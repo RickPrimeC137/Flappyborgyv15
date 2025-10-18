@@ -10,8 +10,8 @@ function computeMetrics(scene) {
   const W = BASE.W, H = BASE.H;
 
   // Tous les paramètres clés en % du monde
-  const gap       = Math.round(H * 0.50);  // ouverture entre tuyaux
-  const pipeW     = Math.round(W * 0.30);  // largeur visuelle standard de tous les tuyaux
+  const gap       = Math.round(H * 0.45);  // ouverture entre tuyaux
+  const pipeW     = Math.round(W * 0.20);  // largeur visuelle standard de tous les tuyaux
   const pipeSpeed = -Math.round(W * 0.42); // vitesse horizontale (px/s)
   const gravityY  = Math.round(H * 1.05);  // gravité du joueur
   const jumpVy    = -Math.round(H * 0.25); // impulsion “saut”
