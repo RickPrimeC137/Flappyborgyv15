@@ -1,7 +1,7 @@
-/*  FlappyBorgy – v15 (menu + bonus + pipes fix)  */
+/*  FlappyBorgy (menu + bonus + pipes fix)  */
 
-const PROFILE = { gravity: 1400, jump: -380, pipeSpeed: -220, gap: 230 };
-const BORGY_SCALE = 0.18;
+const PROFILE = { gravity: 1250, jump: -380, pipeSpeed: -220, gap: 230 };
+const BORGY_SCALE = 0.16;
 const PIPE_W = 100;
 const SPAWN_EVERY = 1600;               // ms
 const BONUS_EVERY = 50;
