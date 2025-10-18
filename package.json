@@ -1,0 +1,12 @@
+{
+  "name": "flappyborgyv15",
+  "version": "15.0.1",
+  "description": "FlappyBorgy v15 \u2013 Telegram WebApp + Render deploy (fixed asset paths + pipe spawner)",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  }
+}
