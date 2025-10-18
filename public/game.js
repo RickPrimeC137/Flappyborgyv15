@@ -10,11 +10,11 @@ function computeMetrics(scene) {
   const W = BASE.W, H = BASE.H;
 
   // Tous les paramètres clés en % du monde
-  const gap       = Math.round(H * 0.22);  // ouverture entre tuyaux
+  const gap       = Math.round(H * 0.40);  // ouverture entre tuyaux
   const pipeW     = Math.round(W * 0.18);  // largeur visuelle standard de tous les tuyaux
   const pipeSpeed = -Math.round(W * 0.42); // vitesse horizontale (px/s)
-  const gravityY  = Math.round(H * 1.05);  // gravité du joueur
-  const jumpVy    = -Math.round(H * 0.28); // impulsion “saut”
+  const gravityY  = Math.round(H * 1.00);  // gravité du joueur
+  const jumpVy    = -Math.round(H * 0.30); // impulsion “saut”
   const playerH   = Math.round(H * 0.18);  // hauteur visuelle cible de Borgy
   const uiPad     = Math.round(W * 0.03);
 
