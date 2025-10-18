@@ -22,8 +22,8 @@ const BONUS_COLOR = 0x22D6A1;
 const AURA_SOFT = 0x9FFFE0;
 
 const PIPE_SKINS = [
-  'graphite','hexghost','mintglass','neonedge',
-  'porcelain','brushed','dualband','frosted'
+  'pipe_v2_graphite.png','cap_v2_graphite.png','pipe_v2_hexghost.png','cap_v2_hexghost.png','cap_v2_mintglass.png','cap_v2_neonedge.png','cap_v2_porcelain.png', 'cap_v2_brushed.png','cap_v2_dualband.png','cap_v2_frosted.png','pipe_v2_mintglass.png','pipe_v2_neonedge.png',
+  'pipe_v2_porcelain.png','pipe_v2_brushed.png','pipe_v2_dualband.png','pipe_v2_frosted.png'
 ];
 
 let game;
