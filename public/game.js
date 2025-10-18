@@ -54,11 +54,64 @@ window.addEventListener('load', () => {
 });
 
 /* ----------------- PRELOAD ----------------- */
-function PreloadScene() { Phaser.Scene.call(this, { key: 'PreloadScene' }); }
-PreloadScene.prototype = Object.create(Phaser.Scene.prototype);
-PreloadScene.prototype.constructor = PreloadScene;
+preload() {
+  const W = this.scale.width, H = this.scale.height;
 
-PreloadScene.prototype.preload = function () {
+  // Barre de chargement simple
+  const bg = this.add.rectangle(W/2, H/2, 360, 8, 0x000000, 0.15).setOrigin(0.5);
+  const bar = this.add.rectangle(W/2 - 180, H/2, 1, 8, 0x00a67e).setOrigin(0, 0.5);
+  const pct = this.add.text(W/2, H/2 + 24, '0%', { fontFamily: 'MonoScore, monospace', fontSize: 18, color: '#055' }).setOrigin(0.5);
+
+  const errors = [];
+  this.load.on('progress', v => { bar.width = 360 * v; pct.setText(Math.round(v*100)+'%'); });
+  this.load.on('fileerror', (file) => {
+    errors.push(file.src || file.key || 'unknown');
+    console.warn('Load error:', file);
+  });
+  this.load.once('complete', () => {
+    if (errors.length) {
+      this.add.text(W/2, H/2 + 60, 'Fichiers manquants:\n' + errors.map(s => s.split('/').slice(-1)[0]).join('\n'),
+        { fontFamily: 'MonoScore, monospace', fontSize: 14, color: '#a00', align: 'center' }).setOrigin(0.5);
+    }
+    // on continue quand même (si assets critiques manquants => tu verras une erreur dans la console)
+    this.scene.start('game');
+  });
+
+  // Utilise un chemin commun sûr
+  this.load.setPath('assets');
+
+  // === LISTE D’ASSETS (noms exacts à respecter dans /public/assets) ===
+  this.load.image('borgy', 'borgy_ingame.png');
+
+  // Pipes (8 styles)
+  this.load.image('pipe_graphite',    'pipe_v2_graphite.png');
+  this.load.image('cap_graphite',     'cap_v2_graphite.png');
+
+  this.load.image('pipe_hexghost',    'pipe_v2_hexghost.png');
+  this.load.image('cap_hexghost',     'cap_v2_hexghost.png');
+
+  this.load.image('pipe_mintglass',   'pipe_v2_mintglass.png');
+  this.load.image('cap_mintglass',    'cap_v2_mintglass.png');
+
+  this.load.image('pipe_neonedge',    'pipe_v2_neonedge.png');
+  this.load.image('cap_neonedge',     'cap_v2_neonedge.png');
+
+  this.load.image('pipe_porcelain',   'pipe_v2_porcelain.png');
+  this.load.image('cap_porcelain',    'cap_v2_porcelain.png');
+
+  this.load.image('pipe_brushed',     'pipe_v2_brushed.png');
+  this.load.image('cap_brushed',      'cap_v2_brushed.png');
+
+  this.load.image('pipe_dualband',    'pipe_v2_dualband.png');
+  this.load.image('cap_dualband',     'cap_v2_dualband.png');
+
+  this.load.image('pipe_frosted',     'pipe_v2_frosted.png');
+  this.load.image('cap_frosted',      'cap_v2_frosted.png');
+
+  // Bonus
+  this.load.image('token_sb', 'sb_token_user.png');
+}
+
   // joueur
   this.load.image('borgy_ingame', 'assets/borgy_ingame.png');
 
