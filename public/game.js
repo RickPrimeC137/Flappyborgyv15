@@ -1,254 +1,389 @@
-/*  FlappyBorgy (menu + bonus + pipes fix)  */
+/*  FlappyBorgy v15+ (pipes 4K, style switch /50, beep, leaderboard)
+    Requires: Phaser 3 (déjà inclus dans index.html) & endpoints:
+      GET  /api/leaderboard   -> [{name,score}, ...]
+      POST /api/leaderboard   -> body: {name, score}
+*/
 
-const PROFILE = { gravity: 1250, jump: -380, pipeSpeed: -220, gap: 230 };
-const BORGY_SCALE = 0.16;
-const PIPE_W = 100;
-const SPAWN_EVERY = 1600;               // ms
-const BONUS_EVERY = 50;
-const BONUS_DURATION = 10000;
-const AURA_SOFT = 0x9FFFE0;
+const WORLD_W = 768;
+const WORLD_H = 1366;
 
-const PIPE_STYLES = [
-  { body:'pipe_graphite',  cap:'cap_graphite'  },
-  { body:'pipe_hexghost',  cap:'cap_hexghost'  },
-  { body:'pipe_mintglass', cap:'cap_mintglass' },
-  { body:'pipe_neonedge',  cap:'cap_neonedge'  },
-  { body:'pipe_porcelain', cap:'cap_porcelain' },
-  { body:'pipe_brushed',   cap:'cap_brushed'   },
-  { body:'pipe_dualband',  cap:'cap_dualband'  },
-  { body:'pipe_frosted',   cap:'cap_frosted'   },
-];
+const PIPE_SPEED   = -220;
+const PIPE_WIDTH   = 120;
+const GAP_Y        = 260;             // Trou vertical
+const GAP_X        = 260;             // Espacement horizontal entre paires
+const SPAWN_DELAY  = Math.round((PIPE_WIDTH + GAP_X) / Math.abs(PIPE_SPEED) * 1000); // ≈ 1730 ms
 
+const BORGY_SCALE  = 0.22;
+const GRAVITY_Y    = 1400;
+const JUMP_VY      = -380;
+
+const BONUS_EVERY  = 50;              // Switch de style toutes les 50 passerelles
+const AURA_COLOR   = 0x9FFFE0;
+
+let game;
+
+/* ---------------- Boot ---------------- */
 window.addEventListener('load', () => {
-  new Phaser.Game({
+  game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game-root',
-    backgroundColor: '#9EE1F2',
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: 768, height: 1366 },
+    backgroundColor: '#9EDFF1',
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: WORLD_W, height: WORLD_H },
     physics: { default: 'arcade', arcade: { gravity: { y: 0 }, debug: false } },
-    scene: [PreloadScene, StartScene, GameScene]
+    scene: [PreloadScene, MenuScene, GameScene]
   });
 });
 
-/* ---------------- PRELOAD ---------------- */
-function PreloadScene(){ Phaser.Scene.call(this,{key:'preload'}); }
+/* ---------------- Preload ---------------- */
+function PreloadScene() { Phaser.Scene.call(this, { key: 'preload' }); }
 PreloadScene.prototype = Object.create(Phaser.Scene.prototype);
 PreloadScene.prototype.constructor = PreloadScene;
 
-PreloadScene.prototype.preload = function(){
+PreloadScene.prototype.preload = function () {
   const W = this.scale.width, H = this.scale.height;
-  const bg = this.add.rectangle(W/2,H/2,360,8,0x000,0.15).setOrigin(0.5);
-  const bar= this.add.rectangle(W/2-180,H/2,1,8,0x00a67e).setOrigin(0,0.5);
-  const pct= this.add.text(W/2,H/2+24,'0%',{fontFamily:'monospace',fontSize:18,color:'#055'}).setOrigin(0.5);
-  this.load.on('progress', v => { bar.width = 360*v; pct.setText((v*100|0)+'%'); });
 
+  // Barre simple
+  const bg = this.add.rectangle(W/2, H/2, 360, 8, 0x000000, 0.15).setOrigin(0.5);
+  const bar = this.add.rectangle(W/2 - 180, H/2, 1, 8, 0x00a67e).setOrigin(0, 0.5);
+  const pct = this.add.text(W/2, H/2 + 28, '0%', { fontFamily: 'monospace', fontSize: 18, color: '#055' }).setOrigin(0.5);
+
+  this.load.on('progress', v => { bar.width = 360 * v; pct.setText(`${Math.round(v*100)}%`); });
+
+  // Assets images existantes
   this.load.setPath('assets');
-  this.load.image('borgy_ingame','borgy_ingame.png');
-  this.load.image('sb_token',     'sb_token_user.png');
-
-  // pipes & caps
-  this.load.image('pipe_graphite',  'pipe_v2_graphite.png');
-  this.load.image('cap_graphite',   'cap_v2_graphite.png');
-  this.load.image('pipe_hexghost',  'pipe_v2_hexghost.png');
-  this.load.image('cap_hexghost',   'cap_v2_hexghost.png');
-  this.load.image('pipe_mintglass', 'pipe_v2_mintglass.png');
-  this.load.image('cap_mintglass',  'cap_v2_mintglass.png');
-  this.load.image('pipe_neonedge',  'pipe_v2_neonedge.png');
-  this.load.image('cap_neonedge',   'cap_v2_neonedge.png');
-  this.load.image('pipe_porcelain', 'pipe_v2_porcelain.png');
-  this.load.image('cap_porcelain',  'cap_v2_porcelain.png');
-  this.load.image('pipe_brushed',   'pipe_v2_brushed.png');
-  this.load.image('cap_brushed',    'cap_v2_brushed.png');
-  this.load.image('pipe_dualband',  'pipe_v2_dualband.png');
-  this.load.image('cap_dualband',   'cap_v2_dualband.png');
-  this.load.image('pipe_frosted',   'pipe_v2_frosted.png');
-  this.load.image('cap_frosted',    'cap_v2_frosted.png');
+  this.load.image('borgy', 'borgy_ingame.png');
+  this.load.image('sb_token', 'sb_token_user.png');
 };
 
-PreloadScene.prototype.create = function(){ this.scene.start('start'); };
-
-/* ---------------- START (menu) ---------------- */
-function StartScene(){ Phaser.Scene.call(this,{key:'start'}); }
-StartScene.prototype = Object.create(Phaser.Scene.prototype);
-StartScene.prototype.constructor = StartScene;
-
-StartScene.prototype.create = function(){
-  const W=this.scale.width,H=this.scale.height;
-  this.add.text(W/2,H*0.22,'FlappyBorgy v15',{fontFamily:'monospace',fontSize:'64px',color:'#084',stroke:'#000',strokeThickness:8}).setOrigin(0.5);
-  const borgy = this.add.image(W/2,H*0.43,'borgy_ingame').setScale(BORGY_SCALE*1.4);
-  this.tweens.add({targets:borgy,y:borgy.y-12,yoyo:true,repeat:-1,duration:900,ease:'sine.inOut'});
-  const btn=this.add.text(W/2,H*0.70,'JOUER',{fontFamily:'monospace',fontSize:'60px',color:'#fff',backgroundColor:'#0db187',padding:{left:36,right:36,top:14,bottom:14}})
-    .setOrigin(0.5).setInteractive({useHandCursor:true});
-  this.add.text(W/2,H*0.78,'Touchez l’écran pour voler',{fontFamily:'monospace',fontSize:'28px',color:'#055'}).setOrigin(0.5);
-  btn.on('pointerdown',()=>this.scene.start('game'));
+PreloadScene.prototype.create = function () {
+  this.scene.start('menu');
 };
 
-/* ---------------- GAME ---------------- */
-function GameScene(){ Phaser.Scene.call(this,{key:'game'}); }
+/* ---------------- Menu ---------------- */
+function MenuScene() { Phaser.Scene.call(this, { key: 'menu' }); }
+MenuScene.prototype = Object.create(Phaser.Scene.prototype);
+MenuScene.prototype.constructor = MenuScene;
+
+MenuScene.prototype.create = function () {
+  const W = this.scale.width, H = this.scale.height;
+
+  this.add.text(W/2, H*0.22, 'FlappyBorgy', {
+    fontFamily: 'Georgia, serif', fontSize: 72, color: '#0b3e38'
+  }).setOrigin(0.5);
+
+  const hint = this.add.text(W/2, H*0.32, 'Touchez pour jouer', {
+    fontFamily: 'monospace', fontSize: 32, color: '#095'
+  }).setOrigin(0.5);
+  this.tweens.add({ targets: hint, alpha: 0.35, yoyo: true, repeat: -1, duration: 900 });
+
+  // Petit borgy décoratif
+  const deco = this.add.sprite(W*0.3, H*0.55, 'borgy').setScale(0.22);
+  this.tweens.add({ targets: deco, angle: { from:-6, to: 6 }, yoyo:true, repeat:-1, duration: 900, ease: 'sine.inOut' });
+
+  // Boutons
+  const btnPlay = this.makeBtn(W/2, H*0.58, 'Démarrer');
+  const btnTop  = this.makeBtn(W/2, H*0.67, 'Classement');
+
+  btnPlay.on('pointerdown', () => this.scene.start('game', { first: true }));
+  btnTop.on('pointerdown',  () => this.showLeaderboard());
+
+  // pseudo mémorisé
+  const name = localStorage.getItem('borgy_name') || '';
+  const nameTxt = this.add.text(W/2, H*0.78, name ? `Joueur: ${name}` : 'Appuyez N pour définir votre pseudo', {
+    fontFamily: 'monospace', fontSize: 24, color: '#033'
+  }).setOrigin(0.5);
+  this.input.keyboard.on('keydown-N', async () => {
+    const pseudo = prompt('Votre pseudo pour le classement ?') || 'anonyme';
+    localStorage.setItem('borgy_name', pseudo);
+    nameTxt.setText(`Joueur: ${pseudo}`);
+  });
+};
+
+MenuScene.prototype.makeBtn = function (x, y, label) {
+  const b = this.add.text(x, y, label, {
+    fontFamily: 'monospace', fontSize: 38, color: '#fff', backgroundColor: '#0db187',
+    padding: { left: 24, right: 24, top: 12, bottom: 12 }
+  }).setOrigin(0.5).setInteractive({ useHandCursor: true });
+  b.on('pointerover', () => b.setAlpha(0.85));
+  b.on('pointerout',  () => b.setAlpha(1));
+  return b;
+};
+
+MenuScene.prototype.showLeaderboard = async function () {
+  const W = this.scale.width, H = this.scale.height;
+  const panel = this.add.rectangle(W/2, H/2, W*0.86, H*0.7, 0x12333a, 0.94);
+  const title = this.add.text(W/2, H*0.2, 'Top 10', { fontFamily:'Georgia,serif', fontSize: 64, color: '#fff' })
+    .setOrigin(0.5);
+
+  let items = [];
+  try { items = await (await fetch('/api/leaderboard')).json(); }
+  catch { items = []; }
+
+  items = (items || []).slice(0, 10);
+  if (!items.length) items = [{name:'—', score:0}];
+
+  const list = this.add.container(W/2, H*0.27);
+  items.forEach((it, i) => {
+    const t = this.add.text(0, i*44, `${String(i+1).padStart(2,'0')}. ${it.name} — ${it.score}`, {
+      fontFamily:'monospace', fontSize: 30, color:'#bff'
+    }).setOrigin(0.5,0);
+    list.add(t);
+  });
+
+  const close = this.makeBtn(W/2, H*0.78, 'Fermer');
+  close.on('pointerdown', () => { panel.destroy(); title.destroy(); list.destroy(); close.destroy(); });
+};
+
+/* ---------------- Game ---------------- */
+function GameScene() { Phaser.Scene.call(this, { key: 'game' }); }
 GameScene.prototype = Object.create(Phaser.Scene.prototype);
 GameScene.prototype.constructor = GameScene;
 
-GameScene.prototype.init = function(){
-  this.score=0; this.pipesPassed=0; this.multiplierActive=false;
-  this.started=false; this.skinIndex=0; this.spawnCount=0;
-  this.followers=[];  // fonctions qui collent les capots aux corps
+GameScene.prototype.init = function () {
+  this.score = 0;
+  this.pipesPassed = 0;
+  this.currentStyle = 0;              // 0 = MintGlass, 1 = Graphite
+  this.followCaps = [];
 };
 
-GameScene.prototype.create = function(){
-  const W=this.scale.width,H=this.scale.height;
+GameScene.prototype.create = function () {
+  const W = this.scale.width, H = this.scale.height;
 
-  // Espacement fixe entre paires (cohérent vitesse/délai)
-  this.SPACING = Math.round(Math.abs(PROFILE.pipeSpeed) * (SPAWN_EVERY/1000)); // px
-  this.nextX   = W + 200; // premier x disponible
+  // Génère les textures 4K (vectorielles)
+  this.createPipeTextures();
 
-  this.scoreTxt = this.add.text(24,24,'Score: 0',{fontFamily:'monospace',fontSize:'44px',color:'#0b4',stroke:'#000',strokeThickness:6}).setDepth(50);
-  this.multTxt  = this.add.text(W-24,24,'',{fontFamily:'monospace',fontSize:'40px',color:'#b1ffe6',stroke:'#007a62',strokeThickness:6}).setOrigin(1,0).setDepth(50);
+  // Score
+  this.scoreText = this.add.text(24, 18, 'Score: 0', {
+    fontFamily:'monospace', fontSize:'48px', color:'#fff', stroke:'#0a3a38', strokeThickness:8
+  }).setDepth(50);
 
-  // Joueur (gravité OFF tant que non démarré)
-  this.player = this.physics.add.image(W*0.25,H*0.45,'borgy_ingame').setScale(BORGY_SCALE).setCollideWorldBounds(true).setDepth(10);
-  const r=Math.max(this.player.width,this.player.height)*0.22; this.player.setCircle(r,this.player.width/2-r,this.player.height/2-r);
+  // Joueur (immobile jusqu’au 1er tap)
+  this.player = this.physics.add.sprite(W*0.25, H*0.5, 'borgy').setScale(BORGY_SCALE).setDepth(10);
   this.player.body.setAllowGravity(false);
+  this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
+                   .setOffset(this.player.width*0.225, this.player.height*0.25);
 
-  this.aura = this.add.circle(this.player.x,this.player.y,Math.max(this.player.displayWidth,this.player.displayHeight)*0.65,AURA_SOFT,0.22).setVisible(false).setDepth(9);
+  // Halo bonus (pas utilisé ici, mais prêt)
+  this.aura = this.add.circle(this.player.x, this.player.y, Math.max(this.player.displayWidth, this.player.displayHeight)*0.65, AURA_COLOR, 0.2)
+                .setVisible(false).setDepth(9);
 
-  this.pipesTop    = this.physics.add.group({allowGravity:false,immovable:true});
-  this.pipesBottom = this.physics.add.group({allowGravity:false,immovable:true});
+  // Groupes
+  this.pipes = this.physics.add.group();
 
-  this.physics.add.collider(this.player,this.pipesTop,   ()=>this.gameOver());
-  this.physics.add.collider(this.player,this.pipesBottom,()=>this.gameOver());
+  // Collisions
+  this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-  this.hint=this.add.text(W/2,H*0.58,'TAP TO START',{fontFamily:'monospace',fontSize:'54px',color:'#083'}).setOrigin(0.5).setDepth(60);
+  // Input
+  this.input.once('pointerdown', () => this.startRun());
+  this.input.keyboard.once('keydown-SPACE', () => this.startRun());
+  this.input.on('pointerdown', () => this.flap());
+  this.input.keyboard.on('keydown-SPACE', () => this.flap());
 
-  const onInput=()=>this.started?this.flap():this.startGame();
-  this.input.on('pointerdown',onInput);
-  this.input.keyboard.on('keydown-SPACE',onInput);
+  // Message “Tapez pour voler”
+  const hint = this.add.text(W*0.5, H*0.6, 'Tape pour voler', { fontFamily:'monospace', fontSize:36, color:'#033' })
+                  .setOrigin(0.5);
+  this.tweens.add({ targets: hint, alpha: 0.3, yoyo:true, repeat:-1, duration:700 });
+
+  this.hint = hint;
 };
 
-GameScene.prototype.startGame = function(){
-  const W=this.scale.width,H=this.scale.height;
-  this.started=true; this.hint?.destroy();
-  this.physics.world.gravity.y=PROFILE.gravity;
+GameScene.prototype.startRun = function () {
+  const H = this.scale.height;
+  this.hint?.destroy();
+
   this.player.body.setAllowGravity(true);
+  this.player.body.setGravityY(GRAVITY_Y);
+  this.flap(); // coup de boost de départ
 
-  // Remplir l’écran de départ proprement
-  while(this.nextX < W + 2*this.SPACING){ this.spawnPair(this.nextX); this.nextX += this.SPACING; }
-
-  this.spawnEvt=this.time.addEvent({delay:SPAWN_EVERY,loop:true,callback:()=>{
-    this.spawnPair(this.nextX); this.nextX += this.SPACING;
-  }});
-};
-
-GameScene.prototype.flap = function(){ this.player.setVelocityY(PROFILE.jump); };
-
-GameScene.prototype.update = function(time){
-  if(!this.started) return;
-  const vy=this.player.body.velocity.y;
-  this.player.setAngle(Phaser.Math.Clamp(vy*0.06,-20,25));
-
-  if(this.aura.visible){
-    this.aura.setPosition(this.player.x,this.player.y);
-    this.aura.alpha = 0.2 + 0.08*Math.sin(time/180);
-  }
-  // coller les capots aux corps
-  this.followers.forEach(f=>f());
-  // purge sécurité
-  [...this.pipesTop.getChildren(),...this.pipesBottom.getChildren()].forEach(p=>{ if(p.x < -PIPE_W*2) p.destroy(); });
-};
-
-/* ---------- génération d’une paire ---------- */
-GameScene.prototype.spawnPair = function(x){
-  const H=this.scale.height, W=this.scale.width;
-  const style = PIPE_STYLES[this.skinIndex]; this.skinIndex=(this.skinIndex+1)%PIPE_STYLES.length;
-
-  const gap = PROFILE.gap;
-  const minTop = 90, maxTop = H - 90 - gap;
-  const MAX_DELTA = 140; // déplacement vertical max entre 2 trous
-
-  // trou doux (limite d’écart avec le précédent)
-  let topY;
-  if(this.prevTopY == null) topY = Phaser.Math.Between(minTop,maxTop);
-  else {
-    const target = Phaser.Math.Between(minTop,maxTop);
-    const delta  = Phaser.Math.Clamp(target - this.prevTopY, -MAX_DELTA, MAX_DELTA);
-    topY = Phaser.Math.Clamp(this.prevTopY + delta, minTop, maxTop);
-  }
-  this.prevTopY = topY;
-
-  const bottomH = H - (topY + gap);
-
-  // Corps
-  const topBody = this.pipesTop.create(x, topY, style.body)
-    .setOrigin(0.5,1).setDisplaySize(PIPE_W, topY).setDepth(5);
-  topBody.body.setVelocityX(PROFILE.pipeSpeed);
-
-  const botBody = this.pipesBottom.create(x, topY+gap, style.body)
-    .setOrigin(0.5,0).setFlipY(true).setDisplaySize(PIPE_W, bottomH).setDepth(5);
-  botBody.body.setVelocityX(PROFILE.pipeSpeed);
-
-  // Capots qui suivent les corps (pas de physique, on les “suit” à l’update)
-  const topCap = this.add.image(x, topY, style.cap).setOrigin(0.5,1).setDepth(6).setAlpha(0.98);
-  const botCap = this.add.image(x, topY+gap, style.cap).setOrigin(0.5,0).setFlipY(true).setDepth(6).setAlpha(0.98);
-
-  this.followers.push(() => {
-    if(!topBody.active){ topCap.destroy(); botCap.destroy(); return; }
-    topCap.x = topBody.x; topCap.y = topBody.y - topBody.displayHeight;
-    botCap.x = botBody.x; botCap.y = botBody.y + 0; // 0 car origin 0
+  // Spawner
+  this.spawnTimer = this.time.addEvent({
+    delay: SPAWN_DELAY,
+    loop: true,
+    callback: () => this.spawnPipePair()
   });
 
-  // capteur de score
-  const sensor = this.add.rectangle(x + PIPE_W/2 + 10, H/2, 10, H, 0x000000, 0);
-  this.physics.add.existing(sensor);
-  sensor.body.setAllowGravity(false).setImmovable(true).setVelocityX(PROFILE.pipeSpeed);
+  // Première paire
+  this.spawnPipePair();
+
+  // Un premier capteur pour son/score arrivera avec la première paire
+};
+
+GameScene.prototype.flap = function () {
+  if (!this.player.active) return;
+  this.player.setVelocityY(JUMP_VY);
+};
+
+GameScene.prototype.update = function (t) {
+  // Tilt léger
+  if (!this.player.body) return;
+  const vy = this.player.body.velocity.y;
+  this.player.setAngle(vy < -20 ? -18 : vy > 120 ? 22 : 0);
+
+  // Suivi d’éventuels caps
+  this.followCaps.forEach(fn => fn());
+
+  // Nettoyage offscreen
+  this.pipes.children.each(ch => { if (ch.active && ch.x < -PIPE_WIDTH*2) ch.destroy(); });
+};
+
+/* ---------- Pipes 4K : génération vectorielle ---------- */
+GameScene.prototype.createPipeTextures = function () {
+  // Crée deux tuiles 64x64 + un cap 140x46 pour chaque style (A=MintGlass, B=Graphite)
+  const makeTile = (key, base, light, stroke) => {
+    const g = this.add.graphics();
+    g.clear();
+    // fond
+    g.fillStyle(base, 1); g.fillRect(0, 0, 64, 64);
+    // bandes
+    g.fillStyle(light, 0.35);
+    g.fillRect(0, 12, 64, 6);
+    g.fillRect(0, 30, 64, 6);
+    g.fillRect(0, 48, 64, 6);
+    // bord
+    g.lineStyle(2, stroke, 0.8); g.strokeRect(1, 1, 62, 62);
+    g.generateTexture(key, 64, 64); g.destroy();
+  };
+
+  const makeCap = (key, base, light, stroke) => {
+    const g = this.add.graphics();
+    g.clear();
+    const w = 140, h = 46, r = 16;
+    // cap
+    g.fillStyle(base, 1);
+    g.fillRoundedRect(0, 0, w, h, { tl:r, tr:r, bl:r, br:r });
+    // highlight
+    g.fillStyle(light, 0.35);
+    g.fillRoundedRect(6, 8, w-12, 10, { tl:10, tr:10, bl:10, br:10 });
+    // bord
+    g.lineStyle(4, stroke, 0.9);
+    g.strokeRoundedRect(0, 0, w, h, { tl:r, tr:r, bl:r, br:r });
+
+    g.generateTexture(key, w, h); g.destroy();
+  };
+
+  // Style A : MintGlass
+  makeTile('tileA', 0x1ec9a5, 0xa4ffe6, 0x0a6555);
+  makeCap ('capA',  0x1ec9a5, 0xa4ffe6, 0x0a6555);
+
+  // Style B : Graphite
+  makeTile('tileB', 0x16a085, 0x7ee8cf, 0x094c41);
+  makeCap ('capB',  0x16a085, 0x7ee8cf, 0x094c41);
+};
+
+GameScene.prototype.spawnPipePair = function () {
+  const W = this.scale.width, H = this.scale.height;
+
+  // Trou vertical
+  const minTop = 90;
+  const maxTop = H - (GAP_Y + 160);
+  const topY = Phaser.Math.Between(minTop, maxTop);
+  const holeY = topY + GAP_Y/2;
+
+  const styleKey = this.currentStyle === 0 ? { tile:'tileA', cap:'capA' } : { tile:'tileB', cap:'capB' };
+  const x = W + PIPE_WIDTH/2 + 12;
+
+  // Corps (TileSprite) + cap
+  const makeBody = (xx, yy, h, isTop) => {
+    const body = this.add.tileSprite(xx, yy, PIPE_WIDTH, h, styleKey.tile)
+      .setOrigin(0.5, isTop ? 1 : 0).setDepth(5);
+    this.physics.add.existing(body, true);
+    body.body.setVelocityX(PIPE_SPEED).setImmovable(true).setAllowGravity(false);
+    this.pipes.add(body);
+
+    const cap = this.add.image(xx, isTop ? (yy - h) : yy, styleKey.cap)
+      .setOrigin(0.5, isTop ? 1 : 0)
+      .setFlipY(!isTop)
+      .setDepth(6);
+
+    // suit le corps
+    this.followCaps.push(() => { if (!body.active) return; cap.x = body.x; cap.y = isTop ? (body.y - body.displayHeight) : body.y; });
+    // destroy tardif
+    this.time.delayedCall(14000, () => { body.destroy(); cap.destroy(); });
+  };
+
+  const topH = holeY - GAP_Y/2;             // hauteur top
+  const botH = H - (holeY + GAP_Y/2);       // hauteur bottom
+
+  makeBody(x, topH, topH, true);
+  makeBody(x, holeY + GAP_Y/2, botH, false);
+
+  // Capteur de score + son
+  const sensor = this.add.rectangle(x + PIPE_WIDTH + 20, H/2, 10, H, 0x000, 0);
+  this.physics.add.existing(sensor, true);
+  sensor.body.setVelocityX(PIPE_SPEED);
   this.physics.add.overlap(this.player, sensor, () => {
-    if(!sensor.active) return;
+    if (!sensor.active) return;
     sensor.destroy();
-    this.pipesPassed++;
-    this.addScore(this.multiplierActive?2:1);
-
-    if(this.pipesPassed>0 && this.pipesPassed%BONUS_EVERY===0){
-      this.spawnBonus(x + 420, Phaser.Math.Between(200, H-280));
-    }
+    this.incrementScore();
   });
-
-  // ménage
-  this.time.delayedCall(13000, ()=>{ [topBody,botBody,topCap,botCap,sensor].forEach(o=>o&&o.destroy()); });
 };
 
-/* ---------- Bonus ---------- */
-GameScene.prototype.spawnBonus = function(x,y){
-  const bonus = this.physics.add.image(x,y,'sb_token').setScale(0.55).setDepth(7);
-  bonus.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-  this.physics.add.overlap(this.player,bonus,()=>{ if(!bonus.active) return; bonus.destroy(); this.activateMultiplier(); });
-  this.time.delayedCall(12000,()=>bonus.destroy());
+GameScene.prototype.incrementScore = function () {
+  this.pipesPassed++;
+  this.score += 1;
+  this.scoreText.setText('Score: ' + this.score);
+
+  // petit beep
+  this.beep(1040, 0.07);
+
+  // switch de style tous les 50
+  if (this.pipesPassed % BONUS_EVERY === 0) {
+    this.currentStyle = (this.currentStyle + 1) % 2;
+    const tag = this.add.text(this.scale.width - 22, 80,
+      this.currentStyle ? 'Graphite' : 'MintGlass',
+      { fontFamily:'monospace', fontSize: 28, color:'#bff', stroke:'#055', strokeThickness:4 }
+    ).setOrigin(1,0).setDepth(60).setAlpha(0);
+    this.tweens.add({ targets: tag, alpha:1, yoyo:true, hold:700, duration:300, onComplete:()=>tag.destroy() });
+  }
 };
 
-GameScene.prototype.activateMultiplier = function(){
-  if(this.multTimer) this.multTimer.remove(false);
-  this.multiplierActive=true; this.aura.setVisible(true);
-  let left=BONUS_DURATION/1000|0; this.multTxt.setText('x2 '+left+'s');
-  this.multTimer=this.time.addEvent({delay:1000,repeat:left,callback:()=>{
-    left--; if(left<=0){ this.multiplierActive=false; this.multTxt.setText(''); this.aura.setVisible(false); }
-    else this.multTxt.setText('x2 '+left+'s');
-  }});
+GameScene.prototype.beep = function (freq = 880, dur = 0.08) {
+  const ac = this.sound.context;
+  const now = ac.currentTime;
+  const o = ac.createOscillator();
+  const g = ac.createGain();
+  o.type = 'square';
+  o.frequency.setValueAtTime(freq, now);
+  g.gain.setValueAtTime(0.0001, now);
+  g.gain.exponentialRampToValueAtTime(0.25, now + 0.01);
+  g.gain.exponentialRampToValueAtTime(0.0001, now + dur);
+  o.connect(g).connect(ac.destination);
+  o.start(now);
+  o.stop(now + dur + 0.02);
 };
 
-GameScene.prototype.addScore = function(v){ this.score+=v; this.scoreTxt.setText('Score: '+this.score); };
+GameScene.prototype.gameOver = async function () {
+  if (!this.player.active) return;
+  this.player.disableBody(true, false);
+  this.spawnTimer && this.spawnTimer.remove(false);
 
-/* ---------- Game Over ---------- */
-GameScene.prototype.gameOver = function(){
-  if(!this.player.active) return;
-  this.player.disableBody(true,false).setTint(0xff6b6b);
-  this.spawnEvt && this.spawnEvt.remove(false);
-  const W=this.scale.width,H=this.scale.height;
+  const W = this.scale.width, H = this.scale.height;
+  const panel = this.add.rectangle(W/2, H/2, W*0.86, 360, 0x163945, 0.92).setDepth(100);
+  this.add.text(W/2, H/2 - 110, 'Game Over', { fontFamily:'Georgia,serif', fontSize:72, color:'#fff' })
+      .setOrigin(0.5).setDepth(101);
+  this.add.text(W/2, H/2 - 30, `Score : ${this.score}`, { fontFamily:'monospace', fontSize:52, color:'#c9fff4' })
+      .setOrigin(0.5).setDepth(101);
 
-  this.add.rectangle(W/2,H/2,W*0.82,360,0x163945,0.92).setDepth(100);
-  this.add.text(W/2,H/2-110,'Game Over',{fontFamily:'Georgia,serif',fontSize:'72px',color:'#fff'}).setOrigin(0.5).setDepth(101);
-  this.add.text(W/2,H/2-30,`Score :  ${this.score}`,{fontFamily:'monospace',fontSize:'52px',color:'#c9fff4'}).setOrigin(0.5).setDepth(101);
+  const btnReplay = this.add.text(W/2 - 120, H/2 + 80, 'Rejouer', {
+    fontFamily:'monospace', fontSize:40, color:'#fff', backgroundColor:'#0db187',
+    padding:{left:18,right:18,top:10,bottom:10}
+  }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor:true });
 
-  const replay=this.add.text(W/2,H/2+70,'Rejouer',{fontFamily:'monospace',fontSize:'48px',color:'#fff',backgroundColor:'#0db187',padding:{left:22,right:22,top:10,bottom:10}})
-    .setOrigin(0.5).setInteractive({useHandCursor:true}).setDepth(101);
-  const home=this.add.text(W/2,H/2+140,'Menu',{fontFamily:'monospace',fontSize:'36px',color:'#fff',backgroundColor:'#0b8266',padding:{left:18,right:18,top:8,bottom:8}})
-    .setOrigin(0.5).setInteractive({useHandCursor:true}).setDepth(101);
-  replay.on('pointerdown',()=>this.scene.restart());
-  home.on('pointerdown',()=>this.scene.start('start'));
+  const btnTop = this.add.text(W/2 + 130, H/2 + 80, 'Classement', {
+    fontFamily:'monospace', fontSize:40, color:'#fff', backgroundColor:'#0aa',
+    padding:{left:18,right:18,top:10,bottom:10}
+  }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor:true });
+
+  btnReplay.on('pointerdown', () => this.scene.restart());
+  btnTop.on('pointerdown', () => this.scene.start('menu'));
+
+  // Envoi classement
+  try {
+    const name = localStorage.getItem('borgy_name') || 'anonyme';
+    await fetch('/api/leaderboard', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ name, score: this.score })
+    });
+  } catch (_) {}
 };
