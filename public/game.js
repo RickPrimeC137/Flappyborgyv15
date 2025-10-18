@@ -1,454 +1,189 @@
-/*  FlappyBorgy – v15 (Pipes+Bonus+Fixes)
- *  © you
- *  Nécessite Phaser 3 (déjà inclus dans index.html)
- */
+// public/game.js
 
-const PROFILE = {
-  gravity: 1400,
-  jump: -380,
-  pipeSpeed: -220,
-  gap: 230
-};
+/* ---------- Config ---------- */
+const W = 768, H = 1366;            // Portrait logique
+const GRAVITY = 1300;
+const JUMP_VELOCITY = -380;
+const SCROLL_SPEED = -220;
+const GAP = 230;                    // Espace entre tuyaux
+const SPAWN_EVERY = 1400;           // ms
 
-const BORGY_SCALE = 0.22;
-const PIPE_W = 130;
-const SPAWN_DELAY = 1600;           // délai entre paires
-const HOLE_MIN = 90;                // limites de placement
-const HOLE_MAX_MARGIN = 160;
-
-const BONUS_EVERY = 50;             // bonus toutes les 50 paires
-const BONUS_DURATION = 10000;       // 10s
-const BONUS_COLOR = 0x22D6A1;
-const AURA_SOFT = 0x9FFFE0;
-
-const PIPE_SKINS = [
-  'pipe_v2_graphite.png','cap_v2_graphite.png','pipe_v2_hexghost.png','cap_v2_hexghost.png','cap_v2_mintglass.png','cap_v2_neonedge.png','cap_v2_porcelain.png', 'cap_v2_brushed.png','cap_v2_dualband.png','cap_v2_frosted.png','pipe_v2_mintglass.png','pipe_v2_neonedge.png',
-  'pipe_v2_porcelain.png','pipe_v2_brushed.png','pipe_v2_dualband.png','pipe_v2_frosted.png'
+const PIPE_KEYS = [
+  'pipe_v2_brushed','pipe_v2_dualband','pipe_v2_frosted','pipe_v2_graphite',
+  'pipe_v2_hexghost','pipe_v2_mintglass','pipe_v2_neonedge','pipe_v2_porcelain'
 ];
 
-let game;
+const CAP_KEYS = [
+  'cap_v2_brushed','cap_v2_dualband','cap_v2_frosted','cap_v2_graphite',
+  'cap_v2_hexghost','cap_v2_mintglass','cap_v2_neonedge','cap_v2_porcelain'
+];
 
-/* ----------------- BOOT ----------------- */
-window.addEventListener('load', () => {
-  const config = {
-    type: Phaser.AUTO,
-    parent: 'game-root',
-    backgroundColor: '#9edff1',
-    scale: {
-      mode: Phaser.Scale.FIT,
-      autoCenter: Phaser.Scale.CENTER_BOTH,
-      width: 768,
-      height: 1366
-    },
-    physics: {
-      default: 'arcade',
-      arcade: {
-        gravity: { y: 0 },
-        debug: false
-      }
-    },
-    scene: [PreloadScene, GameScene]
-  };
+/* ---------- Boot Scene ---------- */
+class Boot extends Phaser.Scene {
+  constructor(){ super('Boot'); }
 
-  game = new Phaser.Game(config);
-});
+  preload(){
+    // Barre de chargement ultra simple
+    const w = 360, x = W/2 - w/2, y = H/2;
+    const bg = this.add.rectangle(x, y, w, 8, 0x0ea5a0).setOrigin(0,0.5);
+    const fg = this.add.rectangle(x, y, 1, 8, 0xffffff).setOrigin(0,0.5);
 
-/* ----------------- PRELOAD ----------------- */
-preload() {
-  const W = this.scale.width, H = this.scale.height;
+    this.load.on('progress', p => fg.width = Math.max(1, w*p));
 
-  // Barre de chargement simple
-  const bg = this.add.rectangle(W/2, H/2, 360, 8, 0x000000, 0.15).setOrigin(0.5);
-  const bar = this.add.rectangle(W/2 - 180, H/2, 1, 8, 0x00a67e).setOrigin(0, 0.5);
-  const pct = this.add.text(W/2, H/2 + 24, '0%', { fontFamily: 'MonoScore, monospace', fontSize: 18, color: '#055' }).setOrigin(0.5);
+    // IMPORTANT : racine = /public
+    this.load.setPath('assets');
 
-  const errors = [];
-  this.load.on('progress', v => { bar.width = 360 * v; pct.setText(Math.round(v*100)+'%'); });
-  this.load.on('fileerror', (file) => {
-    errors.push(file.src || file.key || 'unknown');
-    console.warn('Load error:', file);
-  });
-  this.load.once('complete', () => {
-    if (errors.length) {
-      this.add.text(W/2, H/2 + 60, 'Fichiers manquants:\n' + errors.map(s => s.split('/').slice(-1)[0]).join('\n'),
-        { fontFamily: 'MonoScore, monospace', fontSize: 14, color: '#a00', align: 'center' }).setOrigin(0.5);
-    }
-    // on continue quand même (si assets critiques manquants => tu verras une erreur dans la console)
-    this.scene.start('game');
-  });
+    // Borgy
+    this.load.image('borgy', 'borgy_ingame.png');
 
-  // Utilise un chemin commun sûr
-  this.load.setPath('assets');
+    // Tous les tuyaux + chapeaux
+    PIPE_KEYS.forEach(k => this.load.image(k, `${k}.png`));
+    CAP_KEYS.forEach(k  => this.load.image(k, `${k}.png`));
 
-  // === LISTE D’ASSETS (noms exacts à respecter dans /public/assets) ===
-  this.load.image('borgy', 'borgy_ingame.png');
+    // Petits nuages simples (facultatifs)
+    this.load.image('cloud', 'sb_token_user.png'); // on recycle l’icône si besoin
+  }
 
-  // Pipes (8 styles)
-  this.load.image('pipe_graphite',    'pipe_v2_graphite.png');
-  this.load.image('cap_graphite',     'cap_v2_graphite.png');
-
-  this.load.image('pipe_hexghost',    'pipe_v2_hexghost.png');
-  this.load.image('cap_hexghost',     'cap_v2_hexghost.png');
-
-  this.load.image('pipe_mintglass',   'pipe_v2_mintglass.png');
-  this.load.image('cap_mintglass',    'cap_v2_mintglass.png');
-
-  this.load.image('pipe_neonedge',    'pipe_v2_neonedge.png');
-  this.load.image('cap_neonedge',     'cap_v2_neonedge.png');
-
-  this.load.image('pipe_porcelain',   'pipe_v2_porcelain.png');
-  this.load.image('cap_porcelain',    'cap_v2_porcelain.png');
-
-  this.load.image('pipe_brushed',     'pipe_v2_brushed.png');
-  this.load.image('cap_brushed',      'cap_v2_brushed.png');
-
-  this.load.image('pipe_dualband',    'pipe_v2_dualband.png');
-  this.load.image('cap_dualband',     'cap_v2_dualband.png');
-
-  this.load.image('pipe_frosted',     'pipe_v2_frosted.png');
-  this.load.image('cap_frosted',      'cap_v2_frosted.png');
-
-  // Bonus
-  this.load.image('token_sb', 'sb_token_user.png');
+  create(){
+    // Quand tout est prêt, on passe sur Play
+    this.scene.start('Play');
+  }
 }
 
-  // joueur
-  this.load.image('borgy_ingame', 'assets/borgy_ingame.png');
+/* ---------- Play Scene ---------- */
+class Play extends Phaser.Scene {
+  constructor(){ super('Play'); }
 
-  // bonus
-  this.load.image('sb_token', 'assets/sb_token_user.png');
+  create(){
+    this.cameras.main.setBackgroundColor(0x9EE1F2);
 
-  // pipes skins & caps
-  PIPE_SKINS.forEach(s => {
-    this.load.image(`pipe_${s}`, `assets/pipe_v2_${s}.png`);
-    this.load.image(`cap_${s}`,  `assets/cap_v2_${s}.png`);
-  });
+    // Monde & physique
+    this.physics.world.setBounds(0, 0, W, H);
+    this.physics.world.gravity.y = GRAVITY;
 
-  // petite barre de progression
-  const w = this.scale.width * 0.6, h = 10;
-  const x = this.scale.width * 0.2, y = this.scale.height * 0.5;
-  const bg = this.add.rectangle(x, y, w, h, 0xdddddd).setOrigin(0, 0.5);
-  const fg = this.add.rectangle(x, y, 1, h, 0x00c389).setOrigin(0, 0.5);
-  this.load.on('progress', p => fg.width = w * p);
-  this.load.on('complete', () => { bg.destroy(); fg.destroy(); });
-};
+    // Score
+    this.score = 0;
+    this.scoreText = this.add.text(24, 24, 'Score: 0', {
+      fontFamily: 'monospace', fontSize: '44px', color: '#0b4', stroke: '#000', strokeThickness: 6
+    }).setScrollFactor(0).setDepth(10);
 
-PreloadScene.prototype.create = function () {
-  this.scene.start('GameScene');
-};
+    // Borgy (taille réduite)
+    this.player = this.physics.add.image(180, H*0.45, 'borgy')
+      .setScale(0.33)             // << taille ingame
+      .setCircle(150)             // hitbox arrondie (ajuste si besoin)
+      .setBounce(0)
+      .setCollideWorldBounds(true);
+    this.player.body.setOffset(this.player.width*0.5 - 150, this.player.height*0.5 - 150);
 
-/* ----------------- GAME ----------------- */
-function GameScene() { Phaser.Scene.call(this, { key: 'GameScene' }); }
-GameScene.prototype = Object.create(Phaser.Scene.prototype);
-GameScene.prototype.constructor = GameScene;
+    // Input
+    this.input.on('pointerdown', () => this.flap());
+    this.input.keyboard.on('keydown-SPACE', () => this.flap());
 
-GameScene.prototype.init = function () {
-  this.score = 0;
-  this.multiplierActive = false;
-  this.pipesPassed = 0;
-  this.lastPairId = 0;
+    // Groupes de tuyaux
+    this.pipesTop = this.physics.add.group({ allowGravity: false, immovable: true });
+    this.pipesBottom = this.physics.add.group({ allowGravity: false, immovable: true });
 
-  this.followCaps = [];
-  this.currentSkinIndex = 0;
-  this.spawnCount = 0;
+    // Collisions
+    this.physics.add.collider(this.player, this.pipesTop,   () => this.gameOver(), null, this);
+    this.physics.add.collider(this.player, this.pipesBottom,() => this.gameOver(), null, this);
 
-  this.patterns = ['ALT_HIGH_LOW','STAIRS','SINE','RANDOM_JITTER','RANDOM'];
-  this.patternMode = 'ALT_HIGH_LOW';
-  this.lastTopY = null;
-};
+    // Spawn régulier
+    this.time.addEvent({
+      delay: SPAWN_EVERY,
+      loop: true,
+      callback: () => this.spawnPair(W + 100)
+    });
 
-GameScene.prototype.create = function () {
-  const W = this.scale.width;
-  const H = this.scale.height;
-
-  // --- Texte Score & Mult ---
-  this.scoreText = this.add.text(24, 20, 'Score: 0', {
-    fontFamily: 'monospace',
-    fontSize: '48px',
-    color: '#ffffff',
-    stroke: '#0a3a38',
-    strokeThickness: 8
-  }).setDepth(50).setOrigin(0, 0.0);
-
-  this.multText = this.add.text(W - 24, 20, '', {
-    fontFamily: 'monospace',
-    fontSize: '40px',
-    color: '#b1ffe6',
-    stroke: '#007a62',
-    strokeThickness: 6
-  }).setDepth(50).setOrigin(1, 0);
-
-  // --- Groupe tuyaux
-  this.pipes = this.physics.add.group();
-
-  // --- Joueur (réduit)
-  this.player = this.physics.add
-    .sprite(W * 0.22, H * 0.5, 'borgy_ingame')
-    .setScale(BORGY_SCALE)
-    .setDepth(10)
-    .setCollideWorldBounds(true);
-  this.player.body.setGravityY(PROFILE.gravity);
-  this.player.body
-    .setSize(this.player.width * 0.55, this.player.height * 0.55, true)
-    .setOffset(this.player.width * 0.225, this.player.height * 0.25);
-
-  // --- Halo bonus
-  this.aura = this.add.circle(0, 0, Math.max(this.player.displayWidth, this.player.displayHeight)*0.65, AURA_SOFT, 0.22)
-    .setVisible(false)
-    .setDepth(9);
-
-  // --- Inputs
-  this.input.on('pointerdown', () => this.flap());
-  this.input.keyboard.on('keydown-SPACE', () => this.flap());
-
-  // --- Collisions avec tuyaux
-  this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
-
-  // --- Spawner de tuyaux
-  this.spawnTimer = this.time.addEvent({
-    delay: SPAWN_DELAY,
-    loop: true,
-    callback: () => this.spawnPipePair()
-  });
-
-  // spawn tout de suite une première paire
-  this.spawnPipePair();
-};
-
-GameScene.prototype.update = function (t, dt) {
-  // tilt léger
-  if (this.player.body.velocity.y < -20) this.player.setAngle(-18);
-  else if (this.player.body.velocity.y > 120) this.player.setAngle(22);
-  else this.player.setAngle(0);
-
-  // Aura suit le joueur
-  if (this.aura.visible) {
-    this.aura.x = this.player.x;
-    this.aura.y = this.player.y;
-    this.aura.alpha = 0.2 + 0.08 * Math.sin(t / 180);
+    // Démarrer avec 3 paires déjà posées
+    [0, 1, 2].forEach(i => this.spawnPair(W + 200 + i*280));
   }
 
-  // mettre à jour la position des caps si besoin
-  this.followCaps.forEach(fn => fn());
-
-  // suppression éléments trop à gauche (sécurité)
-  this.pipes.children.each(child => {
-    if (child.active && child.x < -PIPE_W * 2) child.destroy();
-  });
-};
-
-/* --------- Gameplay helpers --------- */
-GameScene.prototype.flap = function () {
-  if (!this.player.active) return;
-  this.player.setVelocityY(PROFILE.jump);
-};
-
-GameScene.prototype.spawnPipePair = function () {
-  const W = this.scale.width;
-  const H = this.scale.height;
-
-  // Pattern pour Y du trou
-  const gap = PROFILE.gap;
-  const minTop = HOLE_MIN;
-  const maxTop = H - (gap + HOLE_MAX_MARGIN);
-  let topY;
-
-  switch (this.patternMode) {
-    case 'ALT_HIGH_LOW':
-      topY = (this.spawnCount % 2 === 0) ? (minTop + 20) : (maxTop - 20);
-      break;
-    case 'STAIRS': {
-      const steps = 5;
-      const steph = (maxTop - minTop) / steps;
-      topY = minTop + ((this.spawnCount % steps) * steph);
-      break;
-    }
-    case 'SINE': {
-      const mid = (minTop + maxTop) / 2;
-      const amp = (maxTop - minTop) * 0.42;
-      topY = mid + Math.sin(this.spawnCount * 0.8) * amp;
-      break;
-    }
-    case 'RANDOM_JITTER': {
-      const last = this.lastTopY ?? ((minTop + maxTop) / 2);
-      const jitter = Phaser.Math.Between(-120, 120);
-      topY = Phaser.Math.Clamp(last + jitter, minTop, maxTop);
-      break;
-    }
-    default:
-      topY = Phaser.Math.Between(minTop, maxTop);
-  }
-  this.lastTopY = topY;
-  this.spawnCount++;
-
-  const holeY = topY + gap / 2;
-  const skin = PIPE_SKINS[this.currentSkinIndex];
-  this.currentSkinIndex = (this.currentSkinIndex + 1) % PIPE_SKINS.length;
-
-  const x = this.cameras.main.width + 40; // rapproché pour bien voir
-  const pair = this.makePipe(x, holeY, gap, skin);
-
-  // capteurs de score
-  const sensor = this.add.rectangle(x + PIPE_W + 20, this.scale.height * 0.5, 10, this.scale.height, 0x000000, 0);
-  this.physics.add.existing(sensor, true);
-  sensor.body.setVelocityX(PROFILE.pipeSpeed);
-  sensor.isScoreSensor = true;
-
-  this.physics.add.overlap(this.player, sensor, () => {
-    if (!sensor.active) return;
-    sensor.destroy();
-    this.incrementScore();
-  });
-
-  // bonus toutes les BONUS_EVERY paires
-  if (this.pipesPassed > 0 && this.pipesPassed % BONUS_EVERY === 0) {
-    this.spawnBonus(x + 450, Phaser.Math.Between(200, this.scale.height - 280));
-  }
-};
-
-GameScene.prototype.makePipe = function (x, holeY, holeH, skin) {
-  const bodyKey = `pipe_${skin}`;
-  const capKey  = `cap_${skin}`;
-
-  const usingImages = this.textures.exists(bodyKey) && this.textures.exists(capKey);
-
-  const H = this.scale.height;
-  const minH = 40;
-  const topH = Math.max(minH, holeY - holeH / 2);
-  const bottomH = Math.max(minH, H - (holeY + holeH / 2));
-
-  let topBody, bottomBody, topCap = null, bottomCap = null;
-
-  if (usingImages) {
-    // Corps
-    topBody = this.physics.add.image(x, topH, bodyKey)
-      .setOrigin(0.5, 1)
-      .setDisplaySize(PIPE_W, topH)
-      .setImmovable(true)
-      .setDepth(5);
-    topBody.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-
-    bottomBody = this.physics.add.image(x, holeY + holeH / 2 + bottomH, bodyKey)
-      .setOrigin(0.5, 1)
-      .setFlipY(true)
-      .setDisplaySize(PIPE_W, bottomH)
-      .setImmovable(true)
-      .setDepth(5);
-    bottomBody.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-
-    // Caps
-    topCap    = this.add.image(x, 0, capKey).setOrigin(0.5, 1).setDepth(6);
-    bottomCap = this.add.image(x, 0, capKey).setOrigin(0.5, 0).setFlipY(true).setDepth(6);
-  } else {
-    // Fallback rectangles (debug si textures manquantes)
-    console.warn('Fallback rectangles used for skin:', skin);
-    const color = 0x10b981, stroke = 0x0a3a38;
-
-    topBody = this.add.rectangle(x, topH, PIPE_W, topH, color)
-      .setOrigin(0.5, 1).setStrokeStyle(6, stroke).setDepth(5);
-    bottomBody = this.add.rectangle(x, holeY + holeH / 2 + bottomH, PIPE_W, bottomH, color)
-      .setOrigin(0.5, 1).setStrokeStyle(6, stroke).setFlipY(true).setDepth(5);
-
-    this.physics.add.existing(topBody, true);
-    this.physics.add.existing(bottomBody, true);
-    topBody.body.setVelocityX(PROFILE.pipeSpeed);
-    bottomBody.body.setVelocityX(PROFILE.pipeSpeed);
+  flap(){
+    this.player.setVelocityY(JUMP_VELOCITY);
   }
 
-  this.pipes.add(topBody);
-  this.pipes.add(bottomBody);
+  spawnPair(x){
+    // Choix style aléatoire commun aux deux tuyaux
+    const i = Math.floor(Math.random()*PIPE_KEYS.length);
+    const pipeKey = PIPE_KEYS[i];
+    const capKey  = CAP_KEYS[i];
 
-  // suivre les caps collés aux corps
-  const f = () => {
-    if (!topBody.active) return;
-    if (topCap) {
-      topCap.x = topBody.x;
-      topCap.y = topBody.y - topBody.displayHeight;
-    }
-    if (bottomCap) {
-      bottomCap.x = bottomBody.x;
-      bottomCap.y = bottomBody.y - bottomBody.displayHeight;
-    }
-  };
-  this.followCaps.push(f);
+    // Calcul hauteur
+    const minTop = 90;
+    const maxTop = H - 90 - GAP;
+    const topY   = Phaser.Math.Between(minTop, maxTop);
 
-  // nettoyage
-  this.time.addEvent({
-    delay: 12000,
-    callback: () => [topBody, bottomBody, topCap, bottomCap].forEach(o => o && o.destroy())
+    // TOP (ancré en bas)
+    const topPipe = this.pipesTop.create(x, topY, pipeKey)
+      .setOrigin(0.5, 1).setScale(0.42).setVelocityX(SCROLL_SPEED);
+    // BOTTOM (ancré en haut)
+    const bottomPipe = this.pipesBottom.create(x, topY + GAP, pipeKey)
+      .setOrigin(0.5, 0).setScale(0.42).setVelocityX(SCROLL_SPEED);
+
+    // (Option) caps décoratifs (non collidants)
+    this.add.image(x, topY - topPipe.displayHeight, capKey)
+      .setOrigin(0.5, 1).setScale(0.42).setDepth(2).setAlpha(0.95).setData('cap', true)
+      .setData('vx', SCROLL_SPEED);
+    this.add.image(x, bottomPipe.y + bottomPipe.displayHeight, capKey)
+      .setOrigin(0.5, 0).setScale(0.42).setDepth(2).setAlpha(0.95).setData('cap', true)
+      .setData('vx', SCROLL_SPEED);
+
+    // Marqueur de score (compte 1 quand le centre passe le joueur)
+    topPipe.scorable = true;
+  }
+
+  update(_, dt){
+    // Comptage + recyclage
+    this.pipesTop.getChildren().forEach(top => {
+      // Score
+      if (top.scorable && top.x + top.displayWidth/2 < this.player.x){
+        top.scorable = false;
+        this.score++;
+        this.scoreText.setText('Score: ' + this.score);
+      }
+      // Recyclage
+      if (top.x < -200){
+        // Détruit son compagnon du bas avec le même index
+        const idx = this.pipesTop.getChildren().indexOf(top);
+        const bot = this.pipesBottom.getChildren()[idx];
+        if (bot) bot.destroy();
+        top.destroy();
+      }
+    });
+
+    // Faire défiler les “caps” décoratifs manuellement
+    this.children.list.forEach(ch => {
+      if (ch.getData('cap')){
+        ch.x += ch.getData('vx') * (dt/1000);
+        if (ch.x < -200) ch.destroy();
+      }
+    });
+
+    // Si le joueur sort par le bas -> fin
+    if (this.player.y > H + 60) this.gameOver();
+  }
+
+  gameOver(){
+    // Petit “freeze” et relance
+    this.physics.pause();
+    this.player.setTint(0xff7777);
+    this.time.delayedCall(700, () => this.scene.restart());
+  }
+}
+
+/* ---------- Démarrage ---------- */
+window.addEventListener('load', () => {
+  const game = new Phaser.Game({
+    type: Phaser.AUTO,
+    width: W,
+    height: H,
+    parent: 'game',
+    physics: { default: 'arcade', arcade: { debug: false } },
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH
+    },
+    scene: [Boot, Play],
+    backgroundColor: '#9EE1F2'
   });
-
-  return { topBody, bottomBody, topCap, bottomCap };
-};
-
-GameScene.prototype.spawnBonus = function (x, y) {
-  const bonus = this.physics.add.image(x, y, 'sb_token')
-    .setDepth(7)
-    .setScale(0.55)
-    .setImmovable(true);
-  bonus.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-
-  this.physics.add.overlap(this.player, bonus, () => {
-    if (!bonus.active) return;
-    bonus.destroy();
-    this.activateMultiplier();
-  });
-
-  // safety destroy
-  this.time.delayedCall(12000, () => bonus.destroy());
-};
-
-GameScene.prototype.activateMultiplier = function () {
-  if (this.multTimer) this.multTimer.remove(false);
-
-  this.multiplierActive = true;
-  this.multText.setText('x2');
-  this.aura.setVisible(true).setFillStyle(AURA_SOFT, 0.28);
-
-  this.multTimer = this.time.delayedCall(BONUS_DURATION, () => {
-    this.multiplierActive = false;
-    this.multText.setText('');
-    this.aura.setVisible(false);
-  });
-};
-
-GameScene.prototype.incrementScore = function () {
-  this.pipesPassed++;
-  const add = this.multiplierActive ? 2 : 1;
-  this.score += add;
-  this.scoreText.setText('Score: ' + this.score);
-};
-
-GameScene.prototype.gameOver = function () {
-  if (!this.player.active) return;
-
-  this.player.disableBody(true, false);
-  this.player.setTint(0xff6b6b);
-  this.spawnTimer && this.spawnTimer.remove(false);
-
-  const W = this.scale.width;
-  const H = this.scale.height;
-
-  const panel = this.add.rectangle(W/2, H/2, W*0.82, 360, 0x163945, 0.92).setDepth(100);
-  const tt = this.add.text(W/2, H/2 - 110, 'Game Over', {
-    fontFamily: 'Georgia, serif',
-    fontSize: '72px',
-    color: '#ffffff'
-  }).setOrigin(0.5).setDepth(101);
-
-  this.add.text(W/2, H/2 - 30, `Score :  ${this.score}`, {
-    fontFamily: 'monospace',
-    fontSize: '52px',
-    color: '#c9fff4'
-  }).setOrigin(0.5).setDepth(101);
-
-  const btn = this.add.text(W/2, H/2 + 70, 'Rejouer', {
-    fontFamily: 'monospace',
-    fontSize: '52px',
-    color: '#ffffff',
-    backgroundColor: '#0db187',
-    padding: { left: 22, right: 22, top: 10, bottom: 10 }
-  }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
-
-  btn.on('pointerdown', () => this.scene.restart());
-};
+});
