@@ -1,306 +1,401 @@
-/*  FlappyBorgy – v15  (Menu + Jeu)
-    Scènes:
-      - BootScene: preload
-      - MenuScene: JOUER / CLASSEMENT / SON
-      - GameScene: gameplay (tuyaux physiques, collisions, bonus x2)
-*/
+/*  FlappyBorgy – v15 (Pipes+Bonus+Fixes)
+ *  © you
+ *  Nécessite Phaser 3 (déjà inclus dans index.html)
+ */
 
-// ---------- Constantes communes ----------
-const W = 768, H = 1366;     // Portrait logique
-const PROFILE = { gravity: 1400, jump: 380 };
-const PIPE_W = 120, PIPE_SPEED = -240;
-const GAP_MIN = 220, GAP_MAX = 280;
-const SPAWN_EVERY_MS = 1400;
-const BONUS_EVERY = 50, BONUS_TIME = 10_000;
+const PROFILE = {
+  gravity: 1400,
+  jump: -380,
+  pipeSpeed: -220,
+  gap: 230
+};
 
-// rotation de 8 skins (doivent exister dans public/assets)
-const SKINS = [
+const BORGY_SCALE = 0.22;
+const PIPE_W = 130;
+const SPAWN_DELAY = 1600;           // délai entre paires
+const HOLE_MIN = 90;                // limites de placement
+const HOLE_MAX_MARGIN = 160;
+
+const BONUS_EVERY = 50;             // bonus toutes les 50 paires
+const BONUS_DURATION = 10000;       // 10s
+const BONUS_COLOR = 0x22D6A1;
+const AURA_SOFT = 0x9FFFE0;
+
+const PIPE_SKINS = [
   'graphite','hexghost','mintglass','neonedge',
   'porcelain','brushed','dualband','frosted'
 ];
 
-// ---------- Boot / Preload ----------
-class BootScene extends Phaser.Scene {
-  constructor(){ super('Boot'); }
-  preload(){
-    this.load.setPath('assets');
-    // Borgy + bonus
-    this.load.image('borgy_ingame', 'borgy_ingame.png');
-    this.load.image('sb_token_user', 'sb_token_user.png');
+let game;
 
-    // Skins (corps + cap)
-    SKINS.forEach(n=>{
-      this.load.image(`pipe_${n}`, `pipe_v2_${n}.png`);
-      this.load.image(`cap_${n}`,  `cap_v2_${n}.png`);
-    });
-  }
-  create(){ this.scene.start('Menu'); }
-}
-
-// ---------- Menu principal ----------
-class MenuScene extends Phaser.Scene {
-  constructor(){ super('Menu'); }
-
-  create(){
-    const cx = this.scale.width/2, cy = this.scale.height/2;
-
-    // ciel
-    this.cameras.main.setBackgroundColor('#97d7e6');
-
-    // Borgy décoratif
-    this.add.image(cx, cy-220, 'borgy_ingame').setScale(0.65).setDepth(1);
-
-    // titre
-    this.add.text(cx, cy-420, 'FlappyBorgy', {
-      fontFamily:'monospace', fontSize:'78px', color:'#ffffff', stroke:'#0a3a38', strokeThickness:10
-    }).setOrigin(0.5);
-
-    // helper bouton
-    const makeBtn = (y, label, cb) => {
-      const g = this.add.rectangle(cx, y, 420, 90, 0x17a88a, 1).setStrokeStyle(6, 0x0a3a38)
-        .setDepth(2).setInteractive({useHandCursor:true});
-      const t = this.add.text(cx, y, label, {fontFamily:'monospace', fontSize:'44px', color:'#ffffff'})
-        .setOrigin(0.5).setDepth(3);
-      g.on('pointerover', ()=>g.setFillStyle(0x14c4a0));
-      g.on('pointerout',  ()=>g.setFillStyle(0x17a88a));
-      g.on('pointerup', cb);
-      return {g,t};
-    };
-
-    // boutons
-    makeBtn(cy+60,  'JOUER', () => this.scene.start('Game'));
-    makeBtn(cy+180, 'CLASSEMENT', () => this.openLeaderboard());
-    this.muteBtn = makeBtn(cy+300, this.sound.mute ? 'SON: OFF' : 'SON: ON', () => {
-      this.sound.mute = !this.sound.mute;
-      this.muteBtn.t.setText(this.sound.mute ? 'SON: OFF' : 'SON: ON');
-    });
-
-    // pied de page
-    this.add.text(cx, this.scale.height - 40, 'v15', {fontFamily:'monospace', fontSize:'22px', color:'#083b49'})
-      .setOrigin(0.5);
-  }
-
-  // Panneau de classement (lecture GET /api/leaderboard)
-  async openLeaderboard(){
-    const cx = this.scale.width/2, cy = this.scale.height/2;
-
-    const panel = this.add.rectangle(cx, cy, 560, 720, 0x123b46, 0.95).setDepth(10);
-    const title = this.add.text(cx, cy-300, 'Top 10', {
-      fontFamily:'monospace', fontSize:'56px', color:'#ffffff'
-    }).setOrigin(0.5).setDepth(11);
-
-    const close = this.add.text(cx, cy+300, 'Fermer', {
-      fontFamily:'monospace', fontSize:'36px', color:'#ffffff', backgroundColor:'#17a88a', padding:{x:14,y:8}
-    }).setOrigin(0.5).setDepth(11).setInteractive({useHandCursor:true});
-    close.on('pointerup', ()=>[panel,title,close,list].forEach(o=>o.destroy()));
-
-    // Récupération via l’API (si indisponible → fallback vide)
-    let rows = [];
-    try{
-      const r = await fetch('/api/leaderboard');
-      rows = (await r.json()).slice(0,10);
-    }catch(e){ rows=[]; }
-
-    const list = this.add.container(cx-240, cy-240).setDepth(11);
-    if(!rows.length){
-      list.add(this.add.text(cx-240, cy-240, 'Pas encore de scores.', {
-        fontFamily:'monospace', fontSize:'30px', color:'#bff'
-      }).setOrigin(0,0));
-      return;
-    }
-    rows.forEach((row,i)=>{
-      const y = i*56;
-      const name = (row.name || '???').slice(0,12);
-      list.add(this.add.text(0, y, `${i+1}. ${name}`, {fontFamily:'monospace', fontSize:'32px', color:'#ffffff'}));
-      list.add(this.add.text(380, y, `${row.score}`, {fontFamily:'monospace', fontSize:'32px', color:'#bff'}).setOrigin(1,0));
-    });
-  }
-}
-
-// ---------- Jeu ----------
-class GameScene extends Phaser.Scene {
-  constructor(){ super('Game'); }
-
-  create(){
-    this.score = 0;
-    this.pipesSpawned = 0;
-    this.dead = false;
-    this.multiplierActive = false;
-    this.scoreMultiplier = 1;
-    this.followCaps = [];
-    this.bonusTimerEvt = null;
-
-    // Monde & HUD
-    this.physics.world.setBounds(0, 0, this.scale.width, this.scale.height);
-    this.scoreText = this.add.text(28, 26, 'Score: 0', {
-      fontFamily:'monospace', fontSize:'42px', color:'#ffffff', stroke:'#000', strokeThickness:6
-    }).setScrollFactor(0).setDepth(50);
-    this.multiText = this.add.text(this.scale.width-20, 26, '', {
-      fontFamily:'monospace', fontSize:'36px', color:'#e0ffe0', stroke:'#005533', strokeThickness:6
-    }).setOrigin(1,0).setScrollFactor(0).setDepth(50);
-
-    // Joueur
-    this.player = this.physics.add.sprite(this.scale.width*0.22, this.scale.height*0.5, 'borgy_ingame')
-      .setScale(0.36).setDepth(10).setCollideWorldBounds(true);
-    this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
-        .setOffset(this.player.width*0.225, this.player.height*0.25);
-    this.player.body.setGravityY(PROFILE.gravity);
-
-    this.input.on('pointerdown', ()=>this.flap());
-    this.input.keyboard.on('keydown-SPACE', ()=>this.flap());
-
-    // Halo bonus
-    this.auraRing = this.add.circle(0, 0, 120, 0x22D6A1, 0.22).setVisible(false).setDepth(9);
-
-    // Groupe de tuyaux physiques
-    this.pipes = this.physics.add.group({ allowGravity:false, immovable:true });
-    this.physics.add.collider(this.player, this.pipes, ()=>this.onHitPipe());
-
-    // Spawn récurrent
-    this.time.addEvent({ delay: SPAWN_EVERY_MS, loop: true, callback: ()=>this.spawnPipePair() });
-
-    // recoller caps + halo
-    this.events.on('update', ()=>{
-      this.followCaps.forEach(f=>f());
-      if(this.auraRing.visible){
-        this.auraRing.x = this.player.x; this.auraRing.y = this.player.y;
-        this.auraRing.scale = 0.95 + 0.05*Math.sin(this.time.now*0.004);
+/* ----------------- BOOT ----------------- */
+window.addEventListener('load', () => {
+  const config = {
+    type: Phaser.AUTO,
+    parent: 'game-root',
+    backgroundColor: '#9edff1',
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: 768,
+      height: 1366
+    },
+    physics: {
+      default: 'arcade',
+      arcade: {
+        gravity: { y: 0 },
+        debug: false
       }
-    });
-  }
+    },
+    scene: [PreloadScene, GameScene]
+  };
 
-  // ------- gameplay -------
-  flap(){
-    if (this.dead) return;
-    this.player.setVelocityY(-PROFILE.jump);
-  }
+  game = new Phaser.Game(config);
+});
 
-  onHitPipe(){
-    if(this.dead) return;
-    this.dead = true;
-    this.clearBonus();
+/* ----------------- PRELOAD ----------------- */
+function PreloadScene() { Phaser.Scene.call(this, { key: 'PreloadScene' }); }
+PreloadScene.prototype = Object.create(Phaser.Scene.prototype);
+PreloadScene.prototype.constructor = PreloadScene;
 
-    this.physics.pause();
-    this.player.setTint(0xff6666);
+PreloadScene.prototype.preload = function () {
+  // joueur
+  this.load.image('borgy_ingame', 'assets/borgy_ingame.png');
 
-    const box = this.add.rectangle(W/2, H/2, 560, 320, 0x123b46, 0.95).setDepth(100);
-    const t1  = this.add.text(W/2, H/2-90, 'Game Over', {fontFamily:'monospace', fontSize:'64px', color:'#fff'}).setOrigin(0.5).setDepth(101);
-    const t2  = this.add.text(W/2, H/2-15, `Score:  ${this.score}`, {fontFamily:'monospace', fontSize:'46px', color:'#bff'}).setOrigin(0.5).setDepth(101);
+  // bonus
+  this.load.image('sb_token', 'assets/sb_token_user.png');
 
-    const btnR = this.makeBtn(W/2-120, H/2+80, 'Rejouer', ()=>{ [box,t1,t2,btnR,btnM].forEach(x=>x.destroy()); this.scene.restart(); });
-    const btnM = this.makeBtn(W/2+120, H/2+80, 'Menu',    ()=>{ [box,t1,t2,btnR,btnM].forEach(x=>x.destroy()); this.scene.start('Menu'); });
-  }
+  // pipes skins & caps
+  PIPE_SKINS.forEach(s => {
+    this.load.image(`pipe_${s}`, `assets/pipe_v2_${s}.png`);
+    this.load.image(`cap_${s}`,  `assets/cap_v2_${s}.png`);
+  });
 
-  makeBtn(x,y,label,cb){
-    const g = this.add.rectangle(x,y, 220,70, 0x17a88a,1).setDepth(101).setStrokeStyle(6,0x0a3a38).setInteractive({useHandCursor:true});
-    const t = this.add.text(x,y, label, {fontFamily:'monospace', fontSize:'36px', color:'#fff'}).setOrigin(0.5).setDepth(102);
-    g.on('pointerover', ()=>g.setFillStyle(0x14c4a0));
-    g.on('pointerout',  ()=>g.setFillStyle(0x17a88a));
-    g.on('pointerup', cb);
-    return g;
-  }
-
-  spawnPipePair(){
-    if(this.dead) return;
-
-    const holeY = Phaser.Math.Between(240, this.scale.height-240);
-    const holeH = Phaser.Math.Between(GAP_MIN, GAP_MAX);
-
-    const skin = SKINS[this.pipesSpawned % SKINS.length];
-    const x = this.scale.width + 120;
-    const pair = this.makePipe(x, holeY, holeH, skin);
-    this.pipesSpawned++;
-
-    pair.scored = false;
-    this.time.addEvent({
-      delay: 50, loop:true,
-      callback: ()=>{
-        if (!pair || pair.destroyed || pair.scored || this.dead) return;
-        const any = pair.topBody || pair.bottomBody;
-        if (any && any.x + PIPE_W*0.5 < this.player.x) {
-          pair.scored = true;
-          this.addScore(1 * this.scoreMultiplier);
-        }
-      }
-    });
-
-    if (this.pipesSpawned % BONUS_EVERY === 0) this.spawnBonus(x+450, holeY);
-  }
-
-  makePipe(x, holeY, holeH, skin){
-    const bodyKey = `pipe_${skin}`, capKey = `cap_${skin}`;
-    const minH = 40;
-    const topH = Math.max(minH, holeY - holeH/2);
-    const bottomH = Math.max(minH, this.scale.height - (holeY + holeH/2));
-
-    const topBody = this.physics.add.image(x, topH, bodyKey)
-      .setOrigin(0.5,1).setDisplaySize(PIPE_W, topH)
-      .setImmovable(true).setDepth(5);
-    topBody.body.setAllowGravity(false).setVelocityX(PIPE_SPEED);
-    this.pipes.add(topBody);
-
-    const bottomBody = this.physics.add.image(x, holeY + holeH/2 + bottomH, bodyKey)
-      .setOrigin(0.5,1).setDisplaySize(PIPE_W, bottomH)
-      .setFlipY(true)
-      .setImmovable(true).setDepth(5);
-    bottomBody.body.setAllowGravity(false).setVelocityX(PIPE_SPEED);
-    this.pipes.add(bottomBody);
-
-    const topCap    = this.add.image(x, 0, capKey).setOrigin(0.5,1).setDepth(6);
-    const bottomCap = this.add.image(x, 0, capKey).setOrigin(0.5,0).setFlipY(true).setDepth(6);
-
-    const f = ()=>{
-      if(!topBody.active) return;
-      topCap.x = topBody.x;       topCap.y = topBody.y - topBody.displayHeight;
-      bottomCap.x = bottomBody.x; bottomCap.y = bottomBody.y - bottomBody.displayHeight;
-    };
-    this.followCaps.push(f);
-
-    this.time.addEvent({ delay: 12000, callback: ()=>[topBody,bottomBody,topCap,bottomCap].forEach(o=>o && o.destroy()) });
-    return { topBody, bottomBody, topCap, bottomCap };
-  }
-
-  spawnBonus(x, y){
-    const b = this.physics.add.image(x, y, 'sb_token_user').setScale(0.75).setDepth(20);
-    b.body.setAllowGravity(false).setVelocityX(PIPE_SPEED);
-    this.physics.add.overlap(this.player, b, ()=>{ b.destroy(); this.startBonus(); });
-  }
-
-  startBonus(){
-    this.multiplierActive = true;
-    this.scoreMultiplier = 2;
-    this.auraRing.setVisible(true);
-    this.updateMultiplierText(BONUS_TIME);
-
-    if(this.bonusTimerEvt) this.bonusTimerEvt.remove(false);
-    const t0 = this.time.now;
-    this.bonusTimerEvt = this.time.addEvent({
-      delay: 100, loop:true, callback: ()=>{
-        const left = Math.max(0, BONUS_TIME - (this.time.now - t0));
-        this.updateMultiplierText(left);
-        if(left<=0) this.clearBonus();
-      }
-    });
-  }
-
-  clearBonus(){
-    this.multiplierActive = false; this.scoreMultiplier = 1;
-    this.auraRing.setVisible(false); this.multiText.setText('');
-    if(this.bonusTimerEvt){ this.bonusTimerEvt.remove(false); this.bonusTimerEvt = null; }
-  }
-
-  addScore(n){ this.score += n; this.scoreText.setText(`Score: ${this.score}`); }
-  updateMultiplierText(msLeft){ const s = Math.ceil(msLeft/1000); this.multiText.setText(`x2  ${s}s`); }
-}
-
-// ---------- Lancement Phaser ----------
-const config = {
-  type: Phaser.AUTO,
-  parent: 'game',
-  width: W, height: H,
-  backgroundColor: '#97d7e6',
-  physics: { default:'arcade', arcade:{ gravity:{y:0}, debug:false } },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, MenuScene, GameScene]
+  // petite barre de progression
+  const w = this.scale.width * 0.6, h = 10;
+  const x = this.scale.width * 0.2, y = this.scale.height * 0.5;
+  const bg = this.add.rectangle(x, y, w, h, 0xdddddd).setOrigin(0, 0.5);
+  const fg = this.add.rectangle(x, y, 1, h, 0x00c389).setOrigin(0, 0.5);
+  this.load.on('progress', p => fg.width = w * p);
+  this.load.on('complete', () => { bg.destroy(); fg.destroy(); });
 };
-new Phaser.Game(config);
+
+PreloadScene.prototype.create = function () {
+  this.scene.start('GameScene');
+};
+
+/* ----------------- GAME ----------------- */
+function GameScene() { Phaser.Scene.call(this, { key: 'GameScene' }); }
+GameScene.prototype = Object.create(Phaser.Scene.prototype);
+GameScene.prototype.constructor = GameScene;
+
+GameScene.prototype.init = function () {
+  this.score = 0;
+  this.multiplierActive = false;
+  this.pipesPassed = 0;
+  this.lastPairId = 0;
+
+  this.followCaps = [];
+  this.currentSkinIndex = 0;
+  this.spawnCount = 0;
+
+  this.patterns = ['ALT_HIGH_LOW','STAIRS','SINE','RANDOM_JITTER','RANDOM'];
+  this.patternMode = 'ALT_HIGH_LOW';
+  this.lastTopY = null;
+};
+
+GameScene.prototype.create = function () {
+  const W = this.scale.width;
+  const H = this.scale.height;
+
+  // --- Texte Score & Mult ---
+  this.scoreText = this.add.text(24, 20, 'Score: 0', {
+    fontFamily: 'monospace',
+    fontSize: '48px',
+    color: '#ffffff',
+    stroke: '#0a3a38',
+    strokeThickness: 8
+  }).setDepth(50).setOrigin(0, 0.0);
+
+  this.multText = this.add.text(W - 24, 20, '', {
+    fontFamily: 'monospace',
+    fontSize: '40px',
+    color: '#b1ffe6',
+    stroke: '#007a62',
+    strokeThickness: 6
+  }).setDepth(50).setOrigin(1, 0);
+
+  // --- Groupe tuyaux
+  this.pipes = this.physics.add.group();
+
+  // --- Joueur (réduit)
+  this.player = this.physics.add
+    .sprite(W * 0.22, H * 0.5, 'borgy_ingame')
+    .setScale(BORGY_SCALE)
+    .setDepth(10)
+    .setCollideWorldBounds(true);
+  this.player.body.setGravityY(PROFILE.gravity);
+  this.player.body
+    .setSize(this.player.width * 0.55, this.player.height * 0.55, true)
+    .setOffset(this.player.width * 0.225, this.player.height * 0.25);
+
+  // --- Halo bonus
+  this.aura = this.add.circle(0, 0, Math.max(this.player.displayWidth, this.player.displayHeight)*0.65, AURA_SOFT, 0.22)
+    .setVisible(false)
+    .setDepth(9);
+
+  // --- Inputs
+  this.input.on('pointerdown', () => this.flap());
+  this.input.keyboard.on('keydown-SPACE', () => this.flap());
+
+  // --- Collisions avec tuyaux
+  this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
+
+  // --- Spawner de tuyaux
+  this.spawnTimer = this.time.addEvent({
+    delay: SPAWN_DELAY,
+    loop: true,
+    callback: () => this.spawnPipePair()
+  });
+
+  // spawn tout de suite une première paire
+  this.spawnPipePair();
+};
+
+GameScene.prototype.update = function (t, dt) {
+  // tilt léger
+  if (this.player.body.velocity.y < -20) this.player.setAngle(-18);
+  else if (this.player.body.velocity.y > 120) this.player.setAngle(22);
+  else this.player.setAngle(0);
+
+  // Aura suit le joueur
+  if (this.aura.visible) {
+    this.aura.x = this.player.x;
+    this.aura.y = this.player.y;
+    this.aura.alpha = 0.2 + 0.08 * Math.sin(t / 180);
+  }
+
+  // mettre à jour la position des caps si besoin
+  this.followCaps.forEach(fn => fn());
+
+  // suppression éléments trop à gauche (sécurité)
+  this.pipes.children.each(child => {
+    if (child.active && child.x < -PIPE_W * 2) child.destroy();
+  });
+};
+
+/* --------- Gameplay helpers --------- */
+GameScene.prototype.flap = function () {
+  if (!this.player.active) return;
+  this.player.setVelocityY(PROFILE.jump);
+};
+
+GameScene.prototype.spawnPipePair = function () {
+  const W = this.scale.width;
+  const H = this.scale.height;
+
+  // Pattern pour Y du trou
+  const gap = PROFILE.gap;
+  const minTop = HOLE_MIN;
+  const maxTop = H - (gap + HOLE_MAX_MARGIN);
+  let topY;
+
+  switch (this.patternMode) {
+    case 'ALT_HIGH_LOW':
+      topY = (this.spawnCount % 2 === 0) ? (minTop + 20) : (maxTop - 20);
+      break;
+    case 'STAIRS': {
+      const steps = 5;
+      const steph = (maxTop - minTop) / steps;
+      topY = minTop + ((this.spawnCount % steps) * steph);
+      break;
+    }
+    case 'SINE': {
+      const mid = (minTop + maxTop) / 2;
+      const amp = (maxTop - minTop) * 0.42;
+      topY = mid + Math.sin(this.spawnCount * 0.8) * amp;
+      break;
+    }
+    case 'RANDOM_JITTER': {
+      const last = this.lastTopY ?? ((minTop + maxTop) / 2);
+      const jitter = Phaser.Math.Between(-120, 120);
+      topY = Phaser.Math.Clamp(last + jitter, minTop, maxTop);
+      break;
+    }
+    default:
+      topY = Phaser.Math.Between(minTop, maxTop);
+  }
+  this.lastTopY = topY;
+  this.spawnCount++;
+
+  const holeY = topY + gap / 2;
+  const skin = PIPE_SKINS[this.currentSkinIndex];
+  this.currentSkinIndex = (this.currentSkinIndex + 1) % PIPE_SKINS.length;
+
+  const x = this.cameras.main.width + 40; // rapproché pour bien voir
+  const pair = this.makePipe(x, holeY, gap, skin);
+
+  // capteurs de score
+  const sensor = this.add.rectangle(x + PIPE_W + 20, this.scale.height * 0.5, 10, this.scale.height, 0x000000, 0);
+  this.physics.add.existing(sensor, true);
+  sensor.body.setVelocityX(PROFILE.pipeSpeed);
+  sensor.isScoreSensor = true;
+
+  this.physics.add.overlap(this.player, sensor, () => {
+    if (!sensor.active) return;
+    sensor.destroy();
+    this.incrementScore();
+  });
+
+  // bonus toutes les BONUS_EVERY paires
+  if (this.pipesPassed > 0 && this.pipesPassed % BONUS_EVERY === 0) {
+    this.spawnBonus(x + 450, Phaser.Math.Between(200, this.scale.height - 280));
+  }
+};
+
+GameScene.prototype.makePipe = function (x, holeY, holeH, skin) {
+  const bodyKey = `pipe_${skin}`;
+  const capKey  = `cap_${skin}`;
+
+  const usingImages = this.textures.exists(bodyKey) && this.textures.exists(capKey);
+
+  const H = this.scale.height;
+  const minH = 40;
+  const topH = Math.max(minH, holeY - holeH / 2);
+  const bottomH = Math.max(minH, H - (holeY + holeH / 2));
+
+  let topBody, bottomBody, topCap = null, bottomCap = null;
+
+  if (usingImages) {
+    // Corps
+    topBody = this.physics.add.image(x, topH, bodyKey)
+      .setOrigin(0.5, 1)
+      .setDisplaySize(PIPE_W, topH)
+      .setImmovable(true)
+      .setDepth(5);
+    topBody.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
+
+    bottomBody = this.physics.add.image(x, holeY + holeH / 2 + bottomH, bodyKey)
+      .setOrigin(0.5, 1)
+      .setFlipY(true)
+      .setDisplaySize(PIPE_W, bottomH)
+      .setImmovable(true)
+      .setDepth(5);
+    bottomBody.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
+
+    // Caps
+    topCap    = this.add.image(x, 0, capKey).setOrigin(0.5, 1).setDepth(6);
+    bottomCap = this.add.image(x, 0, capKey).setOrigin(0.5, 0).setFlipY(true).setDepth(6);
+  } else {
+    // Fallback rectangles (debug si textures manquantes)
+    console.warn('Fallback rectangles used for skin:', skin);
+    const color = 0x10b981, stroke = 0x0a3a38;
+
+    topBody = this.add.rectangle(x, topH, PIPE_W, topH, color)
+      .setOrigin(0.5, 1).setStrokeStyle(6, stroke).setDepth(5);
+    bottomBody = this.add.rectangle(x, holeY + holeH / 2 + bottomH, PIPE_W, bottomH, color)
+      .setOrigin(0.5, 1).setStrokeStyle(6, stroke).setFlipY(true).setDepth(5);
+
+    this.physics.add.existing(topBody, true);
+    this.physics.add.existing(bottomBody, true);
+    topBody.body.setVelocityX(PROFILE.pipeSpeed);
+    bottomBody.body.setVelocityX(PROFILE.pipeSpeed);
+  }
+
+  this.pipes.add(topBody);
+  this.pipes.add(bottomBody);
+
+  // suivre les caps collés aux corps
+  const f = () => {
+    if (!topBody.active) return;
+    if (topCap) {
+      topCap.x = topBody.x;
+      topCap.y = topBody.y - topBody.displayHeight;
+    }
+    if (bottomCap) {
+      bottomCap.x = bottomBody.x;
+      bottomCap.y = bottomBody.y - bottomBody.displayHeight;
+    }
+  };
+  this.followCaps.push(f);
+
+  // nettoyage
+  this.time.addEvent({
+    delay: 12000,
+    callback: () => [topBody, bottomBody, topCap, bottomCap].forEach(o => o && o.destroy())
+  });
+
+  return { topBody, bottomBody, topCap, bottomCap };
+};
+
+GameScene.prototype.spawnBonus = function (x, y) {
+  const bonus = this.physics.add.image(x, y, 'sb_token')
+    .setDepth(7)
+    .setScale(0.55)
+    .setImmovable(true);
+  bonus.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
+
+  this.physics.add.overlap(this.player, bonus, () => {
+    if (!bonus.active) return;
+    bonus.destroy();
+    this.activateMultiplier();
+  });
+
+  // safety destroy
+  this.time.delayedCall(12000, () => bonus.destroy());
+};
+
+GameScene.prototype.activateMultiplier = function () {
+  if (this.multTimer) this.multTimer.remove(false);
+
+  this.multiplierActive = true;
+  this.multText.setText('x2');
+  this.aura.setVisible(true).setFillStyle(AURA_SOFT, 0.28);
+
+  this.multTimer = this.time.delayedCall(BONUS_DURATION, () => {
+    this.multiplierActive = false;
+    this.multText.setText('');
+    this.aura.setVisible(false);
+  });
+};
+
+GameScene.prototype.incrementScore = function () {
+  this.pipesPassed++;
+  const add = this.multiplierActive ? 2 : 1;
+  this.score += add;
+  this.scoreText.setText('Score: ' + this.score);
+};
+
+GameScene.prototype.gameOver = function () {
+  if (!this.player.active) return;
+
+  this.player.disableBody(true, false);
+  this.player.setTint(0xff6b6b);
+  this.spawnTimer && this.spawnTimer.remove(false);
+
+  const W = this.scale.width;
+  const H = this.scale.height;
+
+  const panel = this.add.rectangle(W/2, H/2, W*0.82, 360, 0x163945, 0.92).setDepth(100);
+  const tt = this.add.text(W/2, H/2 - 110, 'Game Over', {
+    fontFamily: 'Georgia, serif',
+    fontSize: '72px',
+    color: '#ffffff'
+  }).setOrigin(0.5).setDepth(101);
+
+  this.add.text(W/2, H/2 - 30, `Score :  ${this.score}`, {
+    fontFamily: 'monospace',
+    fontSize: '52px',
+    color: '#c9fff4'
+  }).setOrigin(0.5).setDepth(101);
+
+  const btn = this.add.text(W/2, H/2 + 70, 'Rejouer', {
+    fontFamily: 'monospace',
+    fontSize: '52px',
+    color: '#ffffff',
+    backgroundColor: '#0db187',
+    padding: { left: 22, right: 22, top: 10, bottom: 10 }
+  }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
+
+  btn.on('pointerdown', () => this.scene.restart());
+};
