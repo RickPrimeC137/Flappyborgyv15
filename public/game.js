@@ -1,254 +1,255 @@
-/* FlappyBorgy — build sans son */
+// FlappyBorgy game.js - Code principal
+// Contient le menu, le système de quêtes et le jeu sans audio
 
-const GAME_W = 768;
-const GAME_H = 1366;
+// Variables globales
+let lastScore = 0;
+let quests = [
+    { description: "Atteindre un score de 10", type: 'score', target: 10, completed: false },
+    { description: "Survivre 15 secondes", type: 'time', target: 15, completed: false },
+    { description: "Atteindre un score de 20", type: 'score', target: 20, completed: false }
+];
 
-const PROFILE = {
-  gravity: 1400,
-  jump: -380,
-  pipeSpeed: -220,
-  gap: 260,              // taille de l'ouverture
-  spawnDelay: 1600       // délai entre paires
-};
-
-const BORGY_SCALE = 0.22;
-const PIPE_W = 180;       // largeur d'affichage des tuyaux
-
-// noms d'assets présents dans public/assets/
-const ASSETS = {
-  borgy: 'borgy_ingame.png',
-  lightTop: 'pipe_light_top.png',
-  lightBottom: 'pipe_light_bottom.png',
-  darkTop: 'pipe_dark_top.png',
-  darkBottom: 'pipe_dark_bottom.png',
-  token: 'sb_token_user.png'
-};
-
-let game;
-
-window.addEventListener('load', () => {
-  game = new Phaser.Game({
-    type: Phaser.AUTO,
-    parent: 'game-root',
-    backgroundColor: '#9edff1',
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: {
-      default: 'arcade',
-      arcade: { gravity: { y: 0 }, debug: false }
-    },
-    scene: [PreloadScene, MenuScene, GameScene]
-  });
-});
-
-/* ======== PRELOAD ======== */
-
-function PreloadScene(){ Phaser.Scene.call(this,{key:'preload'}) }
-PreloadScene.prototype = Object.create(Phaser.Scene.prototype); PreloadScene.prototype.constructor=PreloadScene;
-
-PreloadScene.prototype.preload = function () {
-  const W = this.scale.width, H = this.scale.height;
-  const barBg = this.add.rectangle(W*0.5, H*0.5, W*0.5, 10, 0x0b7463, 0.18).setOrigin(0.5);
-  const bar = this.add.rectangle(W*0.25, H*0.5, 1, 10, 0x0b7463).setOrigin(0,0.5);
-  const pct = this.add.text(W*0.5, H*0.5+18, '0%', {font:'16px monospace', color:'#055'}).setOrigin(0.5);
-
-  this.load.on('progress', p => { bar.width = (W*0.5) * p; pct.setText(Math.round(p*100)+'%'); });
-
-  this.load.setPath('assets');
-  this.load.image('borgy', ASSETS.borgy);
-  this.load.image('pipe_light_top', ASSETS.lightTop);
-  this.load.image('pipe_light_bottom', ASSETS.lightBottom);
-  this.load.image('pipe_dark_top', ASSETS.darkTop);
-  this.load.image('pipe_dark_bottom', ASSETS.darkBottom);
-  this.load.image('sb_token', ASSETS.token);
-};
-
-PreloadScene.prototype.create = function () { this.scene.start('menu'); };
-
-/* ======== MENU ======== */
-
-function MenuScene(){ Phaser.Scene.call(this,{key:'menu'}) }
-MenuScene.prototype = Object.create(Phaser.Scene.prototype); MenuScene.prototype.constructor=MenuScene;
-
-MenuScene.prototype.create = function () {
-  const W = this.scale.width, H = this.scale.height;
-  this.add.text(W*0.5, H*0.18, 'FlappyBorgy', {
-    fontFamily:'Georgia, serif', fontSize:'64px', color:'#154f43'
-  }).setOrigin(0.5);
-
-  const btnPlay = this.add.text(W*0.5, H*0.34, 'Jouer', styleBtn())
-    .setOrigin(0.5).setPadding(20,10,20,10).setInteractive({useHandCursor:true});
-  btnPlay.on('pointerdown', () => this.scene.start('game'));
-
-  const btnQuests = this.add.text(W*0.5, H*0.42, 'Quêtes', styleBtnSecondary())
-    .setOrigin(0.5).setPadding(20,10,20,10).setInteractive({useHandCursor:true});
-  btnQuests.on('pointerdown', () => this.showQuests());
-
-  this.add.text(W*0.5, H*0.92, 'Tap/Space pour sauter\nÉvitez les tuyaux', {
-    font:'20px monospace', color:'#0a3a38', align:'center'
-  }).setOrigin(0.5);
-};
-
-MenuScene.prototype.showQuests = function () {
-  const W = this.scale.width, H = this.scale.height;
-  const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.6, 0x0e3b37, 0.94);
-  const t = this.add.text(W/2, H/2 - 220, 'Quêtes du jour', {font:'36px Georgia', color:'#fff'}).setOrigin(0.5);
-  const quests = [
-    'Atteindre 5 points',
-    'Passer 3 tuyaux d’affilée',
-    'Jouer 3 parties'
-  ];
-  this.add.text(W/2, H/2 - 150, '— Aujourd’hui —', {font:'20px monospace', color:'#b9fff1'}).setOrigin(0.5);
-  this.add.text(W/2 - W*0.33, H/2 - 120, '• ' + quests.join('\n• '), {
-    font:'22px monospace', color:'#eafffb', lineSpacing:10
-  }).setOrigin(0,0);
-
-  const close = this.add.text(W/2, H/2 + 250, 'Fermer', styleBtn()).setOrigin(0.5).setInteractive({useHandCursor:true});
-  close.on('pointerdown', () => { panel.destroy(); t.destroy(); close.destroy(); this.children.each(c=>{ if(c.style && c.text && c!==close && c!==t) c.destroy?.() }); this.scene.restart(); });
-};
-
-function styleBtn(){
-  return { font:'32px monospace', color:'#ffffff', backgroundColor:'#0db187', stroke:'#0a3a38', strokeThickness:6 };
-}
-function styleBtnSecondary(){
-  return { font:'28px monospace', color:'#083b33', backgroundColor:'#c8fff0', stroke:'#0db187', strokeThickness:4 };
-}
-
-/* ======== GAME ======== */
-
-function GameScene(){ Phaser.Scene.call(this,{key:'game'}) }
-GameScene.prototype = Object.create(Phaser.Scene.prototype); GameScene.prototype.constructor=GameScene;
-
-GameScene.prototype.init = function () {
-  this.score = 0;
-  this.pairs = [];            // { top, bottom, scored }
-  this.spawnTimer = null;
-  this.playing = false;
-};
-
-GameScene.prototype.create = function () {
-  const W = this.scale.width, H = this.scale.height;
-
-  // texte score
-  this.scoreText = this.add.text(24, 20, 'Score: 0', {
-    font:'48px monospace', color:'#ffffff', stroke:'#0a3a38', strokeThickness:8
-  }).setDepth(1000);
-
-  // joueur
-  this.player = this.physics.add.sprite(W*0.23, H*0.45, 'borgy')
-    .setScale(BORGY_SCALE).setDepth(10).setCollideWorldBounds(true);
-  this.player.body.setGravityY(PROFILE.gravity);
-  // boîte de collision un peu réduite
-  this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
-                  .setOffset(this.player.width*0.225, this.player.height*0.25);
-
-  // groupe de tuyaux
-  this.pipes = this.physics.add.group();
-
-  // collisions
-  this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
-
-  // input
-  this.input.keyboard.on('keydown-SPACE', () => this.handleInput());
-  this.input.on('pointerdown', () => this.handleInput());
-
-  // message "Tap pour commencer"
-  this.tapText = this.add.text(W*0.5, H*0.62, 'Tap/Space pour commencer', {
-    font:'30px monospace', color:'#0a3a38', backgroundColor:'#c8fff0'
-  }).setOrigin(0.5).setDepth(500);
-
-  // on démarre immobile : le jeu s’active lors du 1er input
-  this.playing = false;
-};
-
-GameScene.prototype.handleInput = function () {
-  if (!this.playing) {
-    this.playing = true;
-    this.tapText?.destroy();
-    // boucle de spawn
-    this.spawnTimer = this.time.addEvent({
-      delay: PROFILE.spawnDelay,
-      loop: true,
-      callback: () => this.spawnPair()
-    });
-    // spawn immédiat
-    this.spawnPair();
-  }
-  // saut
-  this.player.setVelocityY(PROFILE.jump);
-};
-
-GameScene.prototype.spawnPair = function () {
-  const W = this.scale.width, H = this.scale.height;
-  const gap = PROFILE.gap;
-
-  // plage verticale sûre
-  const MIN_TOP = 80;
-  const MAX_TOP = H - (gap + 180);
-  const topY = Phaser.Math.Between(MIN_TOP, MAX_TOP);
-  const holeY = topY + gap/2;
-
-  // tous les 50, alterner skin light/dark
-  const useDark = (Math.floor(this.score/50) % 2) === 1;
-
-  const bodyTopKey = useDark ? 'pipe_dark_bottom' : 'pipe_light_bottom';    // haut = bottom (colerette vers bas)
-  const bodyBotKey = useDark ? 'pipe_dark_top'    : 'pipe_light_top';       // bas = top (colerette vers haut)
-
-  // hauteurs
-  const topHeight = topY;
-  const bottomHeight = H - (holeY + gap/2);
-
-  // TOP (colerette vers le bas) => flipY = true
-  const top = this.physics.add.image(W + 120, topHeight, bodyTopKey)
-    .setOrigin(0.5,1).setFlipY(true).setDisplaySize(PIPE_W, topHeight).setImmovable(true).setDepth(5);
-  top.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-
-  // BOTTOM (colerette vers le haut)
-  const bottom = this.physics.add.image(W + 120, holeY + gap/2 + bottomHeight, bodyBotKey)
-    .setOrigin(0.5,1).setDisplaySize(PIPE_W, bottomHeight).setImmovable(true).setDepth(5);
-  bottom.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-
-  this.pipes.addMultiple([top, bottom]);
-  this.pairs.push({ top, bottom, scored:false });
-
-  // auto-clean
-  this.time.delayedCall(14000, () => { top.destroy(); bottom.destroy(); });
-};
-
-GameScene.prototype.update = function () {
-  if (!this.playing) return;
-
-  // inclinaison
-  if (this.player.body.velocity.y < -30) this.player.setAngle(-18);
-  else if (this.player.body.velocity.y > 160) this.player.setAngle(22);
-  else this.player.setAngle(0);
-
-  // score quand le bord droit du top passe à gauche du joueur
-  for (const p of this.pairs) {
-    if (p.scored || !p.top.active) continue;
-    const rightEdge = p.top.x + (PIPE_W/2);
-    if (rightEdge < this.player.x) {
-      p.scored = true;
-      this.score++;
-      this.scoreText.setText('Score: ' + this.score);
+// Scène du menu principal
+class MenuScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'Menu' });
     }
-  }
+    preload() {
+        // Chargement des assets du jeu
+        this.load.image('bird', 'assets/bird.png');
+        this.load.image('pipe', 'assets/pipe.png');
+        this.load.image('ground', 'assets/ground.png');
+        // Chargement des images de boutons (si disponibles)
+        this.load.image('playButton', 'assets/play.png');
+        this.load.image('questsButton', 'assets/quests.png');
+    }
+    create(data) {
+        // Affichage du dernier score dans le menu
+        if (data && data.score !== undefined) {
+            lastScore = data.score;
+        }
+        let scoreText = "Score : " + lastScore;
+        this.menuScoreText = this.add.text(this.scale.width/2, 50, scoreText,
+            { font: "32px Arial", fill: "#000" }
+        ).setOrigin(0.5, 0.5);
+        // Bouton "Jouer"
+        let playX = this.scale.width / 2;
+        let playY = this.scale.height * 0.45;
+        if (this.textures.exists('playButton')) {
+            this.playButton = this.add.image(playX, playY, 'playButton').setOrigin(0.5, 0.5);
+        } else {
+            this.playButton = this.add.text(playX, playY, "Jouer",
+                { font: "28px Arial", fill: "#000", backgroundColor: "#fff" }
+            ).setOrigin(0.5, 0.5).setPadding(10);
+        }
+        this.playButton.setInteractive();
+        this.playButton.on('pointerdown', () => {
+            this.scene.start('Game');
+        });
+        // Bouton "Quêtes"
+        let questsX = this.scale.width / 2;
+        let questsY = this.scale.height * 0.55;
+        if (this.textures.exists('questsButton')) {
+            this.questsButton = this.add.image(questsX, questsY, 'questsButton').setOrigin(0.5, 0.5);
+        } else {
+            this.questsButton = this.add.text(questsX, questsY, "Quêtes",
+                { font: "28px Arial", fill: "#000", backgroundColor: "#fff" }
+            ).setOrigin(0.5, 0.5).setPadding(10);
+        }
+        this.questsButton.setInteractive();
+        this.questsButton.on('pointerdown', () => {
+            this.scene.start('Quests');
+        });
+        // (Pas de bouton Son, fonctionnalité supprimée)
+    }
+}
 
-  // supprimer les tuyaux trop à gauche
-  this.pipes.children.each(ch => { if (ch.active && ch.x < -PIPE_W*2) ch.destroy(); });
+// Scène de jeu (FlappyBorgy)
+class GameScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'Game' });
+    }
+    create() {
+        // Initialisation du score
+        this.score = 0;
+        this.scoreText = this.add.text(20, 20, "Score : 0",
+            { font: "20px Arial", fill: "#fff", stroke: "#000", strokeThickness: 3 }
+        );
+        // Ajout du sol (statique) en bas de l'écran pour les collisions
+        this.ground = this.physics.add.staticImage(this.scale.width/2, this.scale.height, 'ground')
+            .setOrigin(0.5, 1);
+        this.ground.refreshBody();
+        // Création de l'oiseau (joueur)
+        this.bird = this.physics.add.sprite(100, this.scale.height/2, 'bird');
+        this.bird.body.setGravityY(1000);  // gravité appliquée au joueur
+        // Réduction optionnelle de la zone de collision du bird
+        this.bird.body.setSize(this.bird.width - 4, this.bird.height - 4);
+        // Empêche le joueur de sortir par le bas et le haut (monde)
+        this.bird.setCollideWorldBounds(true);
+        // Groupe pour les tuyaux
+        this.pipes = this.physics.add.group();
+        // Paramètres de génération des tuyaux
+        this.pipeSpeed = 200;
+        this.pipeInterval = 1500;
+        this.gapHeight = 120;
+        // Limites verticales pour le centre de la trouée (espace entre tuyaux)
+        let groundHeight = this.ground.displayHeight;
+        this.minGapY = 130;
+        this.maxGapY = this.scale.height - groundHeight - 20 - this.gapHeight/2;
+        this.lastGapY = 300;  // position de la dernière trouée générée
+        this.pipeDirection = -50;  // direction initiale du déplacement vertical (vers le haut)
+        this.pipeColorToggle = false;  // alternance clair/foncé initiale
+        // Timer de génération continue des paires de tuyaux
+        this.pipeTimer = this.time.addEvent({
+            delay: this.pipeInterval,
+            callback: this.spawnPipe,
+            callbackScope: this,
+            loop: true
+        });
+        // Enregistrement du temps de début (pour les quêtes de survie)
+        this.startTime = Date.now();
+        // Contrôles: clic/souris ou barre d'espace pour faire sauter l'oiseau
+        this.input.on('pointerdown', this.flap, this);
+        this.input.keyboard.on('keydown-SPACE', this.flap, this);
+        // Vérification des collisions (oiseau avec tuyaux ou sol)
+        this.physics.add.overlap(this.bird, this.pipes, this.endGame, null, this);
+        this.physics.add.overlap(this.bird, this.ground, this.endGame, null, this);
+        // Indicateur de fin de partie pour éviter les répétitions
+        this.gameOverFlag = false;
+    }
+    update() {
+        // Effet de rotation de l'oiseau selon sa vitesse verticale
+        if (this.bird.body.velocity.y > 0 && this.bird.angle < 90) {
+            this.bird.angle += 2;
+        }
+        if (this.bird.body.velocity.y < 0 && this.bird.angle > -30) {
+            this.bird.angle = -30;
+        }
+        // Empêche l'oiseau de sortir de l'écran par le haut
+        if (this.bird.y < 0) {
+            this.bird.y = 0;
+            this.bird.body.velocity.y = 0;
+        }
+        // Mise à jour du score quand un tuyau est passé
+        this.pipes.getChildren().forEach(pipe => {
+            if (!pipe.scored && pipe.x + pipe.displayWidth/2 < this.bird.x - this.bird.displayWidth/2) {
+                pipe.scored = true;
+                this.score += 1;
+                this.scoreText.setText("Score : " + this.score);
+            }
+        });
+    }
+    // Fait sauter (voler) l'oiseau
+    flap() {
+        if (!this.gameOverFlag) {
+            this.bird.body.velocity.y = -350;
+            this.bird.angle = -30;
+        }
+    }
+    // Génère une nouvelle paire de tuyaux (haut et bas)
+    spawnPipe() {
+        // Ajuste la direction de la trouée si les limites sont atteintes
+        if (this.lastGapY <= this.minGapY) {
+            this.pipeDirection = 50;
+        } else if (this.lastGapY >= this.maxGapY) {
+            this.pipeDirection = -50;
+        }
+        // Nouvelle position verticale du centre de la trouée
+        this.lastGapY += this.pipeDirection;
+        let gapY = this.lastGapY;
+        // Détermine la couleur du tuyau (alternance clair/foncé)
+        let pipeTint = 0xFFFFFF;
+        if (this.pipeColorToggle) {
+            pipeTint = 0x888888;
+        }
+        this.pipeColorToggle = !this.pipeColorToggle;
+        // Position de départ à droite du jeu
+        let pipeX = this.scale.width + 40;
+        // Position verticale des tuyaux bas et haut
+        let bottomY = gapY + this.gapHeight/2;
+        let topY = gapY - this.gapHeight/2;
+        // Création du tuyau du bas
+        let pipeBottom = this.physics.add.sprite(pipeX, bottomY, 'pipe');
+        pipeBottom.body.allowGravity = false;
+        pipeBottom.body.immovable = true;
+        pipeBottom.setVelocityX(-this.pipeSpeed);
+        pipeBottom.setTint(pipeTint);
+        pipeBottom.scored = false;  // utilisera le tuyau du bas pour le score
+        this.pipes.add(pipeBottom);
+        // Création du tuyau du haut (retourné)
+        let pipeTop = this.physics.add.sprite(pipeX, topY, 'pipe');
+        pipeTop.body.allowGravity = false;
+        pipeTop.body.immovable = true;
+        pipeTop.setVelocityX(-this.pipeSpeed);
+        pipeTop.setTint(pipeTint);
+        pipeTop.setFlipY(true);
+        pipeTop.scored = true;  // pour ignorer ce tuyau dans le comptage de score
+        this.pipes.add(pipeTop);
+    }
+    // Gère la fin de la partie
+    endGame() {
+        if (this.gameOverFlag) return;
+        this.gameOverFlag = true;
+        // Arrête la génération de tuyaux
+        this.pipeTimer.remove(false);
+        // Désactive les contrôles
+        this.input.off('pointerdown', this.flap, this);
+        this.input.keyboard.off('keydown-SPACE', this.flap, this);
+        // Durée de survie du joueur en secondes
+        let survivedSeconds = Math.floor((Date.now() - this.startTime) / 1000);
+        // Mise à jour des quêtes selon la performance du joueur
+        quests.forEach(q => {
+            if (!q.completed) {
+                if (q.type === 'score' && this.score >= q.target) {
+                    q.completed = true;
+                }
+                if (q.type === 'time' && survivedSeconds >= q.target) {
+                    q.completed = true;
+                }
+            }
+        });
+        // Retour au menu principal en passant le score actuel
+        this.scene.start('Menu', { score: this.score });
+    }
+}
+
+// Scène d'affichage des quêtes journalières
+class QuestsScene extends Phaser.Scene {
+    constructor() {
+        super({ key: 'Quests' });
+    }
+    create() {
+        // Titre des quêtes
+        this.add.text(this.scale.width/2, 60, "Quêtes journalières",
+            { font: "26px Arial", fill: "#000" }
+        ).setOrigin(0.5, 0.5);
+        // Liste des quêtes et statut
+        let startY = 120;
+        quests.forEach((q, i) => {
+            let status = q.completed ? " \u2713" : "";
+            let text = (i+1) + ". " + q.description + status;
+            this.add.text(50, startY + i * 40, text, { font: "22px Arial", fill: "#000" });
+        });
+        // Bouton de retour au menu
+        this.backText = this.add.text(20, 20, "< Retour", { font: "20px Arial", fill: "#000" });
+        this.backText.setInteractive();
+        this.backText.on('pointerdown', () => {
+            this.scene.start('Menu');
+        });
+    }
+}
+
+// Configuration du jeu Phaser
+const config = {
+    type: Phaser.AUTO,
+    width: 400,
+    height: 600,
+    backgroundColor: "#87CEEB",
+    physics: {
+        default: 'arcade',
+        arcade: { gravity: { y: 0 }, debug: false }
+    },
+    scene: [MenuScene, GameScene, QuestsScene]
 };
-
-GameScene.prototype.gameOver = function () {
-  if (!this.player.active) return;
-  this.player.disableBody(true,false).setTint(0xff7676);
-  this.spawnTimer?.remove(false);
-
-  const W = this.scale.width, H = this.scale.height;
-  const panel = this.add.rectangle(W/2, H/2, W*0.8, 360, 0x163945, 0.92).setDepth(2000);
-  this.add.text(W/2, H/2-110, 'Game Over', {font:'64px Georgia', color:'#ffffff'}).setOrigin(0.5).setDepth(2001);
-  this.add.text(W/2, H/2-30, `Score : ${this.score}`, {font:'44px monospace', color:'#c9fff4'}).setOrigin(0.5).setDepth(2001);
-
-  const btn = this.add.text(W/2, H/2+70, 'Rejouer', {
-    font:'40px monospace', color:'#fff', backgroundColor:'#0db187', padding:{left:22,right:22,top:10,bottom:10}
-  }).setOrigin(0.5).setDepth(2001).setInteractive({useHandCursor:true});
-  btn.on('pointerdown', () => this.scene.restart());
-};
+// Création du jeu
+const game = new Phaser.Game(config);
