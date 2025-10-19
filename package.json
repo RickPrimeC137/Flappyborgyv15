@@ -1,14 +1,10 @@
 {
-  "name": "flappyborgyv15",
-  "version": "15.0.0",
-  "description": "FlappyBorgy v15 - Phaser 3 + Node/Express (Render-ready)",
+  "name": "flappyborgy",
+  "version": "15.7.0",
+  "private": true,
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "dev": "node server.js"
-  },
-  "engines": {
-    "node": ">=18"
+    "start": "node server.js"
   },
   "dependencies": {
     "express": "^4.18.2"
