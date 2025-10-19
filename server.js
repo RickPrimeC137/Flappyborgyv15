@@ -1,30 +1,32 @@
-// Minimal Express server for Render (or any Node host)
+// server.js
 const express = require('express');
 const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// 1) JSON (optionnel, ici pas utilisé)
-app.use(express.json());
-
-// 2) Servir le dossier public **sans** livrer automatiquement index.html
+// Cache statique (images très longues, JS/CSS 1h)
 app.use(express.static(path.join(__dirname, 'public'), {
-  index: false,
-  extensions: false,
-  maxAge: '1d'
+  etag: true,
+  lastModified: true,
+  maxAge: '1h',
+  setHeaders: (res, filePath) => {
+    // Les PNG et les polices peuvent être mis en cache très longtemps
+    if (/\.(png|jpg|jpeg|gif|webp|ogg|mp3|wav)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    }
+  }
 }));
 
-// 3) Route explicite pour "/" => public/index.html
-app.get('/', (req, res) => {
+// Route / -> index.html (utile quand un index n'est pas servi par défaut)
+app.get('/', (_req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// 4) Healthcheck simple (facultatif)
-app.get('/healthz', (req, res) => res.status(200).send('OK'));
+// Endpoint de santé (Render, fly.io, etc.)
+app.get('/healthz', (_req, res) => res.status(200).send('ok'));
 
-// 5) Démarrage
+// Démarrage
 app.listen(PORT, () => {
-  console.log(`FlappyBorgy server on : ${PORT}`);
-  console.log(`=> Your service is live 🚀`);
+  console.log(`FlappyBorgy server on :${PORT}\n==> http://localhost:${PORT}`);
 });
