@@ -1,15 +1,12 @@
 {
   "name": "flappyborgyv15",
-  "version": "16.0.0",
-  "description": "FlappyBorgy v16 - Phaser 3 + Express static",
+  "version": "15.0.0",
+  "description": "FlappyBorgy v15 - Phaser 3 - Render",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
   },
-  "engines": {
-    "node": ">=18"
-  },
   "dependencies": {
-    "express": "^4.19.2"
+    "express": "^4.18.2"
   }
 }
