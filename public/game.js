@@ -1,393 +1,368 @@
-/*  FlappyBorgy v15 – clean pipes + menu + score sound
- *  Phaser 3 (inclus via <script src="phaser.min.js"> dans index.html)
+/*  FlappyBorgy v15 — Pipes 4K + Menu + Beep + Cap Masks
+ *  Phaser 3 (inclus via <script src="phaser.min.js"></script> dans index.html)
  */
 
 ///////////////////////
-// Paramètres généraux
+//  PARAMÈTRES JEU  //
 ///////////////////////
-const LOGICAL_W = 768;
-const LOGICAL_H = 1366;
+const WORLD_W = 768;
+const WORLD_H = 1366;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,
-  gap: 240,              // hauteur du trou
+  pipeSpeed: -225,
+  gap: 260                   // trou un peu plus large pour mobiles
 };
 
-const BORGY_SCALE = 0.18;            // taille du chien
-const PIPE_W = 132;                  // largeur visuelle
-const SPAWN_DELAY = 1600;            // délai entre paires
-const HOLE_MIN = 100;                // zone haute minimale
-const HOLE_MAX_MARGIN = 180;         // marge basse (contre le sol)
+const BORGY_SCALE = 0.22;
+const PIPE_W = 150;          // largeur visuelle des tuyaux
+const CAP_H   = 130;         // hauteur visuelle des caps (fixe, masquée au bord)
+const BODY_STROKE = 0x0b4a3f;
+const BODY_FILL_LIGHT = 0x34d399;   // vert clair
+const BODY_FILL_DARK  = 0x1a2a25;   // très sombre
 
-const PIPE_STYLE_CHANGE_EVERY = 50;  // alterner tous les 50
-const PIPE_STYLES = ['light', 'dark'];
+const SPAWN_DELAY = 1500;    // délai entre paires
+const CHANGE_SKIN_EVERY = 50; // change de skin toutes les 50 paires
 
 ///////////////////////
-// Boot du jeu
+//  SCÈNE PRELOAD    //
 ///////////////////////
-window.addEventListener('load', () => {
+class PreloadScene extends Phaser.Scene {
+  constructor(){ super('preload'); }
+
+  preload(){
+    const W = this.scale.width, H = this.scale.height;
+
+    // Barre de chargement
+    const bg = this.add.rectangle(W/2, H*0.55, 360, 10, 0x000000, 0.15).setOrigin(0.5);
+    const fg = this.add.rectangle(W/2 - 180, H*0.55, 1, 10, 0x00b894).setOrigin(0,0.5);
+    const pct = this.add.text(W/2, H*0.55+22, '0%', { fontFamily:'monospace', fontSize:18, color:'#044' }).setOrigin(0.5);
+    this.load.on('progress', v => { fg.width = 360*v; pct.setText(Math.round(v*100)+'%'); });
+
+    this.load.setPath('assets');
+
+    // Joueur
+    this.load.image('borgy', 'borgy_ingame.png');
+
+    // Pipes (4 images)
+    this.load.image('pipe_light_top',    'pipe_light_top.png');
+    this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
+    this.load.image('pipe_dark_top',     'pipe_dark_top.png');
+    this.load.image('pipe_dark_bottom',  'pipe_dark_bottom.png');
+
+    // Son
+    this.load.audio('beep', 'beep.mp3');
+  }
+
+  create(){
+    this.scene.start('menu');
+  }
+}
+
+///////////////////////
+//  SCÈNE MENU       //
+///////////////////////
+class MenuScene extends Phaser.Scene {
+  constructor(){ super('menu'); }
+
+  create(){
+    const W = this.scale.width, H = this.scale.height;
+
+    this.add.text(W/2, H*0.28, 'FlappyBorgy', {
+      fontFamily: 'Georgia, serif',
+      fontSize: 80,
+      color: '#063',
+      stroke: '#0a3a38',
+      strokeThickness: 10
+    }).setOrigin(0.5);
+
+    this.add.text(W/2, H*0.42, 'Tap to Start', {
+      fontFamily: 'monospace',
+      fontSize: 48,
+      color: '#ffffff',
+      stroke: '#0a3a38',
+      strokeThickness: 8
+    }).setOrigin(0.5).setAlpha(0.9);
+
+    // little mascot
+    this.add.image(W/2, H*0.58, 'borgy')
+      .setScale(0.28)
+      .setAngle(-10);
+
+    this.input.once('pointerdown', ()=> this.scene.start('game'));
+    this.input.keyboard?.once('keydown-SPACE', ()=> this.scene.start('game'));
+  }
+}
+
+///////////////////////
+//  SCÈNE GAME       //
+///////////////////////
+class GameScene extends Phaser.Scene {
+  constructor(){ super('game'); }
+
+  init(){
+    this.score = 0;
+    this.pairsSpawned = 0;       // pour le changement de skin
+    this.started = false;
+
+    // Pattern
+    this.spawnCount = 0;
+    this.patternMode = 'STAIRS'; // plus propre : escaliers
+    this.lastTopY = null;
+  }
+
+  create(){
+    const W = this.scale.width, H = this.scale.height;
+
+    // Score
+    this.scoreText = this.add.text(24, 24, 'Score: 0', {
+      fontFamily: 'monospace', fontSize: 48, color: '#ffffff',
+      stroke: '#0a3a38', strokeThickness: 8
+    }).setDepth(1000).setOrigin(0,0);
+
+    // Groupes
+    this.pipes = this.physics.add.group();
+    this.sensors = this.physics.add.group();
+
+    // Joueur
+    this.player = this.physics.add.sprite(W*0.24, H*0.45, 'borgy')
+      .setScale(BORGY_SCALE)
+      .setCollideWorldBounds(true)
+      .setDepth(10);
+    this.player.body.setAllowGravity(false);   // pas de gravité avant le 1er tap
+    this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
+        .setOffset(this.player.width*0.225, this.player.height*0.25);
+
+    // Overlay "tap pour démarrer"
+    this.tapOverlay = this.add.text(W/2, H*0.70, 'Tap to flap', {
+      fontFamily:'monospace', fontSize: 46, color:'#eaffff',
+      stroke:'#0a3a38', strokeThickness: 6
+    }).setOrigin(0.5).setDepth(1000).setAlpha(0.9);
+
+    // Entrées
+    const startIfNeeded = () => {
+      if (!this.started){
+        this.started = true;
+        this.player.body.setAllowGravity(true);
+        this.player.setVelocityY(-220); // petit saut de départ
+        this.tapOverlay.setVisible(false);
+        // Timer de spawn
+        this.spawnTimer = this.time.addEvent({
+          delay: SPAWN_DELAY,
+          loop: true,
+          callback: ()=> this.spawnPipePair()
+        });
+        // Une première paire de suite pour éviter le vide
+        this.spawnPipePair();
+      }else{
+        this.flap();
+      }
+    };
+    this.input.on('pointerdown', startIfNeeded);
+    this.input.keyboard?.on('keydown-SPACE', startIfNeeded);
+
+    // Collisions
+    this.physics.add.overlap(this.player, this.pipes, ()=> this.gameOver(), null, this);
+
+    // Son
+    this.beep = this.sound.add('beep', { volume: 0.35 });
+  }
+
+  update(time){
+    if (!this.started) return;
+
+    // Inclinaison
+    if (this.player.body.velocity.y < -20) this.player.setAngle(-16);
+    else if (this.player.body.velocity.y > 160) this.player.setAngle(22);
+    else this.player.setAngle(0);
+
+    // Nettoyage hors écran
+    this.pipes.children.each(p => {
+      if (p.active && p.x < -PIPE_W*2) p.destroy();
+    });
+    this.sensors.children.each(s => {
+      if (s.active && s.x < -50) s.destroy();
+    });
+  }
+
+  flap(){
+    if (!this.player.active) return;
+    this.player.setVelocityY(PROFILE.jump);
+  }
+
+  spawnPipePair(){
+    const W = this.scale.width, H = this.scale.height;
+
+    // Pattern (choix du topY)
+    const gap = PROFILE.gap;
+    const minTop = 90;
+    const maxTop = H - (gap + 180);
+    let topY;
+
+    switch (this.patternMode) {
+      case 'STAIRS': {
+        const steps = 6;
+        const stepH = (maxTop - minTop) / steps;
+        topY = minTop + ( (this.spawnCount % steps) * stepH );
+        break;
+      }
+      case 'RANDOM': default:
+        topY = Phaser.Math.Between(minTop, maxTop);
+    }
+    this.spawnCount++;
+
+    const holeY = topY + gap/2;
+    const topH = topY;
+    const bottomH = H - (holeY + gap/2);
+
+    // Skin (change toutes les 50 paires)
+    const skinIndex = Math.floor(this.pairsSpawned / CHANGE_SKIN_EVERY) % 2;
+    const skin = (skinIndex === 0) ? 'light' : 'dark';
+
+    const x = W + 40;
+
+    // VISU + COLLISIONS
+    const pair = this.createPipeVisualsAndBodies(x, topH, bottomH, holeY, gap, skin);
+    this.pairsSpawned++;
+
+    // Capteur de score
+    const sensor = this.add.rectangle(x + PIPE_W + 40, H/2, 12, H, 0x000, 0)
+      .setDepth(1);
+    this.physics.add.existing(sensor, true);
+    sensor.body.setVelocityX(PROFILE.pipeSpeed);
+    this.sensors.add(sensor);
+
+    this.physics.add.overlap(this.player, sensor, ()=>{
+      if (!sensor.active) return;
+      sensor.destroy();
+      this.incrementScore();
+    });
+  }
+
+  createPipeVisualsAndBodies(x, topH, bottomH, holeY, gap, skin){
+    const H = this.scale.height;
+
+    // Corps = simples rectangles propres (derrière les caps)
+    const bodyColor = (skin === 'light') ? BODY_FILL_LIGHT : BODY_FILL_DARK;
+
+    const topBody = this.add.rectangle(x, topH, PIPE_W, topH, bodyColor)
+      .setOrigin(0.5,1).setDepth(4).setStrokeStyle(6, BODY_STROKE, 0.6);
+    const bottomBody = this.add.rectangle(x, holeY + gap/2 + bottomH, PIPE_W, bottomH, bodyColor)
+      .setOrigin(0.5,1).setDepth(4).setStrokeStyle(6, BODY_STROKE, 0.6).setFlipY(true);
+
+    this.physics.add.existing(topBody, true);
+    this.physics.add.existing(bottomBody, true);
+    topBody.body.setVelocityX(PROFILE.pipeSpeed);
+    bottomBody.body.setVelocityX(PROFILE.pipeSpeed);
+
+    this.pipes.add(topBody);
+    this.pipes.add(bottomBody);
+
+    // Caps (avec MASQUES pour couper le halo des PNG)
+    const topKey = (skin === 'light') ? 'pipe_light_top' : 'pipe_dark_top';
+    const botKey = (skin === 'light') ? 'pipe_light_bottom' : 'pipe_dark_bottom';
+
+    const topCap = this.add.image(x, topBody.y - topBody.height, topKey)
+      .setOrigin(0.5,1).setDepth(6)
+      .setDisplaySize(PIPE_W, CAP_H);
+    const bottomCap = this.add.image(x, holeY + gap/2, botKey)
+      .setOrigin(0.5,0).setDepth(6)
+      .setDisplaySize(PIPE_W, CAP_H);
+
+    // --- MASQUES GEOMETRY pour couper net au bord du tuyau
+    {
+      const gTop = this.make.graphics({ x: 0, y: 0, add: false });
+      gTop.fillStyle(0xffffff);
+      gTop.fillRect(-PIPE_W/2, -CAP_H, PIPE_W, CAP_H);
+      const maskTop = gTop.createGeometryMask();
+      topCap.setMask(maskTop);
+    }
+    {
+      const gBot = this.make.graphics({ x: 0, y: 0, add: false });
+      gBot.fillStyle(0xffffff);
+      gBot.fillRect(-PIPE_W/2, 0, PIPE_W, CAP_H);
+      const maskBot = gBot.createGeometryMask();
+      bottomCap.setMask(maskBot);
+    }
+
+    // Faire "suivre" les caps les corps
+    const follow = () => {
+      if (!topBody.active) return;
+      topCap.x = topBody.x;
+      topCap.y = topBody.y - topBody.height;
+      bottomCap.x = bottomBody.x;
+      bottomCap.y = holeY + gap/2;
+    };
+    this.events.on('update', follow);
+
+    // Donner la vitesse aux caps (sinon ils restent statiques)
+    this.tweens.add({
+      targets: [topCap, bottomCap],
+      x: -PIPE_W*2,
+      duration: ( (x + PIPE_W*2) / Math.abs(PROFILE.pipeSpeed) ) * 1000,
+      ease: 'Linear',
+      onComplete: ()=> {
+        topCap.destroy(); bottomCap.destroy();
+        this.events.off('update', follow);
+      }
+    });
+
+    return { topBody, bottomBody, topCap, bottomCap };
+  }
+
+  incrementScore(){
+    this.score += 1;
+    this.scoreText.setText('Score: ' + this.score);
+    this.beep?.play();
+  }
+
+  gameOver(){
+    if (!this.player.active) return;
+
+    this.player.disableBody(true,false);
+    this.player.setTint(0xff6b6b);
+    this.spawnTimer && this.spawnTimer.remove(false);
+
+    const W = this.scale.width, H = this.scale.height;
+
+    const panel = this.add.rectangle(W/2, H/2, W*0.82, 360, 0x163945, 0.92).setDepth(1000);
+    this.add.text(W/2, H/2-110, 'Game Over', {
+      fontFamily:'Georgia, serif', fontSize:72, color:'#fff'
+    }).setOrigin(0.5).setDepth(1001);
+    this.add.text(W/2, H/2-30, `Score : ${this.score}`, {
+      fontFamily:'monospace', fontSize:52, color:'#c9fff4'
+    }).setOrigin(0.5).setDepth(1001);
+
+    const btn = this.add.text(W/2, H/2+70, 'Rejouer', {
+      fontFamily:'monospace', fontSize:52, color:'#fff',
+      backgroundColor:'#0db187', padding:{left:22,right:22,top:10,bottom:10}
+    }).setOrigin(0.5).setDepth(1001).setInteractive({ useHandCursor:true });
+
+    btn.once('pointerdown', ()=> this.scene.restart());
+  }
+}
+
+///////////////////////
+//  BOOT CONFIG      //
+///////////////////////
+window.addEventListener('load', ()=>{
   const config = {
     type: Phaser.AUTO,
     parent: 'game-root',
-    backgroundColor: '#9EDFF1',
+    backgroundColor: '#9edff1',
     scale: {
       mode: Phaser.Scale.FIT,
       autoCenter: Phaser.Scale.CENTER_BOTH,
-      width: LOGICAL_W,
-      height: LOGICAL_H,
+      width: WORLD_W,
+      height: WORLD_H
     },
     physics: {
       default: 'arcade',
-      arcade: {
-        gravity: { y: 0 },
-        debug: false,
-      },
+      arcade: { gravity: {y:0}, debug: false }
     },
-    scene: [PreloadScene, MenuScene, GameScene],
+    scene: [PreloadScene, MenuScene, GameScene]
   };
 
   new Phaser.Game(config);
 });
-
-///////////////////////
-// PRELOAD
-///////////////////////
-function PreloadScene() { Phaser.Scene.call(this, { key: 'preload' }); }
-PreloadScene.prototype = Object.create(Phaser.Scene.prototype);
-PreloadScene.prototype.constructor = PreloadScene;
-
-PreloadScene.prototype.preload = function () {
-  const W = this.scale.width, H = this.scale.height;
-  const barW = 400, barH = 10, x = (W - barW) / 2, y = H * 0.5;
-
-  const bg = this.add.rectangle(x, y, barW, barH, 0x000000, 0.15).setOrigin(0, 0.5);
-  const fg = this.add.rectangle(x, y, 1, barH, 0x00B37A).setOrigin(0, 0.5);
-  const pct = this.add.text(W/2, y + 24, '0%', { fontFamily: 'monospace', fontSize: 20, color: '#0a3a38' }).setOrigin(0.5);
-
-  this.load.on('progress', p => { fg.width = barW * p; pct.setText(`${Math.round(p*100)}%`); });
-
-  this.load.setPath('assets');
-
-  // joueur + bonus (bonus facultatif ici)
-  this.load.image('borgy_ingame', 'borgy_ingame.png');
-  this.load.image('sb_token', 'sb_token_user.png');
-
-  // 4 visuels des tuyaux (top = cap en haut, bottom = cap en bas)
-  this.load.image('pipe_light_top',    'pipe_light_top.png');
-  this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
-  this.load.image('pipe_dark_top',     'pipe_dark_top.png');
-  this.load.image('pipe_dark_bottom',  'pipe_dark_bottom.png');
-
-  // son de score (facultatif — s’il n’existe pas, aucun crash)
-  this.load.audio('point', 'point.wav');
-
-  this.load.once('complete', () => this.scene.start('menu'));
-};
-
-///////////////////////
-// MENU
-///////////////////////
-function MenuScene() { Phaser.Scene.call(this, { key: 'menu' }); }
-MenuScene.prototype = Object.create(Phaser.Scene.prototype);
-MenuScene.prototype.constructor = MenuScene;
-
-MenuScene.prototype.create = function () {
-  const W = this.scale.width, H = this.scale.height;
-
-  this.add.text(W/2, H*0.28, 'FLAPPYBORGY', {
-    fontFamily: 'Georgia, serif',
-    fontSize: 84,
-    color: '#0b3d3a',
-    stroke: '#ffffff',
-    strokeThickness: 8
-  }).setOrigin(0.5);
-
-  this.add.text(W/2, H*0.38, 'Version 15', {
-    fontFamily: 'monospace',
-    fontSize: 28,
-    color: '#055'
-  }).setOrigin(0.5);
-
-  const btn = this.add.text(W/2, H*0.55, 'JOUER', {
-    fontFamily: 'monospace',
-    fontSize: 56,
-    color: '#ffffff',
-    backgroundColor: '#0db187',
-    padding: { left: 28, right: 28, top: 12, bottom: 12 }
-  }).setOrigin(0.5).setInteractive({ useHandCursor: true });
-
-  this.add.text(W/2, H*0.64, 'Tape pour sauter • Evite les tuyaux', {
-    fontFamily: 'monospace',
-    fontSize: 24,
-    color: '#064'
-  }).setOrigin(0.5);
-
-  btn.on('pointerdown', () => this.scene.start('game'));
-  this.input.keyboard.once('keydown-SPACE', () => this.scene.start('game'));
-};
-
-///////////////////////
-// JEU
-///////////////////////
-function GameScene() { Phaser.Scene.call(this, { key: 'game' }); }
-GameScene.prototype = Object.create(Phaser.Scene.prototype);
-GameScene.prototype.constructor = GameScene;
-
-GameScene.prototype.init = function () {
-  this.score = 0;
-  this.pairsSpawned = 0;
-  this.pipesPassed = 0;
-
-  this.patterns = ['ALT_HIGH_LOW', 'STAIRS', 'SINE', 'RANDOM_JITTER', 'RANDOM'];
-  this.patternMode = 'STAIRS';
-  this.lastTopY = null;
-
-  this.gameStarted = false;
-  this.spawnTimer = null;
-};
-
-GameScene.prototype.create = function () {
-  const W = this.scale.width, H = this.scale.height;
-
-  // Score
-  this.scoreText = this.add.text(24, 22, 'Score: 0', {
-    fontFamily: 'monospace',
-    fontSize: '48px',
-    color: '#ffffff',
-    stroke: '#0a3a38',
-    strokeThickness: 8
-  }).setDepth(10).setOrigin(0, 0);
-
-  // Groupe des tuyaux
-  this.pipes = this.physics.add.group();
-
-  // Joueur (gravité OFF tant que la partie n'a pas commencé)
-  this.player = this.physics.add.sprite(W * 0.25, H * 0.45, 'borgy_ingame')
-    .setScale(BORGY_SCALE)
-    .setCollideWorldBounds(true)
-    .setDepth(5);
-
-  this.player.body.setAllowGravity(false);            // OFF => attend le premier tap
-  this.player.body.setGravityY(PROFILE.gravity);      // gravité prête
-  // hitbox plus courte
-  this.player.body.setSize(this.player.width * 0.55, this.player.height * 0.55, true)
-                  .setOffset(this.player.width * 0.225, this.player.height * 0.25);
-
-  // Message "Tap to start"
-  this.readyText = this.add.text(W/2, H*0.62, 'Tape pour démarrer', {
-    fontFamily: 'monospace',
-    fontSize: 44,
-    color: '#ffffff',
-    stroke: '#086',
-    strokeThickness: 6
-  }).setOrigin(0.5).setDepth(10);
-
-  // Entrées
-  this.input.on('pointerdown', () => this.flap());
-  this.input.keyboard.on('keydown-SPACE', () => this.flap());
-
-  // Collision avec les tuyaux
-  this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
-
-  // Une première paire pour remplir l’écran dès le départ (mais vitesse nulle tant que pas commencé)
-  this.spawnPipePair(true);
-};
-
-GameScene.prototype.startGame = function () {
-  if (this.gameStarted) return;
-  this.gameStarted = true;
-
-  this.player.body.setAllowGravity(true);
-  this.readyText && this.readyText.destroy();
-
-  // Timer de spawn
-  this.spawnTimer = this.time.addEvent({
-    delay: SPAWN_DELAY,
-    loop: true,
-    callback: () => this.spawnPipePair(false),
-  });
-
-  // Donner la vitesse aux éléments déjà présents
-  this.pipes.children.each(p => {
-    if (p.body && p.body.velocity.x === 0) p.body.setVelocityX(PROFILE.pipeSpeed);
-  });
-};
-
-GameScene.prototype.update = function (t, dt) {
-  // Inclinaison du chien
-  if (this.player.body.velocity.y < -20) this.player.setAngle(-18);
-  else if (this.player.body.velocity.y > 120) this.player.setAngle(22);
-  else this.player.setAngle(0);
-
-  // Nettoyage des objets trop à gauche
-  this.pipes.children.each(child => {
-    if (child.active && child.x < -PIPE_W * 2) child.destroy();
-  });
-};
-
-///////////////////////
-// Contrôles & gameplay
-///////////////////////
-GameScene.prototype.flap = function () {
-  if (!this.gameStarted) this.startGame();
-  if (!this.player.active) return;
-  this.player.setVelocityY(PROFILE.jump);
-};
-
-GameScene.prototype.incrementScore = function () {
-  this.pipesPassed++;
-  this.score += 1;
-  this.scoreText.setText('Score: ' + this.score);
-
-  // bip (silencieux si l’asset n’existe pas)
-  const s = this.sound.get('point');
-  if (this.cache.audio.exists('point')) {
-    this.sound.play('point', { volume: 0.45 });
-  }
-};
-
-///////////////////////
-// Génération des tuyaux
-///////////////////////
-GameScene.prototype.chooseTopY = function () {
-  const H = this.scale.height;
-  const gap = PROFILE.gap;
-  const minTop = HOLE_MIN;
-  const maxTop = H - (gap + HOLE_MAX_MARGIN);
-
-  let topY;
-  switch (this.patternMode) {
-    case 'ALT_HIGH_LOW':
-      topY = (this.pairsSpawned % 2 === 0) ? (minTop + 20) : (maxTop - 20);
-      break;
-    case 'STAIRS': {
-      const steps = 5;
-      const steph = (maxTop - minTop) / steps;
-      topY = minTop + ((this.pairsSpawned % steps) * steph);
-      break;
-    }
-    case 'SINE': {
-      const mid = (minTop + maxTop) / 2;
-      const amp = (maxTop - minTop) * 0.42;
-      topY = mid + Math.sin(this.pairsSpawned * 0.8) * amp;
-      break;
-    }
-    case 'RANDOM_JITTER': {
-      const last = this.lastTopY ?? ((minTop + maxTop) / 2);
-      const jitter = Phaser.Math.Between(-140, 140);
-      topY = Phaser.Math.Clamp(last + jitter, minTop, maxTop);
-      break;
-    }
-    default:
-      topY = Phaser.Math.Between(minTop, maxTop);
-  }
-  this.lastTopY = topY;
-  return topY;
-};
-
-/**
- * Crée une paire de tuyaux (haut + bas) et un capteur de score.
- * @param {boolean} freeze - si true, la vitesse est 0 (pour l’écran d’attente)
- */
-GameScene.prototype.spawnPipePair = function (freeze) {
-  const speedX = freeze ? 0 : PROFILE.pipeSpeed;
-
-  const W = this.scale.width, H = this.scale.height;
-  const x = W + 40;
-
-  const topY = this.chooseTopY();
-  const holeY = topY + PROFILE.gap / 2;
-
-  // Alterner de style tous les 50
-  const styleIndex = Math.floor(this.pairsSpawned / PIPE_STYLE_CHANGE_EVERY) % PIPE_STYLES.length;
-  const style = PIPE_STYLES[styleIndex]; // 'light' | 'dark'
-  this.pairsSpawned++;
-
-  // Construit la paire
-  this.makePipe(x, holeY, PROFILE.gap, style, speedX);
-
-  // Capteur de score (ligne invisible que le joueur traverse)
-  const sensor = this.add.rectangle(x + PIPE_W + 6, H * 0.5, 8, H, 0x000000, 0);
-  this.physics.add.existing(sensor);
-  sensor.body.setAllowGravity(false).setImmovable(true).setVelocityX(speedX);
-  sensor.isScoreSensor = true;
-
-  this.physics.add.overlap(this.player, sensor, () => {
-    if (!sensor.active) return;
-    sensor.destroy();
-    this.incrementScore();
-  });
-};
-
-GameScene.prototype.makePipe = function (x, holeY, holeH, style, speedX) {
-  const H = this.scale.height;
-  const minH = 40;
-  const topH    = Math.max(minH, holeY - holeH / 2);           // colonne du haut
-  const bottomH = Math.max(minH, H - (holeY + holeH / 2));     // colonne du bas
-
-  // HAUT : cap vers le bas => image *_bottom, ancrée en bas
-  const keyTop = `pipe_${style}_bottom`;
-  const topPipe = this.physics.add.image(x, topH, keyTop)
-    .setOrigin(0.5, 1)
-    .setDisplaySize(PIPE_W, topH)
-    .setImmovable(true)
-    .setDepth(4);
-  topPipe.body.setAllowGravity(false).setVelocityX(speedX);
-
-  // BAS : cap vers le haut => image *_top, ancrée en haut
-  const keyBottom = `pipe_${style}_top`;
-  const bottomPipe = this.physics.add.image(x, holeY + holeH / 2, keyBottom)
-    .setOrigin(0.5, 0)
-    .setDisplaySize(PIPE_W, bottomH)
-    .setImmovable(true)
-    .setDepth(4);
-  bottomPipe.body.setAllowGravity(false).setVelocityX(speedX);
-
-  this.pipes.add(topPipe);
-  this.pipes.add(bottomPipe);
-
-  // Sécurité : cleanup
-  this.time.delayedCall(12000, () => [topPipe, bottomPipe].forEach(o => o && o.destroy()));
-};
-
-///////////////////////
-// Fin de partie
-///////////////////////
-GameScene.prototype.gameOver = function () {
-  if (!this.player.active) return;
-
-  // stop spawns
-  this.spawnTimer && this.spawnTimer.remove(false);
-
-  // figer le joueur
-  this.player.disableBody(true, false);
-  this.player.setTint(0xff6b6b);
-
-  const W = this.scale.width, H = this.scale.height;
-
-  const panel = this.add.rectangle(W/2, H/2, W * 0.82, 360, 0x153b47, 0.92).setDepth(100);
-  this.add.text(W/2, H/2 - 110, 'Game Over', {
-    fontFamily: 'Georgia, serif',
-    fontSize: 72,
-    color: '#ffffff'
-  }).setOrigin(0.5).setDepth(101);
-
-  this.add.text(W/2, H/2 - 30, `Score :  ${this.score}`, {
-    fontFamily: 'monospace',
-    fontSize: 52,
-    color: '#c9fff4'
-  }).setOrigin(0.5).setDepth(101);
-
-  const btn = this.add.text(W/2, H/2 + 70, 'Rejouer', {
-    fontFamily: 'monospace',
-    fontSize: 52,
-    color: '#ffffff',
-    backgroundColor: '#0db187',
-    padding: { left: 22, right: 22, top: 10, bottom: 10 }
-  }).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
-
-  btn.on('pointerdown', () => this.scene.restart());
-  this.input.keyboard.once('keydown-SPACE', () => this.scene.restart());
-};
