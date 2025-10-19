@@ -3,39 +3,24 @@
 <head>
   <meta charset="utf-8" />
   <title>FlappyBorgy v15</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover" />
-  <meta name="theme-color" content="#9edff1" />
-  <meta name="description" content="FlappyBorgy - SwissBorg fan game" />
-
-  <!-- Reset & simple styles -->
+  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <meta name="color-scheme" content="light dark" />
   <style>
-    html, body {
-      height: 100%;
-      margin: 0;
-      background: #9edff1; /* même fond que le jeu */
-      overscroll-behavior: none;
-      -webkit-touch-callout: none;
-      -webkit-user-select: none;
-      -ms-user-select: none;
-      user-select: none;
-    }
-    #game-root {
-      width: 100%;
-      height: 100%;
-      touch-action: manipulation;
-    }
-    /* Police fallback "pixel/mono" pour le score */
+    html, body { height: 100%; margin: 0; background:#9edff1; }
+    #game-root { width: 100%; height: 100%; touch-action: manipulation; }
+    /* police monospace lisible pour le score */
     @font-face {
       font-family: "MonoScore";
-      src: local("Consolas"), local("Menlo"), local("Monaco");
+      src: local("Menlo"), local("Consolas"), local("Courier New");
     }
+    canvas { display:block; image-rendering: optimizeSpeed; }
   </style>
-
-  <!-- Phaser 3 (CDN) -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 </head>
 <body>
   <div id="game-root"></div>
+
+  <!-- Phaser (CDN officiel jsDelivr) -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 
   <!-- Ton jeu -->
   <script src="game.js"></script>
