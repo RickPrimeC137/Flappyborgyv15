@@ -2,27 +2,21 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>FlappyBorgy v15</title>
+  <title>FlappyBorgy v15.7</title>
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
-  <meta name="color-scheme" content="light dark" />
   <style>
     html, body { height: 100%; margin: 0; background:#9edff1; }
     #game-root { width: 100%; height: 100%; touch-action: manipulation; }
-    /* police monospace lisible pour le score */
-    @font-face {
-      font-family: "MonoScore";
-      src: local("Menlo"), local("Consolas"), local("Courier New");
-    }
     canvas { display:block; image-rendering: optimizeSpeed; }
   </style>
 </head>
 <body>
   <div id="game-root"></div>
 
-  <!-- Phaser (CDN officiel jsDelivr) -->
+  <!-- Phaser -->
   <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
 
-  <!-- Ton jeu -->
+  <!-- Jeu -->
   <script src="game.js"></script>
 </body>
 </html>
