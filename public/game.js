@@ -1,12 +1,12 @@
-/*  FlappyBorgy v15.6
- *  - Gravité active dès le début (le joueur tombe)
- *  - Spawn des tuyaux PAUSÉ jusqu'au premier tap
- *  - Tuyaux propres: caps seules + corps tileSprite sans halo
- *  - Collisions robustes (rectangles physiques invisibles)
- *  - Woof à chaque point, bonus optionnel, menu & quêtes
+/*  FlappyBorgy v15.7
+ *  - Gravité active dès l’ouverture
+ *  - Spawn des tuyaux PAUSÉ jusqu’au premier tap
+ *  - Tuyaux propres (caps + corps tileSprite sans halo)
+ *  - Collisions via rectangles physiques dynamiques immovables
+ *  - Son "woof" à chaque point, bonus optionnel, menu & quêtes
  */
 
-const VERSION = 'v15.6'; // change à chaque déploiement pour casser le cache
+const VERSION = 'v15.7'; // incrémente pour casser le cache CDN
 
 /* ------------------ Profil jeu ------------------ */
 const PROFILE = { gravity: 1400, jump: -380, pipeSpeed: -220, gap: 230 };
@@ -53,13 +53,12 @@ function saveBestScore(s){ const k='fbv15_best', best=Number(localStorage.getIte
 function loadBestScore(){ return Number(localStorage.getItem('fbv15_best')||0); }
 
 /* ------------------ Texture corps tuyau (anti halo) ------------------ */
-/** Crée une texture tileable à partir d'une bande verticale du PNG `srcKey` */
 function makePipeBodyTexture(scene, srcKey, outKey) {
   if (scene.textures.exists(outKey)) return outKey;
   const img = scene.textures.get(srcKey).getSourceImage();
   const w = img.width, h = img.height;
 
-  // Bande centrale (loin des bords et de la bague pour éviter tout matte)
+  // Bande centrale (loin des bords et de la bague)
   const sliceW = Math.max(16, Math.floor(w * 0.14));
   const sx = Math.floor((w - sliceW) / 2);
   const sy = Math.floor(h * 0.18);
@@ -145,18 +144,18 @@ class GameScene extends Phaser.Scene {
     // Score
     this.scoreText = this.add.text(24, 20, 'Score: 0', { fontFamily:'monospace', fontSize:48, color:'#fff', stroke:'#0a3a38', strokeThickness:8 }).setDepth(50);
 
-    // Joueur — GRAVITÉ ACTIVE dès le début
+    // Joueur — GRAVITÉ ACTIVE
     this.player = this.physics.add.sprite(W*0.22, H*0.5, 'borgy')
       .setScale(BORGY_SCALE).setDepth(10).setCollideWorldBounds(true);
-    this.player.body.setAllowGravity(true);                 // <-- gravité ON
-    this.player.body.setGravityY(PROFILE.gravity);          // chute naturelle
+    this.player.body.setAllowGravity(true);
+    this.player.body.setGravityY(PROFILE.gravity);
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
 
     // Son
     this.sndWoof = this.sound.add('woof', { volume: 0.45 });
 
-    // Groupe collisions (rectangles physiques)
+    // Groupe collision (rectangles dynamiques invisibles)
     this.pipeBodies = this.physics.add.group();
 
     // Inputs
@@ -166,10 +165,10 @@ class GameScene extends Phaser.Scene {
     // Overlay "tap"
     this.startMsg = this.add.text(W/2, H*0.55, 'TAP pour démarrer', { fontFamily:'monospace', fontSize:36, color:'#0b3a32', backgroundColor:'#cffff3' }).setOrigin(0.5).setDepth(20);
 
-    // Timer spawn PAUSÉ jusqu’au premier tap
+    // Timer spawn PAUSÉ
     this.spawnTimer = this.time.addEvent({ delay: SPAWN_DELAY, loop:true, paused:true, callback: ()=> this.spawnPair() });
 
-    // Collisions joueur ↔ tuyaux
+    // Collisions
     this.physics.add.overlap(this.player, this.pipeBodies, ()=> this.gameOver(), null, this);
   }
 
@@ -177,8 +176,7 @@ class GameScene extends Phaser.Scene {
     if (!this.started){
       this.started = true;
       this.startMsg?.destroy();
-      // première paire immédiate + on lance le timer
-      this.spawnPair();
+      this.spawnPair();             // première paire immédiate
       this.spawnTimer.paused = false;
     }
     this.player.setVelocityY(PROFILE.jump);
@@ -186,15 +184,11 @@ class GameScene extends Phaser.Scene {
 
   update(){
     if (!this.player.active) return;
-
-    // Tilt visuel
     const vy = this.player.body.velocity.y;
     this.player.setAngle(Phaser.Math.Clamp(vy * 0.06, -18, 22));
 
-    // Suivi visuels (caps/bodies)
     this.followers.forEach(fn => fn());
 
-    // Game over si on touche le haut/bas uniquement APRES démarrage
     if (this.started){
       const H=this.scale.height;
       if (this.player.y <= 0 || this.player.y >= H) this.gameOver();
@@ -207,7 +201,6 @@ class GameScene extends Phaser.Scene {
     const minTop = HOLE_MIN;
     const maxTop = H - (gap + HOLE_MAX_MARGIN);
 
-    // placement "random-jitter" propre
     if (this._lastTopY === undefined) this._lastTopY = (minTop + maxTop)/2;
     const jitter = Phaser.Math.Between(-110, 110);
     const topY = Phaser.Math.Clamp(this._lastTopY + jitter, minTop, maxTop);
@@ -216,25 +209,26 @@ class GameScene extends Phaser.Scene {
     const holeCenter = topY + gap/2;
     const x = W + 60;
 
-    // Alternance clair/dark toutes les 50 paires franchies
     const useDark = (Math.floor(this.pipesPassed / 50) % 2) === 1;
     const variant = useDark ? 'dark' : 'light';
     this.makePipes(x, holeCenter, gap, variant);
 
-    // Capteur de score
+    // ---- Capteur de score: DYNAMIQUE + immovable (fix setVelocityX) ----
     const sensor = this.add.rectangle(x + PIPE_W/2 + 10, H/2, 10, H, 0x000000, 0);
-    this.physics.add.existing(sensor, true);
+    this.physics.add.existing(sensor, false); // dynamic
     sensor.body.setAllowGravity(false);
+    sensor.body.setImmovable(true);
     sensor.body.setVelocityX(PROFILE.pipeSpeed);
 
-    this.physics.add.overlap(this.player, sensor, ()=>{
+    this.physics.add.overlap(this.player, sensor, () => {
       if (!sensor.active) return;
       sensor.destroy();
       this.pipesPassed++;
       this.incrementScore();
 
-      // Bonus toutes les 50 paires
-      if (this.pipesPassed % 50 === 0) this.spawnBonus(this.player.x + 520, Phaser.Math.Between(220, H-260));
+      if (this.pipesPassed % 50 === 0) {
+        this.spawnBonus(this.player.x + 520, Phaser.Math.Between(220, H - 260));
+      }
     });
   }
 
@@ -243,29 +237,27 @@ class GameScene extends Phaser.Scene {
     const topH = Math.max(40, holeCenter - holeSize/2);
     const bottomH = Math.max(40, H - (holeCenter + holeSize/2));
 
-    const keyTop    = `pipe_${variant}_top`;     // cap "top"
-    const keyBottom = `pipe_${variant}_bottom`;  // cap "bottom"
+    const keyTop    = `pipe_${variant}_top`;
+    const keyBottom = `pipe_${variant}_bottom`;
 
-    // Texture tileable pour le corps (depuis le PNG bottom) — zéro halo
     const bodyKey = makePipeBodyTexture(this, keyBottom, `body_${variant}`);
 
-    // VISUELS: tileSprite pour corps (pas d'étirement des caps)
+    // VISUELS (tileSprite pour le corps)
     const topBodyVis = this.add.tileSprite(x, topH, PIPE_W, topH, bodyKey).setOrigin(0.5,1).setDepth(5);
     const botBodyVis = this.add.tileSprite(x, holeCenter + holeSize/2 + bottomH, PIPE_W, bottomH, bodyKey).setOrigin(0.5,1).setFlipY(true).setDepth(5);
     const capTop     = this.add.image(x, topH, keyBottom).setOrigin(0.5,1).setDepth(6);
     const capBottom  = this.add.image(x, holeCenter + holeSize/2, keyTop).setOrigin(0.5,0).setDepth(6);
 
-    // PHYSIQUE: rectangles invisibles
+    // PHYSIQUE — DYNAMIQUES + immovables (fix setVelocityX)
     const topPhys = this.add.rectangle(topBodyVis.x, topBodyVis.y - topH/2, PIPE_W, topH, 0x000000, 0);
     const botPhys = this.add.rectangle(botBodyVis.x, botBodyVis.y - bottomH/2, PIPE_W, bottomH, 0x000000, 0);
-    this.physics.add.existing(topPhys, true);
-    this.physics.add.existing(botPhys, true);
-    topPhys.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-    botPhys.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
+    this.physics.add.existing(topPhys, false);
+    this.physics.add.existing(botPhys, false);
+    topPhys.body.setAllowGravity(false).setImmovable(true).setVelocityX(PROFILE.pipeSpeed);
+    botPhys.body.setAllowGravity(false).setImmovable(true).setVelocityX(PROFILE.pipeSpeed);
     this.pipeBodies.add(topPhys);
     this.pipeBodies.add(botPhys);
 
-    // Collisions
     this.physics.add.overlap(this.player, topPhys, ()=> this.gameOver(), null, this);
     this.physics.add.overlap(this.player, botPhys, ()=> this.gameOver(), null, this);
 
@@ -280,7 +272,6 @@ class GameScene extends Phaser.Scene {
       topBodyVis.tilePositionY += 0.4;
       botBodyVis.tilePositionY += 0.4;
 
-      // cleanup hors écran
       if (topBodyVis.x < -PIPE_W*2) {
         [topBodyVis, botBodyVis, capTop, capBottom, topPhys, botPhys].forEach(o=>o&&o.destroy());
         this.events.off('update', follow);
@@ -296,13 +287,12 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnBonus(x, y){
-    if (!this.textures.exists('sb_token')) return; // bonus facultatif
+    if (!this.textures.exists('sb_token')) return; // bonus optionnel
     const b = this.physics.add.image(x, y, 'sb_token').setScale(0.55).setDepth(9).setImmovable(true);
     b.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
     this.physics.add.overlap(this.player, b, ()=>{
       if (!b.active) return;
       b.destroy();
-      // Woof plus aigu pour feedback bonus
       this.sound.play('woof', { volume: 0.6, detune: 300 });
       this.incrementScore(5);
       bumpQuest('bonus', 1);
