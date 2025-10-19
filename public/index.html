@@ -2,21 +2,39 @@
 <html lang="fr">
 <head>
   <meta charset="utf-8" />
-  <title>FlappyBorgy v15.7</title>
-  <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no" />
+  <title>FlappyBorgy v16</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#aee5f2" />
+
   <style>
-    html, body { height: 100%; margin: 0; background:#9edff1; }
-    #game-root { width: 100%; height: 100%; touch-action: manipulation; }
-    canvas { display:block; image-rendering: optimizeSpeed; }
+    /* Plein écran, fond cohérent au boot */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #aee5f2;
+      overscroll-behavior: none;
+      touch-action: manipulation;
+      -webkit-tap-highlight-color: transparent;
+      font-family: system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol";
+    }
+    #game-root {
+      width: 100%;
+      height: 100%;
+      display: grid;
+      place-items: center;
+    }
+    /* Empêche l’étirement bizarre sur iOS */
+    canvas { image-rendering: pixelated; }
   </style>
+
+  <!-- Phaser 3 (CDN officiel) -->
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.0/dist/phaser.min.js" defer></script>
+
+  <!-- Ton jeu -->
+  <script src="./game.js" defer></script>
 </head>
 <body>
-  <div id="game-root"></div>
-
-  <!-- Phaser -->
-  <script src="https://cdn.jsdelivr.net/npm/phaser@3.70.0/dist/phaser.min.js"></script>
-
-  <!-- Jeu -->
-  <script src="game.js"></script>
+  <div id="game-root" aria-label="FlappyBorgy"></div>
 </body>
 </html>
