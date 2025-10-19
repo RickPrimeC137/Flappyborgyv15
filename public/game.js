@@ -54,7 +54,7 @@ class BootScene extends Phaser.Scene {
     this.load.image('token', 'sb_token_user.png');
 
     // Son : on tente le woof; fallback beep si besoin
-    this.load.audio('woof', ['single-dog-woof-sound.ogg','beep.ogg']);
+    this.load.audio('single-dog-woof-sound', ['single-dog-woof-sound.ogg','beep.ogg']);
   }
 
   create(){
