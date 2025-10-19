@@ -1,314 +1,361 @@
-/*  FlappyBorgy v15.8
- *  - Corps physiques des tuyaux & capteurs en sprites (texture 'px') => setVelocityX OK
- *  - Visuels des tuyaux = tileSprite (zéro halo) + caps
- *  - Gravité active, menu, quêtes quotidiennes, woof à chaque point
- */
+/* FlappyBorgy – v16
+   - Menu démarrer / Quêtes (placeholder)
+   - Tuyaux 2 skins (clair/sombre) qui alternent toutes les 50 paires
+   - Défilement fluide des tuyaux (Arcade Physics, vitesse négative)
+   - Capteurs de score dynamiques
+   - Son "woof" à chaque tuyau passé (désactivable)
+   - Correctif halo noir sur les caps (crop) + option filtre NEAREST
+*/
 
-const VERSION = 'v15.8';
-
-/* ---------------- Profil de jeu ---------------- */
-const PROFILE = { gravity: 1400, jump: -380, pipeSpeed: -220, gap: 230 };
+const GAME_W = 768, GAME_H = 1366;         // portrait logique
+const PROFILE = {
+  gravity: 1400,
+  jump: -380,
+  speed: -220,
+  gap: 260,
+  spawnDelay: 1450,                         // ms entre paires
+  pipeWidth: 180
+};
 const BORGY_SCALE = 0.22;
-const PIPE_W = 140;
-const SPAWN_DELAY = 1600;
-const HOLE_MIN = 90;
-const HOLE_MAX_MARGIN = 160;
 
-/* ---------------- Styles UI ---------------- */
-const btnPrimary = { fontFamily:'monospace', fontSize:52, color:'#fff', backgroundColor:'#0db187',
-  padding:{left:22,right:22,top:10,bottom:10} };
-const btnSecondary = { fontFamily:'monospace', fontSize:40, color:'#0b3a32', backgroundColor:'#bdf4e7',
-  padding:{left:18,right:18,top:8,bottom:8} };
-
-/* ---------------- Quêtes quotidiennes ---------------- */
-const QUEST_KEY='fbv15_daily_quests', QUEST_DATE='fbv15_daily_date';
-const today = ()=>{ const d=new Date(); return `${d.getFullYear()}-${d.getMonth()+1}-${d.getDate()}`; };
-const newQuests = ()=>[
-  {id:'pipes', title:'Passer 60 tuyaux', target:60, progress:0, done:false},
-  {id:'score', title:'Atteindre 30 points', target:30, progress:0, done:false},
-  {id:'bonus', title:'Prendre 1 bonus', target:1, progress:0, done:false}
+// alternance skins toutes les 50 paires
+const SWITCH_EVERY = 50;
+const SKINS = [
+  { top: 'pipe_light_top', bottom: 'pipe_light_bottom' },
+  { top: 'pipe_dark_top',  bottom: 'pipe_dark_bottom'  }
 ];
-function loadQuests(){
-  const t=today(), last=localStorage.getItem(QUEST_DATE);
-  if(last!==t){ const q=newQuests(); localStorage.setItem(QUEST_KEY, JSON.stringify(q)); localStorage.setItem(QUEST_DATE,t); return q; }
-  try{ const q=JSON.parse(localStorage.getItem(QUEST_KEY)||'[]'); return Array.isArray(q)?q:newQuests(); }
-  catch{ const q=newQuests(); localStorage.setItem(QUEST_KEY, JSON.stringify(q)); return q; }
-}
-function saveQuests(q){ localStorage.setItem(QUEST_KEY, JSON.stringify(q)); }
-function bumpQuest(id, n=1){ const q=loadQuests(); let ch=false; q.forEach(k=>{ if(k.id===id && !k.done){ k.progress=Math.min(k.target,(k.progress||0)+n); if(k.progress>=k.target) k.done=true; ch=true; } }); if(ch) saveQuests(q); }
-function best(){ return Number(localStorage.getItem('fbv15_best')||0); }
-function setBest(s){ if(s>best()) localStorage.setItem('fbv15_best', String(s)); }
 
-/* ---------------- Utilitaires images tuyaux ---------------- */
-function makePipeBodyTexture(scene, srcKey, outKey) {
-  if (scene.textures.exists(outKey)) return outKey;
-  const img = scene.textures.get(srcKey).getSourceImage();
-  const w = img.width, h = img.height;
+let game;
 
-  const sliceW = Math.max(16, Math.floor(w * 0.14));
-  const sx = Math.floor((w - sliceW) / 2);
-  const sy = Math.floor(h * 0.18);
-  const sh = Math.max(120, h - sy - Math.floor(h * 0.20));
-
-  const tex = scene.textures.createCanvas(outKey, sliceW, sh);
-  const ctx = tex.getContext();
-  ctx.clearRect(0,0,sliceW,sh);
-  ctx.drawImage(img, sx, sy, sliceW, sh, 0, 0, sliceW, sh);
-  tex.refresh();
-  return outKey;
-}
-
-/* ---------------- Scenes ---------------- */
-class PreloadScene extends Phaser.Scene {
-  constructor(){ super('preload'); }
-  preload(){
-    const W=this.scale.width,H=this.scale.height;
-    const bg=this.add.rectangle(W/2,H/2,420,10,0x000,0.12).setOrigin(0.5);
-    const bar=this.add.rectangle(W/2-210,H/2,1,10,0x0aa67e).setOrigin(0,0.5);
-    const pct=this.add.text(W/2,H/2+22,'0%',{fontFamily:'monospace',fontSize:16,color:'#044'}).setOrigin(0.5);
-    this.load.on('progress',p=>{bar.width=420*p;pct.setText(`${Math.round(p*100)}%`);});
-
-    this.load.setPath('assets');
-    const v=f=>`${f}?${VERSION}`;
-    this.load.image('borgy',             v('borgy_ingame.png'));
-    this.load.image('pipe_light_top',    v('pipe_light_top.png'));
-    this.load.image('pipe_light_bottom', v('pipe_light_bottom.png'));
-    this.load.image('pipe_dark_top',     v('pipe_dark_top.png'));
-    this.load.image('pipe_dark_bottom',  v('pipe_dark_bottom.png'));
-    this.load.image('sb_token',          v('sb_token_user.png')); // optionnel
-    this.load.audio('woof',              [v('woof.ogg')]);
-
-    this.load.once('complete',()=> this.scene.start('boot'));
-  }
-}
+/* --------------------------------------------------------- */
+/* Boot / Preload                                            */
+/* --------------------------------------------------------- */
 class BootScene extends Phaser.Scene {
   constructor(){ super('boot'); }
+
+  preload(){
+    const w = this.scale.width, h = this.scale.height;
+
+    // barre de chargement
+    const bg = this.add.rectangle(w/2, h*0.55, w*0.55, 10, 0x000000, 0.12).setOrigin(0.5);
+    const fg = this.add.rectangle(bg.x - bg.width/2, bg.y, 1, 10, 0x00a67e).setOrigin(0,0.5);
+    const pct = this.add.text(bg.x, bg.y+24, '0%', {fontFamily:'monospace', fontSize: 18, color:'#044'}).setOrigin(0.5);
+    this.load.on('progress', p => { fg.width = bg.width*p; pct.setText(Math.round(p*100)+'%'); });
+
+    // ASSETS (dossier public/assets)
+    this.load.setPath('assets');
+    this.load.image('borgy', 'borgy_ingame.png');
+
+    this.load.image('pipe_light_top',    'pipe_light_top.png');
+    this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
+    this.load.image('pipe_dark_top',     'pipe_dark_top.png');
+    this.load.image('pipe_dark_bottom',  'pipe_dark_bottom.png');
+
+    this.load.image('token', 'sb_token_user.png');
+
+    // Son : on tente le woof; fallback beep si besoin
+    this.load.audio('woof', ['single-dog-woof-sound.ogg','beep.ogg']);
+  }
+
   create(){
-    // Génère une mini texture blanche 'px' pour les corps physiques invisibles
-    const g=this.add.graphics(); g.fillStyle(0xffffff,1); g.fillRect(0,0,2,2); g.generateTexture('px',2,2); g.destroy();
+    // Anti halo : filtre NEAREST (optionnel)
+    ['pipe_light_top','pipe_light_bottom','pipe_dark_top','pipe_dark_bottom'].forEach(k=>{
+      if (this.textures.exists(k)) this.textures.get(k).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    });
+
     this.scene.start('menu');
   }
 }
+
+/* --------------------------------------------------------- */
+/* Menu                                                      */
+/* --------------------------------------------------------- */
 class MenuScene extends Phaser.Scene {
   constructor(){ super('menu'); }
   create(){
-    const W=this.scale.width,H=this.scale.height;
-    this.add.text(W/2,H*0.22,'FlappyBorgy',{fontFamily:'Georgia,serif',fontSize:72,color:'#0b3a32',stroke:'#bdf4e7',strokeThickness:10}).setOrigin(0.5);
-    const play=this.add.text(W/2,H*0.42,'Jouer',btnPrimary).setOrigin(0.5).setInteractive({useHandCursor:true});
-    play.on('pointerdown',()=> this.scene.start('game'));
-    const quests=this.add.text(W/2,H*0.54,'Quêtes',btnSecondary).setOrigin(0.5).setInteractive({useHandCursor:true});
-    quests.on('pointerdown',()=> this.scene.start('quests'));
-    this.add.text(W/2,H*0.78,'Tap/Space pour sauter\nÉvite les tuyaux',{fontFamily:'monospace',fontSize:26,color:'#0b3a32',align:'center'}).setOrigin(0.5);
+    const W = this.scale.width, H = this.scale.height;
+
+    this.add.text(W/2, H*0.18, 'FlappyBorgy', {
+      fontFamily:'Georgia, serif', fontSize:64, color:'#104a3e'
+    }).setOrigin(0.5);
+
+    const playBtn = this.makeBtn(W/2, H*0.32, 'Jouer', () => this.scene.start('game'));
+    const questsBtn = this.makeBtn(W/2, H*0.40, 'Quêtes', () => this.scene.start('quests'));
+    const soundBtn = this.makeBtn(W/2, H*0.48, `Son : ${localStorage.getItem('fb_sound')==='0'?'OFF':'ON'}`, () => {
+      const now = localStorage.getItem('fb_sound')==='0' ? '1':'0';
+      localStorage.setItem('fb_sound', now);
+      soundBtn.setText(`Son : ${now==='0'?'OFF':'ON'}`);
+    });
+
+    this.add.text(W/2, H*0.86, 'Tap/Espace pour sauter\nÉvitez les tuyaux', {
+      fontFamily:'monospace', fontSize:24, color:'#104a3e', align:'center'
+    }).setOrigin(0.5);
+  }
+
+  makeBtn(x,y,label,cb){
+    const t = this.add.text(x,y,label,{
+      fontFamily:'monospace', fontSize:34, color:'#fff', backgroundColor:'#11a88a', padding:{left:16,right:16,top:8,bottom:8}
+    }).setOrigin(0.5).setInteractive({useHandCursor:true});
+    t.on('pointerdown', cb);
+    return t;
   }
 }
-class QuestScene extends Phaser.Scene {
+
+/* --------------------------------------------------------- */
+/* Quêtes (placeholder visuel simple)                        */
+/* --------------------------------------------------------- */
+class QuestsScene extends Phaser.Scene {
   constructor(){ super('quests'); }
   create(){
-    const W=this.scale.width,H=this.scale.height;
-    this.add.text(W/2,80,'Quêtes du jour',{fontFamily:'Georgia,serif',fontSize:56,color:'#0b3a32'}).setOrigin(0.5);
-    const q=loadQuests(); let y=180;
-    q.forEach(it=>{ const t=`${it.title}  –  ${it.progress}/${it.target}  ${it.done?'✅':'⬜'}`; this.add.text(60,y,t,{fontFamily:'monospace',fontSize:28,color:it.done?'#0a7a56':'#083b43'}); y+=60; });
-    const back=this.add.text(W/2,H*0.88,'← Retour',btnSecondary).setOrigin(0.5).setInteractive({useHandCursor:true});
-    back.on('pointerdown',()=> this.scene.start('menu'));
+    const W=this.scale.width, H=this.scale.height;
+    this.add.text(W/2, H*0.12, 'Quêtes journalières', {fontFamily:'Georgia,serif', fontSize:48, color:'#133'}).setOrigin(0.5);
+    const list = [
+      '• Faire 10 points (0/10)',
+      '• Passer 3 tuyaux d’affilée (0/3)',
+      '• Jouer 3 parties (0/3)'
+    ];
+    this.add.text(W/2, H*0.22, list.join('\n'), {fontFamily:'monospace', fontSize:28, color:'#155', lineSpacing:12}).setOrigin(0.5,0);
+    this.add.text(W/2, H*0.85, 'Retour', {fontFamily:'monospace', fontSize:34, color:'#fff', backgroundColor:'#11a88a', padding:{left:18,right:18,top:8,bottom:8}})
+      .setOrigin(0.5).setInteractive({useHandCursor:true}).on('pointerdown', ()=>this.scene.start('menu'));
   }
 }
 
+/* --------------------------------------------------------- */
+/* Jeu                                                       */
+/* --------------------------------------------------------- */
 class GameScene extends Phaser.Scene {
   constructor(){ super('game'); }
+
   init(){
-    this.score=0;
-    this.pipesPassed=0;
-    this.started=false;
-    this.followFns=[];
+    this.score = 0;
+    this.passed = 0;              // paires passées
+    this.skinIndex = 0;           // 0 clair / 1 sombre
+    this.followFns = [];          // MAJ visuelle des caps/bodies
+    this.soundOn = (localStorage.getItem('fb_sound')!=='0');
   }
+
   create(){
-    const W=this.scale.width,H=this.scale.height;
+    const W = this.scale.width, H = this.scale.height;
+    this.cameras.main.setBackgroundColor('#aee5f2');
 
-    // Score
-    this.scoreText=this.add.text(24,20,'Score: 0',{fontFamily:'monospace',fontSize:48,color:'#fff',stroke:'#0a3a38',strokeThickness:8}).setDepth(50);
+    // texte score
+    this.scoreText = this.add.text(24, 20, 'Score: 0', {
+      fontFamily:'monospace', fontSize:48, color:'#ffffff', stroke:'#0a3a38', strokeThickness:8
+    }).setDepth(50);
 
-    // Joueur (gravité ON)
-    this.player=this.physics.add.sprite(W*0.22,H*0.5,'borgy').setScale(BORGY_SCALE).setDepth(10).setCollideWorldBounds(true);
-    this.player.body.setAllowGravity(true);
+    // joueur
+    this.player = this.physics.add.sprite(W*0.24, H*0.5, 'borgy')
+      .setScale(BORGY_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setGravityY(PROFILE.gravity);
-    this.player.body.setSize(this.player.width*0.55,this.player.height*0.55,true)
-                    .setOffset(this.player.width*0.225,this.player.height*0.25);
+    this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
+                    .setOffset(this.player.width*0.225, this.player.height*0.25);
 
-    // Son
-    this.sndWoof=this.sound.add('woof',{volume:0.45});
+    // groupe de colliders “tuyaux”
+    this.pipeColliders = this.physics.add.group({ allowGravity:false, immovable:true });
 
-    // Groupe des corps (sprites physiques invisibles)
-    this.pipeBodies=this.physics.add.group();
+    // collisions
+    this.physics.add.overlap(this.player, this.pipeColliders, () => this.gameOver(), null, this);
 
-    // Input
-    this.input.on('pointerdown',()=> this.onTap());
-    this.input.keyboard.on('keydown-SPACE',()=> this.onTap());
+    // input
+    this.input.on('pointerdown', ()=>this.flap());
+    this.input.keyboard.on('keydown-SPACE', ()=>this.flap());
 
-    // Msg start
-    this.startMsg=this.add.text(W/2,H*0.55,'TAP pour démarrer',{fontFamily:'monospace',fontSize:36,color:'#0b3a32',backgroundColor:'#cffff3'}).setOrigin(0.5).setDepth(20);
+    // son
+    this.woof = this.sound.add('woof', { volume: 0.5 });
 
-    // Timer spawn (PAUSÉ)
-    this.spawnTimer=this.time.addEvent({delay:SPAWN_DELAY,loop:true,paused:true,callback:()=> this.spawnPair()});
+    // 2 premières paires pour remplir l’écran
+    this.spawnPair(W + 120);
+    this.time.delayedCall(PROFILE.spawnDelay*0.7, ()=>this.spawnPair(W + 120 + 380));
 
-    // Collisions
-    this.physics.add.overlap(this.player,this.pipeBodies,()=> this.gameOver(),null,this);
+    // spawner régulier
+    this.timer = this.time.addEvent({
+      delay: PROFILE.spawnDelay, loop: true, callback: ()=> this.spawnPair()
+    });
   }
-  onTap(){
-    if(!this.started){
-      this.started=true;
-      this.startMsg?.destroy();
-      this.spawnPair();                 // première paire instant
-      this.spawnTimer.paused=false;     // puis boucle
-    }
+
+  flap(){
+    if (!this.player.active) return;
     this.player.setVelocityY(PROFILE.jump);
   }
-  update(){
-    if(!this.player.active) return;
-    const vy=this.player.body.velocity.y;
-    this.player.setAngle(Phaser.Math.Clamp(vy*0.06,-18,22));
 
-    this.followFns.forEach(f=>f());
+  update(time, dt){
+    // look / tilt
+    const vy = this.player.body.velocity.y;
+    this.player.setAngle(Phaser.Math.Clamp(Phaser.Math.Linear(-25, 35, (vy+400)/800), -25, 35));
 
-    if(this.started){
-      const H=this.scale.height;
-      if(this.player.y<=0 || this.player.y>=H) this.gameOver();
-    }
-  }
+    // MAJ des éléments “visuels” qui suivent les colliders
+    this.followFns.forEach(fn=>fn());
 
-  /* --------- Spawn d'une paire (physique = sprites 'px') --------- */
-  spawnPair(){
-    const W=this.scale.width,H=this.scale.height;
-    const gap=PROFILE.gap, minTop=HOLE_MIN, maxTop=H-(gap+HOLE_MAX_MARGIN);
-
-    if(this._lastTopY===undefined) this._lastTopY=(minTop+maxTop)/2;
-    const jitter=Phaser.Math.Between(-110,110);
-    const topY=Phaser.Math.Clamp(this._lastTopY+jitter,minTop,maxTop);
-    this._lastTopY=topY;
-
-    const holeCenter=topY+gap/2;
-    const x=W+60;
-
-    const useDark=(Math.floor(this.pipesPassed/50)%2)===1;
-    const variant=useDark?'dark':'light';
-
-    this.makePipes(x,holeCenter,gap,variant);
-
-    // Capteur de score (sprite dynamique immovable)
-    const sensor=this.physics.add.sprite(x+PIPE_W/2+10, H/2, 'px')
-      .setVisible(false).setDepth(1);
-    sensor.body.setAllowGravity(false).setImmovable(true).setVelocityX(PROFILE.pipeSpeed);
-    sensor.body.setSize(10,H,true);
-
-    this.physics.add.overlap(this.player,sensor,()=>{
-      if(!sensor.active) return;
-      sensor.destroy();
-      this.pipesPassed++;
-      this.incrementScore();
-      if(this.pipesPassed%50===0){
-        this.spawnBonus(this.player.x+520, Phaser.Math.Between(220,this.scale.height-260));
-      }
+    // nettoyage colliders hors écran
+    this.pipeColliders.children.iterate((c)=>{
+      if (!c) return;
+      if (c.active && c.x < -PROFILE.pipeWidth*2) c.destroy();
     });
   }
 
-  makePipes(x, holeCenter, holeSize, variant){
-    const H=this.scale.height;
-    const topH=Math.max(40, holeCenter-holeSize/2);
-    const bottomH=Math.max(40, H-(holeCenter+holeSize/2));
+  /* ------------ Génération de paires de tuyaux ----------------- */
+  spawnPair(startX){
+    const W = this.scale.width, H = this.scale.height;
+    const x = (startX !== undefined) ? startX : (W + 40);
 
-    const keyTop    = `pipe_${variant}_top`;
-    const keyBottom = `pipe_${variant}_bottom`;
-    const bodyKey   = makePipeBodyTexture(this, keyBottom, `body_${variant}`);
+    // trou
+    const gap = PROFILE.gap;
+    const minTop = 120;
+    const maxTop = H - (gap + 160);
+    const topH = Phaser.Math.Between(minTop, maxTop);
+    const holeCenter = topH + gap/2;
 
-    // VISUELS (tileSprites + caps)
-    const topBodyVis = this.add.tileSprite(x, topH, PIPE_W, topH, bodyKey).setOrigin(0.5,1).setDepth(5);
-    const botBodyVis = this.add.tileSprite(x, holeCenter+holeSize/2+bottomH, PIPE_W, bottomH, bodyKey).setOrigin(0.5,1).setFlipY(true).setDepth(5);
-    const capTop     = this.add.image(x, topH, keyBottom).setOrigin(0.5,1).setDepth(6);
-    const capBottom  = this.add.image(x, holeCenter+holeSize/2, keyTop).setOrigin(0.5,0).setDepth(6);
+    // skin (switch toutes les 50)
+    const effectiveIndex = Math.floor(this.passed / SWITCH_EVERY) % SKINS.length;
+    const skin = SKINS[effectiveIndex];
 
-    // PHYSIQUES : sprites invisibles 'px' (dynamiques + immovables)
-    const topPhys = this.physics.add.sprite(x, topH - topH/2, 'px').setVisible(false);
-    const botPhys = this.physics.add.sprite(x, holeCenter+holeSize/2 + bottomH - bottomH/2, 'px').setVisible(false);
+    // corps + caps haut
+    const top = this.makePipe(x, topH, true, skin);
+    // corps + caps bas
+    const bottomHeight = H - (holeCenter + gap/2);
+    const bottom = this.makePipe(x, holeCenter + gap/2 + bottomHeight, false, skin, bottomHeight);
 
-    topPhys.body.setAllowGravity(false).setImmovable(true).setVelocityX(PROFILE.pipeSpeed);
-    botPhys.body.setAllowGravity(false).setImmovable(true).setVelocityX(PROFILE.pipeSpeed);
-    topPhys.body.setSize(PIPE_W, topH, true);
-    botPhys.body.setSize(PIPE_W, bottomH, true);
+    // capteur de score (physique, transparent, dynamique)
+    const sensor = this.physics.add.image(x + PROFILE.pipeWidth*0.6, H/2)
+      .setScale(1, H/(this.player.height)).setAlpha(0.0001);
+    sensor.setImmovable(true);
+    sensor.body.allowGravity = false;
+    sensor.setVelocityX(PROFILE.speed);
 
-    this.pipeBodies.add(topPhys);
-    this.pipeBodies.add(botPhys);
-    this.physics.add.overlap(this.player, topPhys, ()=> this.gameOver(), null, this);
-    this.physics.add.overlap(this.player, botPhys, ()=> this.gameOver(), null, this);
+    this.physics.add.overlap(this.player, sensor, ()=>{
+      if (!sensor.active) return;
+      sensor.destroy();
+      this.passed++;
+      this.score++;
+      this.scoreText.setText('Score: ' + this.score);
+      if (this.soundOn && this.woof) this.woof.play();
+    });
 
-    // Suivi visuel + petit scroll
+    // collision bodies (dynamiques immobiles, vitesse négative)
+    [top.collider, bottom.collider].forEach(c=>{
+      c.setImmovable(true);
+      c.body.allowGravity = false;
+      c.setVelocityX(PROFILE.speed);
+      this.pipeColliders.add(c);
+    });
+  }
+
+  /* Fabrique un tuyau (haut ou bas)
+     - Crée un collider invisible (physics Image)
+     - Crée le visuel: tileSprite + cap
+     - Enregistre une followFn pour coller visuel au collider
+  */
+  makePipe(x, endY, isTop, skin, forcedBodyH){
+    const keyTop = skin.top;
+    const keyBottom = skin.bottom;
+    const bodyHeight = forcedBodyH ?? endY;           // si top: endY est la hauteur du corps
+    const bodyY = isTop ? bodyHeight : endY;          // position du collider
+    const halfW = PROFILE.pipeWidth/2;
+
+    // collider : rectangle invisible
+    const collider = this.physics.add.image(x, bodyY, undefined).setVisible(false);
+    collider.body.setSize(PROFILE.pipeWidth, bodyHeight);
+    collider.setOrigin(0.5, isTop ? 1 : 1);           // pivot en bas (on place par y “base”)
+    collider.body.setOffset(-halfW, -bodyHeight);     // ancrage manuel
+
+    // VISUEL corps : on génère une bande (tileSprite) à partir du PNG top/bottom “body”
+    const bodyTexKey = this.makePipeBodyTexture(isTop ? keyBottom : keyTop); // on prend la partie “fût”
+    const bodySprite = this.add.tileSprite(x, bodyY - (isTop? bodyHeight/2 : bodyHeight/2),
+                                           PROFILE.pipeWidth, bodyHeight, bodyTexKey)
+                                .setOrigin(0.5, 0.5).setDepth(5);
+    if (!isTop) bodySprite.setFlipY(true);
+
+    // VISUEL cap (haut ou bas) + CORRECTIF HALO (crop latéral)
+    const capKey = isTop ? keyBottom : keyTop;
+    const cap = this.add.image(x, isTop ? endY : (endY - bodyHeight), capKey)
+                        .setDepth(6)
+                        .setOrigin(0.5, isTop ? 1 : 0)
+                        .setFlipY(!isTop);
+
+    // --- anti halo : on recadre quelques pixels à gauche/droite du cap
+    const src = this.textures.get(capKey).getSourceImage();
+    const pad = Math.round(src.width * 0.06); // ajuste 0.05–0.08 si nécessaire
+    cap.setCrop(pad, 0, src.width - pad*2, src.height);
+
+    // fonction de suivi (coller visuels au collider)
     const follow = ()=>{
-      if(!topPhys.active){ this.events.off('update', follow); return; }
-      topBodyVis.x=topPhys.x; topBodyVis.y=topPhys.y + topH/2;
-      botBodyVis.x=botPhys.x; botBodyVis.y=botPhys.y + bottomH/2;
-      capTop.x=topBodyVis.x; capTop.y=topBodyVis.y;
-      capBottom.x=botBodyVis.x; capBottom.y=botBodyVis.y - bottomH;
-      topBodyVis.tilePositionY += 0.4;
-      botBodyVis.tilePositionY += 0.4;
-
-      if(topBodyVis.x < -PIPE_W*2){
-        [topBodyVis,botBodyVis,capTop,capBottom,topPhys,botPhys].forEach(o=>o&&o.destroy());
-        this.events.off('update', follow);
+      bodySprite.x = collider.x;
+      cap.x = collider.x;
+      if (isTop){
+        bodySprite.y = collider.y - bodyHeight/2;
+        cap.y = collider.y; // base du haut
+      }else{
+        bodySprite.y = collider.y - bodyHeight/2;
+        cap.y = collider.y - bodyHeight; // sommet du bas
       }
     };
-    this.events.on('update', follow);
+    this.followFns.push(follow);
 
-    // Kill de sécurité
-    this.time.delayedCall(15000, ()=>{
-      [topBodyVis,botBodyVis,capTop,capBottom,topPhys,botPhys].forEach(o=>o&&o.destroy());
-      this.events.off('update', follow);
-    });
+    return { collider, bodySprite, cap };
   }
 
-  spawnBonus(x,y){
-    if(!this.textures.exists('sb_token')) return;
-    const b=this.physics.add.image(x,y,'sb_token').setScale(0.55).setDepth(9).setImmovable(true);
-    b.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
-    this.physics.add.overlap(this.player,b,()=>{
-      if(!b.active) return;
-      b.destroy();
-      this.sound.play('woof',{volume:0.6,detune:300});
-      this.incrementScore(5);
-      bumpQuest('bonus',1);
-    });
-    this.time.delayedCall(12000,()=> b.destroy());
-  }
+  // Crée/retourne une texture répétable (key) depuis le PNG cap/bottom/top en rognant les bords sombres
+  makePipeBodyTexture(fromKey){
+    const key = `body_${fromKey}`;
+    if (this.textures.exists(key)) return key;
 
-  incrementScore(n=1){
-    this.score += n;
-    this.scoreText.setText('Score: '+this.score);
-    this.sound.play('woof',{volume:0.4});
-    bumpQuest('pipes',1);
-    bumpQuest('score',n);
+    const src = this.textures.get(fromKey).getSourceImage();
+    // on coupe 6% gauche/droite et 18% top/bottom pour ne garder que le fût
+    const cx = Math.round(src.width * 0.06);
+    const cy = Math.round(src.height * 0.18);
+    const cw = src.width - cx*2;
+    const ch = src.height - cy*2;
+
+    const rt = this.textures.createCanvas(key, cw, ch);
+    const ctx = rt.getContext();
+    ctx.drawImage(src, cx, cy, cw, ch, 0, 0, cw, ch);
+    rt.refresh();
+
+    // filtre NEAREST aussi sur le body
+    this.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+    return key;
   }
 
   gameOver(){
-    if(!this.player.active) return;
+    if (!this.player.active) return;
     this.player.disableBody(true,false);
-    this.spawnTimer && (this.spawnTimer.paused=true);
-    setBest(this.score);
+    this.player.setTint(0xff6b6b);
+    this.timer && this.timer.remove(false);
 
-    const W=this.scale.width,H=this.scale.height;
-    this.add.rectangle(W/2,H/2,W*0.82,360,0x163945,0.92).setDepth(100);
-    this.add.text(W/2,H/2-110,'Game Over',{fontFamily:'Georgia,serif',fontSize:72,color:'#fff'}).setOrigin(0.5).setDepth(101);
-    this.add.text(W/2,H/2-30,`Score : ${this.score}   |   Best : ${best()}`,{fontFamily:'monospace',fontSize:40,color:'#c9fff4'}).setOrigin(0.5).setDepth(101);
-    const btn=this.add.text(W/2,H/2+70,'Rejouer',btnPrimary).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    btn.on('pointerdown',()=> this.scene.restart());
+    const W=this.scale.width, H=this.scale.height;
+    const panel = this.add.rectangle(W/2, H/2, W*0.8, 360, 0x163945, 0.92).setDepth(100);
+    this.add.text(W/2, H/2-110, 'Game Over', {fontFamily:'Georgia,serif', fontSize:70, color:'#fff'}).setOrigin(0.5).setDepth(101);
+    this.add.text(W/2, H/2-30, `Score : ${this.score}`, {fontFamily:'monospace', fontSize:54, color:'#c9fff4'}).setOrigin(0.5).setDepth(101);
+
+    const btn = this.add.text(W/2, H/2+70, 'Rejouer', {
+      fontFamily:'monospace', fontSize:46, color:'#fff', backgroundColor:'#0db187',
+      padding:{left:20,right:20,top:10,bottom:10}
+    }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    btn.on('pointerdown', ()=> this.scene.restart());
   }
 }
 
-/* ---------------- Boot Phaser ---------------- */
-window.addEventListener('load',()=>{
-  const config={
-    type:Phaser.AUTO,
-    parent:'game-root',
-    backgroundColor:'#9edff1',
-    scale:{ mode:Phaser.Scale.FIT, autoCenter:Phaser.Scale.CENTER_BOTH, width:768, height:1366 },
-    physics:{ default:'arcade', arcade:{ gravity:{y:0}, debug:false } },
-    scene:[PreloadScene,BootScene,MenuScene,GameScene,QuestScene]
-  };
-  new Phaser.Game(config);
+/* --------------------------------------------------------- */
+/* Lancement                                                 */
+/* --------------------------------------------------------- */
+window.addEventListener('load', () => {
+  game = new Phaser.Game({
+    type: Phaser.AUTO,
+    backgroundColor: '#aee5f2',
+    scale: {
+      mode: Phaser.Scale.FIT,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: GAME_W,
+      height: GAME_H
+    },
+    physics: {
+      default: 'arcade',
+      arcade: {
+        gravity: { y: 0 },   // la gravité est appliquée UNIQUEMENT au player
+        debug: false
+      }
+    },
+    scene: [BootScene, MenuScene, QuestsScene, GameScene],
+    parent: 'game-root'
+  });
 });
