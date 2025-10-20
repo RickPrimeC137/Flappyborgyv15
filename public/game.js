@@ -7,12 +7,12 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,
   gap: 260,          // taille de l’ouverture
-  spawnDelay: 1500   // ~1.5s, cohérent avec SPAWN_EVERY de ton snippet
+  spawnDelay: 1500   // ~1.5s
 };
 
 // Hypothèses “style canvas” (padding transparent dans le PNG)
 const PAD = 2;            // padding transparent sur la largeur (gauche/droite)
-const PIPE_BODY_W = 0.92; // proportion utile (sans padding). On re-calculera en px via la largeur source.
+const PIPE_BODY_W = 0.92; // proportion utile (sans padding)
 const PIPE_W_DISPLAY = 180; // largeur d’affichage à l’écran
 
 const THEME_PERIOD = 50;      // alterne clair/sombre tous les 50
@@ -83,6 +83,9 @@ class GameScene extends Phaser.Scene {
     // bonus
     this.multiplierActive = false;
     this.multTimer = null;
+
+    // handle timer ref (créée dans create)
+    this.spawnTimer = null;
   }
 
   create(){
@@ -111,7 +114,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
 
-    // ⬇️ MODIF B : gravité locale (initialement 0, activée au démarrage)
+    // MODIF B : gravité locale (initialement 0, activée au démarrage)
     this.player.setGravityY(0);
 
     // Aura bonus
@@ -127,6 +130,17 @@ class GameScene extends Phaser.Scene {
 
     // Première paire (immobile tant que non démarré)
     this.spawnPair(true);
+
+    // 🔁 MODIF TIMER : créer le timer maintenant (en pause), on le relancera au tap
+    this.spawnTimer = this.time.addEvent({
+      delay: PROFILE.spawnDelay,
+      loop: true,
+      paused: true,
+      callback: () => {
+        console.log('[timer] tick');
+        this.spawnPair(false);
+      }
+    });
   }
 
   computeTextureInfo(){
@@ -137,25 +151,21 @@ class GameScene extends Phaser.Scene {
   }
 
   onTap(){
+    console.log('[tap]');
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
 
-      // ⬇️ MODIF B : appliquer la gravité du profil au joueur au démarrage
+      // MODIF B : appliquer la gravité du profil au joueur au démarrage
       this.player.setGravityY(PROFILE.gravity);
 
       // mets en mouvement ce qui est déjà là
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
       if (this._lastSensor?.body) this._lastSensor.body.setVelocityX(PROFILE.pipeSpeed);
 
-      // spawn immédiat + timer régulier
+      // spawn immédiat puis reprise du timer déjà créé
       this.spawnPair(false);
-      this.spawnTimer && this.spawnTimer.remove(false);
-      this.spawnTimer = this.time.addEvent({
-        delay: PROFILE.spawnDelay,
-        loop: true,
-        callback: () => this.spawnPair(false)
-      });
+      if (this.spawnTimer) this.spawnTimer.paused = false;
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
@@ -183,6 +193,7 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnPair(silentFirst){
+    console.log('[spawn] pair', { silentFirst });
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
@@ -302,7 +313,9 @@ class GameScene extends Phaser.Scene {
     if (!this.player.active) return;
     this.player.disableBody(true, false);
     this.player.setTint(0xff7a7a);
-    this.spawnTimer && this.spawnTimer.remove(false);
+
+    // stop timer proprement
+    if (this.spawnTimer) this.spawnTimer.remove(false);
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
