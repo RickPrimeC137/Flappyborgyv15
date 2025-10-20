@@ -1,4 +1,4 @@
-/* FlappyBorgy — spawn dans update (sans timer), setScale, gravité locale */
+/* FlappyBorgy — spawn dans update, vitesses via body, setScale, gravité locale */
 
 const GAME_W = 768, GAME_H = 1366;
 
@@ -73,12 +73,11 @@ class GameScene extends Phaser.Scene {
 
     this.score = 0;
     this.pairsSpawned = 0;
-    this.followCaps = [];
+
     this.multiplierActive = false;
     this.multTimer = null;
 
-    // ⬇️ accumulateur pour le spawn “à la main”
-    this.spawnAccum = 0;
+    this.spawnAccum = 0; // cadence de spawn “manuelle”
   }
 
   create(){
@@ -93,9 +92,6 @@ class GameScene extends Phaser.Scene {
     this.scoreText = this.add.text(24, 20, 'Score: 0', {
       fontFamily:'monospace', fontSize:48, color:'#fff', stroke:'#0a3a38', strokeThickness:8
     }).setDepth(20);
-    this.multText = this.add.text(W-24, 24, '', {
-      fontFamily:'monospace', fontSize:42, color:'#b1ffe6', stroke:'#007a62', strokeThickness:6
-    }).setOrigin(1,0).setDepth(20);
 
     // Groupe tuyaux
     this.pipes = this.physics.add.group();
@@ -108,12 +104,7 @@ class GameScene extends Phaser.Scene {
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
     this.player.setGravityY(0); // Modif B : 0 au départ
 
-    // Aura bonus
-    this.aura = this.add.circle(this.player.x, this.player.y,
-      Math.max(this.player.displayWidth, this.player.displayHeight)*0.7, BONUS_AURA_SOFT, 0.22)
-      .setVisible(false).setDepth(9);
-
-    // Collision player vs pipes
+    // Collisions player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
     // Première paire (immobile tant que non démarré)
@@ -126,33 +117,24 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // mets en mouvement ce qui existe déjà
+      // mets en mouvement ce qui existe déjà (via BODY)
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
       if (this._lastSensor?.body) this._lastSensor.body.setVelocityX(PROFILE.pipeSpeed);
 
-      // spawn immédiat (puis update se charge du rythme)
+      // spawn immédiat (puis update cadencera)
       this.spawnPair(false);
-
-      // démarre l’accumulateur à zéro pour espacer correctement
       this.spawnAccum = 0;
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
 
-  // IMPORTANT: delta en ms → on s’en sert pour cadencer le spawn
   update(time, delta){
     const vy = this.player.body.velocity.y;
     if      (vy < -40) this.player.setAngle(-16);
     else if (vy > 140) this.player.setAngle(20);
     else               this.player.setAngle(0);
 
-    if (this.aura.visible){
-      this.aura.x = this.player.x;
-      this.aura.y = this.player.y;
-      this.aura.alpha = 0.2 + 0.08 * Math.sin(time/180);
-    }
-
-    // 💡 cadence de spawn “manuelle”
+    // cadence spawn
     if (this.started){
       this.spawnAccum += delta;
       while (this.spawnAccum >= PROFILE.spawnDelay){
@@ -161,13 +143,13 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    this.followCaps.forEach(fn => fn());
+    // auto-clean
     this.pipes.children.iterate(ch => { if (ch && ch.active && ch.x < -PIPE_W_DISPLAY*2) ch.destroy(); });
 
-    // alternance de thème (inofensif)
+    // alternance
     if (this.pairsSpawned > 0 && this.pairsSpawned % THEME_PERIOD === 0){
       this.theme = (this.theme === 'light') ? 'dark' : 'light';
-      this.pairsSpawned++; // évite bascule multiple
+      this.pairsSpawned++; // évite rebouclage
     }
   }
 
@@ -182,7 +164,7 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    const x = W + PIPE_W_DISPLAY * 0.6;
+    const x = W + PIPE_W_DISPLAY * 0.6; // hors-écran à droite
 
     // ===== BOTTOM =====
     const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6);
@@ -197,7 +179,7 @@ class GameScene extends Phaser.Scene {
 
     bottomImg.setImmovable(true);
     bottomImg.body.setAllowGravity(false);
-    if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
+    if (this.started) bottomImg.body.setVelocityX(PROFILE.pipeSpeed); // <-- via body
 
     const displayWb = nativeWb * scaleXb;
     const bodyWpx = displayWb * PIPE_BODY_W;
@@ -219,7 +201,7 @@ class GameScene extends Phaser.Scene {
 
     topImg.setImmovable(true);
     topImg.body.setAllowGravity(false);
-    if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
+    if (this.started) topImg.body.setVelocityX(PROFILE.pipeSpeed); // <-- via body
 
     const displayWt = nativeWt * scaleXt;
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
@@ -241,7 +223,8 @@ class GameScene extends Phaser.Scene {
     });
 
     this.pairsSpawned++;
-    console.log('[spawn]', this.pairsSpawned, this.theme);
+    // console.log('[spawn]', this.pairsSpawned, this.theme);
+
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
       this.spawnBonus(x + 520, by);
@@ -255,13 +238,11 @@ class GameScene extends Phaser.Scene {
       .setDepth(7).setScale(0.55).setImmovable(true);
     bonus.body.setAllowGravity(false);
     if (this.started) bonus.body.setVelocityX(PROFILE.pipeSpeed);
-
     this.physics.add.overlap(this.player, bonus, () => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     });
-
     this.time.delayedCall(12000, () => bonus && bonus.destroy());
   }
 
