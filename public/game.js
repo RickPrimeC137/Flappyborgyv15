@@ -15,7 +15,7 @@ const PIPE_BODY_W = 0.92;     // % de largeur utile pour la hitbox
 const PIPE_W_DISPLAY = 180;
 
 // ↓↓↓ Taille du joueur (modif demandée)
-const PLAYER_SCALE = 0.18;     // était ~0.22 ; ajuste si besoin
+const PLAYER_SCALE = 0.16;     // était ~0.22 ; ajuste si besoin
 
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
