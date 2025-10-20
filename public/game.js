@@ -1,4 +1,4 @@
-/* FlappyBorgy — pipes fix: setScale au lieu de setDisplaySize, timer au tap, gravité locale */
+/* FlappyBorgy — spawn dans update (sans timer), setScale, gravité locale */
 
 const GAME_W = 768, GAME_H = 1366;
 
@@ -19,9 +19,6 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 const BONUS_AURA_SOFT = 0x9FFFE0;
-
-// Debug visuel (mets false quand c’est bon)
-const DEBUG_PIPES = false;
 
 class PreloadScene extends Phaser.Scene {
   constructor(){ super('preload'); }
@@ -73,18 +70,21 @@ class GameScene extends Phaser.Scene {
   init(data){
     this.started = false;
     this.theme = data?.startTheme || 'light';
+
     this.score = 0;
     this.pairsSpawned = 0;
     this.followCaps = [];
     this.multiplierActive = false;
     this.multTimer = null;
-    this.spawnTimer = null;
+
+    // ⬇️ accumulateur pour le spawn “à la main”
+    this.spawnAccum = 0;
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // Input plein écran
+    // Zone d’input plein écran
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on('pointerdown', () => this.onTap());
     this.input.keyboard.on('keydown-SPACE', () => this.onTap());
@@ -106,7 +106,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setAllowGravity(false);
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
-    this.player.setGravityY(0); // Modif B
+    this.player.setGravityY(0); // Modif B : 0 au départ
 
     // Aura bonus
     this.aura = this.add.circle(this.player.x, this.player.y,
@@ -130,19 +130,17 @@ class GameScene extends Phaser.Scene {
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
       if (this._lastSensor?.body) this._lastSensor.body.setVelocityX(PROFILE.pipeSpeed);
 
-      // spawn immédiat + démarrage du timer ICI (pas de paused:)
+      // spawn immédiat (puis update se charge du rythme)
       this.spawnPair(false);
-      this.spawnTimer && this.spawnTimer.remove(false);
-      this.spawnTimer = this.time.addEvent({
-        delay: PROFILE.spawnDelay,
-        loop: true,
-        callback: () => this.spawnPair(false)
-      });
+
+      // démarre l’accumulateur à zéro pour espacer correctement
+      this.spawnAccum = 0;
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
 
-  update(t){
+  // IMPORTANT: delta en ms → on s’en sert pour cadencer le spawn
+  update(time, delta){
     const vy = this.player.body.velocity.y;
     if      (vy < -40) this.player.setAngle(-16);
     else if (vy > 140) this.player.setAngle(20);
@@ -151,16 +149,25 @@ class GameScene extends Phaser.Scene {
     if (this.aura.visible){
       this.aura.x = this.player.x;
       this.aura.y = this.player.y;
-      this.aura.alpha = 0.2 + 0.08 * Math.sin(t/180);
+      this.aura.alpha = 0.2 + 0.08 * Math.sin(time/180);
+    }
+
+    // 💡 cadence de spawn “manuelle”
+    if (this.started){
+      this.spawnAccum += delta;
+      while (this.spawnAccum >= PROFILE.spawnDelay){
+        this.spawnAccum -= PROFILE.spawnDelay;
+        this.spawnPair(false);
+      }
     }
 
     this.followCaps.forEach(fn => fn());
     this.pipes.children.iterate(ch => { if (ch && ch.active && ch.x < -PIPE_W_DISPLAY*2) ch.destroy(); });
 
-    // alternance de thème
+    // alternance de thème (inofensif)
     if (this.pairsSpawned > 0 && this.pairsSpawned % THEME_PERIOD === 0){
       this.theme = (this.theme === 'light') ? 'dark' : 'light';
-      this.pairsSpawned++; // évite boucle
+      this.pairsSpawned++; // évite bascule multiple
     }
   }
 
@@ -168,7 +175,6 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
-    // Centre de la gap
     const margin = 60;
     const gapY = margin + gap/2 + Math.random() * (H - 2*margin - gap);
 
@@ -176,27 +182,23 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    // apparition à droite (juste hors-écran)
     const x = W + PIPE_W_DISPLAY * 0.6;
 
     // ===== BOTTOM =====
     const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6);
     bottomImg.setOrigin(0.5, 0);
 
-    // ➜ SCALE depuis la taille native (évite setDisplaySize)
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXb = PIPE_W_DISPLAY / nativeWb;
-    // on veut une hauteur d’affichage précise
     const bottomH = Math.max(20, H - (gapY + gap/2) + PAD);
     const scaleYb = bottomH / nativeHb;
     bottomImg.setScale(scaleXb, scaleYb);
-
     bottomImg.y = gapY + gap/2 - PAD;
+
     bottomImg.setImmovable(true);
     bottomImg.body.setAllowGravity(false);
     if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
 
-    // hitbox (92% largeur affichée)
     const displayWb = nativeWb * scaleXb;
     const bodyWpx = displayWb * PIPE_BODY_W;
     const offsetX = (displayWb - bodyWpx) / 2;
@@ -213,8 +215,8 @@ class GameScene extends Phaser.Scene {
     const topH = Math.max(20, gapY - gap/2 + PAD);
     const scaleYt = topH / nativeHt;
     topImg.setScale(scaleXt, scaleYt);
-
     topImg.y = gapY - gap/2 + PAD;
+
     topImg.setImmovable(true);
     topImg.body.setAllowGravity(false);
     if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
@@ -223,21 +225,6 @@ class GameScene extends Phaser.Scene {
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
     topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
     this.pipes.add(topImg);
-
-    // ===== DEBUG (derrière les tuyaux) =====
-    if (DEBUG_PIPES){
-      const dbgDepth = 5; // < 6 pour rester derrière
-      const dbgTop = this.add.rectangle(topImg.x, topImg.y - topImg.displayHeight/2,
-        PIPE_W_DISPLAY, topImg.displayHeight, 0xff00ff, 0.15).setDepth(dbgDepth);
-      const dbgBot = this.add.rectangle(bottomImg.x, bottomImg.y + bottomImg.displayHeight/2,
-        PIPE_W_DISPLAY, bottomImg.displayHeight, 0xff00ff, 0.15).setDepth(dbgDepth);
-      this.physics.add.existing(dbgTop, false);
-      this.physics.add.existing(dbgBot, false);
-      dbgTop.body.setAllowGravity(false).setImmovable(true);
-      dbgBot.body.setAllowGravity(false).setImmovable(true);
-      if (this.started){ dbgTop.body.setVelocityX(PROFILE.pipeSpeed); dbgBot.body.setVelocityX(PROFILE.pipeSpeed); }
-      this.time.delayedCall(16000, () => { dbgTop.destroy(); dbgBot.destroy(); });
-    }
 
     // ===== SENSOR SCORE =====
     const sensor = this.add.rectangle(x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6, H*0.5, 8, H, 0x000000, 0);
@@ -254,8 +241,7 @@ class GameScene extends Phaser.Scene {
     });
 
     this.pairsSpawned++;
-    // console.log('[spawn]', this.pairsSpawned, { gapY, topH, bottomH, theme:this.theme });
-
+    console.log('[spawn]', this.pairsSpawned, this.theme);
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
       this.spawnBonus(x + 520, by);
@@ -269,11 +255,13 @@ class GameScene extends Phaser.Scene {
       .setDepth(7).setScale(0.55).setImmovable(true);
     bonus.body.setAllowGravity(false);
     if (this.started) bonus.body.setVelocityX(PROFILE.pipeSpeed);
+
     this.physics.add.overlap(this.player, bonus, () => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     });
+
     this.time.delayedCall(12000, () => bonus && bonus.destroy());
   }
 
@@ -289,13 +277,15 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  addScore(n){ this.score += this.multiplierActive ? n*2 : n; this.scoreText.setText('Score: ' + this.score); }
+  addScore(n){
+    this.score += this.multiplierActive ? n*2 : n;
+    this.scoreText.setText('Score: ' + this.score);
+  }
 
   gameOver(){
     if (!this.player.active) return;
     this.player.disableBody(true, false);
     this.player.setTint(0xff7a7a);
-    this.spawnTimer && this.spawnTimer.remove(false);
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
