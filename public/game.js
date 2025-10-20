@@ -1,13 +1,13 @@
-/* FlappyBorgy — spawn dans update, vitesses via body, setScale, gravité locale */
+/* FlappyBorgy — mouvement manuel (pas de setVelocity), gravité locale (modif B) */
 
 const GAME_W = 768, GAME_H = 1366;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,
+  pipeSpeed: -220,   // px/s vers la gauche
   gap: 260,
-  spawnDelay: 1500
+  spawnDelay: 1500   // ms
 };
 
 const PAD = 2;
@@ -74,16 +74,17 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.pairsSpawned = 0;
 
-    this.multiplierActive = false;
-    this.multTimer = null;
+    // cadence de spawn
+    this.spawnAccum = 0;
 
-    this.spawnAccum = 0; // cadence de spawn “manuelle”
+    // liste des objets à déplacer manuellement (images + capteurs)
+    this.movers = [];
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // Zone d’input plein écran
+    // Input plein écran
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on('pointerdown', () => this.onTap());
     this.input.keyboard.on('keydown-SPACE', () => this.onTap());
@@ -93,7 +94,7 @@ class GameScene extends Phaser.Scene {
       fontFamily:'monospace', fontSize:48, color:'#fff', stroke:'#0a3a38', strokeThickness:8
     }).setDepth(20);
 
-    // Groupe tuyaux
+    // Groupe tuyaux (pour collisions)
     this.pipes = this.physics.add.group();
 
     // Joueur
@@ -107,7 +108,7 @@ class GameScene extends Phaser.Scene {
     // Collisions player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-    // Première paire (immobile tant que non démarré)
+    // première paire (immobile avant le départ)
     this.spawnPair(true);
   }
 
@@ -117,11 +118,7 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // mets en mouvement ce qui existe déjà (via BODY)
-      this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
-      if (this._lastSensor?.body) this._lastSensor.body.setVelocityX(PROFILE.pipeSpeed);
-
-      // spawn immédiat (puis update cadencera)
+      // spawn immédiat après départ
       this.spawnPair(false);
       this.spawnAccum = 0;
     }
@@ -129,12 +126,13 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta){
+    // inclinaison du joueur
     const vy = this.player.body.velocity.y;
     if      (vy < -40) this.player.setAngle(-16);
     else if (vy > 140) this.player.setAngle(20);
     else               this.player.setAngle(0);
 
-    // cadence spawn
+    // cadence de spawn
     if (this.started){
       this.spawnAccum += delta;
       while (this.spawnAccum >= PROFILE.spawnDelay){
@@ -143,13 +141,17 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // auto-clean
-    this.pipes.children.iterate(ch => { if (ch && ch.active && ch.x < -PIPE_W_DISPLAY*2) ch.destroy(); });
-
-    // alternance
-    if (this.pairsSpawned > 0 && this.pairsSpawned % THEME_PERIOD === 0){
-      this.theme = (this.theme === 'light') ? 'dark' : 'light';
-      this.pairsSpawned++; // évite rebouclage
+    // 🔧 mouvement manuel + sync bodies
+    if (this.started){
+      const dx = PROFILE.pipeSpeed * (delta / 1000); // px/frame
+      for (let i = this.movers.length - 1; i >= 0; i--){
+        const o = this.movers[i];
+        if (!o.active) { this.movers.splice(i,1); continue; }
+        o.x += dx;
+        if (o.body && o.body.updateFromGameObject) o.body.updateFromGameObject();
+        // nettoyage hors écran
+        if (o.x < -PIPE_W_DISPLAY*2) { o.destroy(); this.movers.splice(i,1); }
+      }
     }
   }
 
@@ -164,57 +166,49 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    const x = W + PIPE_W_DISPLAY * 0.6; // hors-écran à droite
+    const x = W + PIPE_W_DISPLAY * 0.6; // hors écran à droite
 
-    // ===== BOTTOM =====
+    // === BOTTOM ===
     const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6);
     bottomImg.setOrigin(0.5, 0);
-
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXb = PIPE_W_DISPLAY / nativeWb;
     const bottomH = Math.max(20, H - (gapY + gap/2) + PAD);
-    const scaleYb = bottomH / nativeHb;
-    bottomImg.setScale(scaleXb, scaleYb);
+    bottomImg.setScale(scaleXb, bottomH / nativeHb);
     bottomImg.y = gapY + gap/2 - PAD;
-
-    bottomImg.setImmovable(true);
-    bottomImg.body.setAllowGravity(false);
-    if (this.started) bottomImg.body.setVelocityX(PROFILE.pipeSpeed); // <-- via body
+    bottomImg.setImmovable(true).body.setAllowGravity(false);
 
     const displayWb = nativeWb * scaleXb;
-    const bodyWpx = displayWb * PIPE_BODY_W;
-    const offsetX = (displayWb - bodyWpx) / 2;
-    bottomImg.body.setSize(bodyWpx, bottomImg.displayHeight, true);
-    bottomImg.body.setOffset(offsetX, 0);
-    this.pipes.add(bottomImg);
+    bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
+    bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
 
-    // ===== TOP =====
+    this.pipes.add(bottomImg);
+    this.movers.push(bottomImg);
+
+    // === TOP ===
     const topImg = this.physics.add.image(x, 0, keyTop).setDepth(6);
     topImg.setOrigin(0.5, 1);
-
     const nativeWt = topImg.width, nativeHt = topImg.height;
     const scaleXt = PIPE_W_DISPLAY / nativeWt;
     const topH = Math.max(20, gapY - gap/2 + PAD);
-    const scaleYt = topH / nativeHt;
-    topImg.setScale(scaleXt, scaleYt);
+    topImg.setScale(scaleXt, topH / nativeHt);
     topImg.y = gapY - gap/2 + PAD;
-
-    topImg.setImmovable(true);
-    topImg.body.setAllowGravity(false);
-    if (this.started) topImg.body.setVelocityX(PROFILE.pipeSpeed); // <-- via body
+    topImg.setImmovable(true).body.setAllowGravity(false);
 
     const displayWt = nativeWt * scaleXt;
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
     topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
-    this.pipes.add(topImg);
 
-    // ===== SENSOR SCORE =====
+    this.pipes.add(topImg);
+    this.movers.push(topImg);
+
+    // === SENSOR SCORE ===
     const sensor = this.add.rectangle(x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
-    if (this.started) sensor.body.setVelocityX(PROFILE.pipeSpeed);
     sensor.isScore = !silentFirst;
     this._lastSensor = sensor;
+    this.movers.push(sensor);
 
     this.physics.add.overlap(this.player, sensor, () => {
       if (!sensor.active || !sensor.isScore) return;
@@ -223,13 +217,14 @@ class GameScene extends Phaser.Scene {
     });
 
     this.pairsSpawned++;
-    // console.log('[spawn]', this.pairsSpawned, this.theme);
 
+    // Bonus occasionnel
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
       this.spawnBonus(x + 520, by);
     }
 
+    // auto-destroy au cas où
     this.time.delayedCall(16000, () => [topImg, bottomImg, sensor].forEach(o => o && o.destroy()));
   }
 
@@ -237,7 +232,7 @@ class GameScene extends Phaser.Scene {
     const bonus = this.physics.add.image(x, y, 'bonus_sb')
       .setDepth(7).setScale(0.55).setImmovable(true);
     bonus.body.setAllowGravity(false);
-    if (this.started) bonus.body.setVelocityX(PROFILE.pipeSpeed);
+    this.movers.push(bonus);
     this.physics.add.overlap(this.player, bonus, () => {
       if (!bonus.active) return;
       bonus.destroy();
@@ -247,15 +242,8 @@ class GameScene extends Phaser.Scene {
   }
 
   activateMultiplier(){
-    if (this.multTimer) this.multTimer.remove(false);
     this.multiplierActive = true;
-    this.multText.setText('x2');
-    this.aura.setVisible(true).setFillStyle(BONUS_AURA_SOFT, 0.28);
-    this.multTimer = this.time.delayedCall(BONUS_DURATION, () => {
-      this.multiplierActive = false;
-      this.multText.setText('');
-      this.aura.setVisible(false);
-    });
+    this.time.delayedCall(BONUS_DURATION, () => { this.multiplierActive = false; });
   }
 
   addScore(n){
@@ -267,16 +255,9 @@ class GameScene extends Phaser.Scene {
     if (!this.player.active) return;
     this.player.disableBody(true, false);
     this.player.setTint(0xff7a7a);
-
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
     this.add.text(W/2, H/2 - 110, 'Game Over', { fontFamily:'Georgia,serif', fontSize:72, color:'#fff' }).setOrigin(0.5).setDepth(101);
-    this.add.text(W/2, H/2 - 30, `Score : ${this.score}`, { fontFamily:'monospace', fontSize:52, color:'#cffff1' }).setOrigin(0.5).setDepth(101);
-    const replay = this.add.text(W/2, H/2 + 70, 'Rejouer', {
-      fontFamily:'monospace', fontSize:48, color:'#fff',
-      backgroundColor:'#0db187', padding:{left:22,right:22,top:10,bottom:10}
-    }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    replay.on('pointerdown', ()=> this.scene.restart({ startTheme: this.theme }));
   }
 }
 
