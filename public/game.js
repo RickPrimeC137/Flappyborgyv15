@@ -1,4 +1,4 @@
-/* FlappyBorgy — debug spawn pipes + gravité locale */
+/* FlappyBorgy — pipes fix: setScale au lieu de setDisplaySize, timer au tap, gravité locale */
 
 const GAME_W = 768, GAME_H = 1366;
 
@@ -10,19 +10,18 @@ const PROFILE = {
   spawnDelay: 1500
 };
 
-// Affichage / hitbox
 const PAD = 2;
 const PIPE_BODY_W = 0.92;
 const PIPE_W_DISPLAY = 180;
-
-// Debug visuel
-const DEBUG_PIPES = true;     // ← mets false quand tout marche
 
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 const BONUS_AURA_SOFT = 0x9FFFE0;
+
+// Debug visuel (mets false quand c’est bon)
+const DEBUG_PIPES = false;
 
 class PreloadScene extends Phaser.Scene {
   constructor(){ super('preload'); }
@@ -74,14 +73,11 @@ class GameScene extends Phaser.Scene {
   init(data){
     this.started = false;
     this.theme = data?.startTheme || 'light';
-
     this.score = 0;
     this.pairsSpawned = 0;
     this.followCaps = [];
-
     this.multiplierActive = false;
     this.multTimer = null;
-
     this.spawnTimer = null;
   }
 
@@ -110,26 +106,18 @@ class GameScene extends Phaser.Scene {
     this.player.body.setAllowGravity(false);
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
-    this.player.setGravityY(0); // Modif B (0 au départ)
+    this.player.setGravityY(0); // Modif B
 
     // Aura bonus
     this.aura = this.add.circle(this.player.x, this.player.y,
       Math.max(this.player.displayWidth, this.player.displayHeight)*0.7, BONUS_AURA_SOFT, 0.22)
       .setVisible(false).setDepth(9);
 
-    // Collisions player vs pipes
+    // Collision player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-    // Première paire (immobile)
+    // Première paire (immobile tant que non démarré)
     this.spawnPair(true);
-
-    // Timer prêt mais en pause — reprend au 1er tap
-    this.spawnTimer = this.time.addEvent({
-      delay: PROFILE.spawnDelay,
-      loop: true,
-      paused: true,
-      callback: () => this.spawnPair(false)
-    });
   }
 
   onTap(){
@@ -138,13 +126,18 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // met en mouvement ce qui existe déjà
+      // mets en mouvement ce qui existe déjà
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
       if (this._lastSensor?.body) this._lastSensor.body.setVelocityX(PROFILE.pipeSpeed);
 
-      // spawn immédiat + reprise du timer
+      // spawn immédiat + démarrage du timer ICI (pas de paused:)
       this.spawnPair(false);
-      if (this.spawnTimer) this.spawnTimer.paused = false;
+      this.spawnTimer && this.spawnTimer.remove(false);
+      this.spawnTimer = this.time.addEvent({
+        delay: PROFILE.spawnDelay,
+        loop: true,
+        callback: () => this.spawnPair(false)
+      });
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
@@ -164,10 +157,10 @@ class GameScene extends Phaser.Scene {
     this.followCaps.forEach(fn => fn());
     this.pipes.children.iterate(ch => { if (ch && ch.active && ch.x < -PIPE_W_DISPLAY*2) ch.destroy(); });
 
-    // alternance thème (non bloquant)
+    // alternance de thème
     if (this.pairsSpawned > 0 && this.pairsSpawned % THEME_PERIOD === 0){
       this.theme = (this.theme === 'light') ? 'dark' : 'light';
-      this.pairsSpawned++; // évite rebouclage
+      this.pairsSpawned++; // évite boucle
     }
   }
 
@@ -183,46 +176,61 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    // apparition à droite (légèrement hors-écran)
-    const x = W + PIPE_W_DISPLAY * 0.5 + 2;
+    // apparition à droite (juste hors-écran)
+    const x = W + PIPE_W_DISPLAY * 0.6;
 
-    // ---------- BOTTOM ----------
-    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(5);
+    // ===== BOTTOM =====
+    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6);
     bottomImg.setOrigin(0.5, 0);
-    const bottomH = H - (gapY + gap/2) + PAD;
-    bottomImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, bottomH));
+
+    // ➜ SCALE depuis la taille native (évite setDisplaySize)
+    const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
+    const scaleXb = PIPE_W_DISPLAY / nativeWb;
+    // on veut une hauteur d’affichage précise
+    const bottomH = Math.max(20, H - (gapY + gap/2) + PAD);
+    const scaleYb = bottomH / nativeHb;
+    bottomImg.setScale(scaleXb, scaleYb);
+
     bottomImg.y = gapY + gap/2 - PAD;
     bottomImg.setImmovable(true);
     bottomImg.body.setAllowGravity(false);
     if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
 
-    // Hitbox utile
-    const bodyWpx = PIPE_W_DISPLAY * PIPE_BODY_W;
-    const offsetX = (PIPE_W_DISPLAY - bodyWpx) / 2;
+    // hitbox (92% largeur affichée)
+    const displayWb = nativeWb * scaleXb;
+    const bodyWpx = displayWb * PIPE_BODY_W;
+    const offsetX = (displayWb - bodyWpx) / 2;
     bottomImg.body.setSize(bodyWpx, bottomImg.displayHeight, true);
     bottomImg.body.setOffset(offsetX, 0);
     this.pipes.add(bottomImg);
 
-    // ---------- TOP ----------
-    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(5);
+    // ===== TOP =====
+    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(6);
     topImg.setOrigin(0.5, 1);
-    const topH = gapY - gap/2 + PAD;
-    topImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, topH));
+
+    const nativeWt = topImg.width, nativeHt = topImg.height;
+    const scaleXt = PIPE_W_DISPLAY / nativeWt;
+    const topH = Math.max(20, gapY - gap/2 + PAD);
+    const scaleYt = topH / nativeHt;
+    topImg.setScale(scaleXt, scaleYt);
+
     topImg.y = gapY - gap/2 + PAD;
     topImg.setImmovable(true);
     topImg.body.setAllowGravity(false);
     if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
 
-    topImg.body.setSize(bodyWpx, topImg.displayHeight, true);
-    topImg.body.setOffset(offsetX, topImg.displayHeight - topImg.body.height);
+    const displayWt = nativeWt * scaleXt;
+    topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
+    topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
     this.pipes.add(topImg);
 
-    // ---------- DEBUG VISUEL ----------
+    // ===== DEBUG (derrière les tuyaux) =====
     if (DEBUG_PIPES){
+      const dbgDepth = 5; // < 6 pour rester derrière
       const dbgTop = this.add.rectangle(topImg.x, topImg.y - topImg.displayHeight/2,
-        PIPE_W_DISPLAY, topImg.displayHeight, 0xff00ff, 0.15).setDepth(50);
+        PIPE_W_DISPLAY, topImg.displayHeight, 0xff00ff, 0.15).setDepth(dbgDepth);
       const dbgBot = this.add.rectangle(bottomImg.x, bottomImg.y + bottomImg.displayHeight/2,
-        PIPE_W_DISPLAY, bottomImg.displayHeight, 0xff00ff, 0.15).setDepth(50);
+        PIPE_W_DISPLAY, bottomImg.displayHeight, 0xff00ff, 0.15).setDepth(dbgDepth);
       this.physics.add.existing(dbgTop, false);
       this.physics.add.existing(dbgBot, false);
       dbgTop.body.setAllowGravity(false).setImmovable(true);
@@ -231,8 +239,8 @@ class GameScene extends Phaser.Scene {
       this.time.delayedCall(16000, () => { dbgTop.destroy(); dbgBot.destroy(); });
     }
 
-    // ---------- SENSOR SCORE ----------
-    const sensor = this.add.rectangle(x + bodyWpx/2 + 6, H*0.5, 8, H, 0x000000, 0);
+    // ===== SENSOR SCORE =====
+    const sensor = this.add.rectangle(x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
     if (this.started) sensor.body.setVelocityX(PROFILE.pipeSpeed);
@@ -246,15 +254,13 @@ class GameScene extends Phaser.Scene {
     });
 
     this.pairsSpawned++;
-    console.log('[spawn]', this.pairsSpawned, {gapY, topH, bottomH, theme:this.theme});
+    // console.log('[spawn]', this.pairsSpawned, { gapY, topH, bottomH, theme:this.theme });
 
-    // Bonus
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
       this.spawnBonus(x + 520, by);
     }
 
-    // Nettoyage tardif
     this.time.delayedCall(16000, () => [topImg, bottomImg, sensor].forEach(o => o && o.destroy()));
   }
 
@@ -263,13 +269,11 @@ class GameScene extends Phaser.Scene {
       .setDepth(7).setScale(0.55).setImmovable(true);
     bonus.body.setAllowGravity(false);
     if (this.started) bonus.body.setVelocityX(PROFILE.pipeSpeed);
-
     this.physics.add.overlap(this.player, bonus, () => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     });
-
     this.time.delayedCall(12000, () => bonus && bonus.destroy());
   }
 
@@ -285,16 +289,13 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  addScore(n){
-    this.score += this.multiplierActive ? n*2 : n;
-    this.scoreText.setText('Score: ' + this.score);
-  }
+  addScore(n){ this.score += this.multiplierActive ? n*2 : n; this.scoreText.setText('Score: ' + this.score); }
 
   gameOver(){
     if (!this.player.active) return;
     this.player.disableBody(true, false);
     this.player.setTint(0xff7a7a);
-    if (this.spawnTimer) this.spawnTimer.remove(false);
+    this.spawnTimer && this.spawnTimer.remove(false);
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
