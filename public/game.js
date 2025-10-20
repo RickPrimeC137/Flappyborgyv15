@@ -104,26 +104,15 @@ class GameScene extends Phaser.Scene {
     // Groupe tuyaux
     this.pipes = this.physics.add.group();
 
-   create(){
-  // ...
-  this.player = this.physics.add.sprite(W*0.22, H*0.45, 'borgy')
-    .setScale(0.22).setDepth(10).setCollideWorldBounds(true);
+    // Joueur
+    this.player = this.physics.add.sprite(W*0.22, H*0.45, 'borgy')
+      .setScale(0.22).setDepth(10).setCollideWorldBounds(true);
+    this.player.body.setAllowGravity(false);
+    this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
+                    .setOffset(this.player.width*0.225, this.player.height*0.25);
 
-  this.player.body.setAllowGravity(false);
-  this.player.setGravityY(0); // au départ
-
-  // ...
-}
-
-onTap(){
-  if (!this.started){
-    this.started = true;
-    this.player.body.setAllowGravity(true);
-    this.player.setGravityY(PROFILE.gravity);  // ← gravité locale
-    // ...
-  }
-  if (this.player.active) this.player.setVelocityY(PROFILE.jump);
-}
+    // ⬇️ MODIF B : gravité locale (initialement 0, activée au démarrage)
+    this.player.setGravityY(0);
 
     // Aura bonus
     this.aura = this.add.circle(this.player.x, this.player.y,
@@ -151,6 +140,9 @@ onTap(){
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
+
+      // ⬇️ MODIF B : appliquer la gravité du profil au joueur au démarrage
+      this.player.setGravityY(PROFILE.gravity);
 
       // mets en mouvement ce qui est déjà là
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
@@ -330,7 +322,7 @@ window.addEventListener('load', () => {
     parent: 'game-root',
     backgroundColor: '#9edff1',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
+    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } }, // gravité globale inchangée
     scene: [PreloadScene, MenuScene, GameScene]
   });
 });
