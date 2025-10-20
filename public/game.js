@@ -1,17 +1,17 @@
-/* FlappyBorgy — mouvement manuel (pas de setVelocity), gravité locale (modif B) */
+/* FlappyBorgy — déplacement manuel (robuste), gravité locale (modif B) */
 
 const GAME_W = 768, GAME_H = 1366;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,   // px/s vers la gauche
+  pipeSpeed: -220,   // px/s (gauche)
   gap: 260,
   spawnDelay: 1500   // ms
 };
 
 const PAD = 2;
-const PIPE_BODY_W = 0.92;
+const PIPE_BODY_W = 0.92;     // % de largeur utile pour la hitbox
 const PIPE_W_DISPLAY = 180;
 
 const THEME_PERIOD = 50;
@@ -69,22 +69,23 @@ class GameScene extends Phaser.Scene {
 
   init(data){
     this.started = false;
+    this.isOver  = false;
     this.theme = data?.startTheme || 'light';
 
     this.score = 0;
     this.pairsSpawned = 0;
 
-    // cadence de spawn
+    // cadence de spawn “manuelle”
     this.spawnAccum = 0;
 
-    // liste des objets à déplacer manuellement (images + capteurs)
+    // registres pour le déplacement manuel
     this.movers = [];
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // Input plein écran
+    // Zone d’input plein écran
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on('pointerdown', () => this.onTap());
     this.input.keyboard.on('keydown-SPACE', () => this.onTap());
@@ -103,22 +104,26 @@ class GameScene extends Phaser.Scene {
     this.player.body.setAllowGravity(false);
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
-    this.player.setGravityY(0); // Modif B : 0 au départ
+    this.player.setGravityY(0); // Modif B : 0 avant le départ
 
     // Collisions player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-    // première paire (immobile avant le départ)
+    // Première paire (immobile tant que non démarré)
     this.spawnPair(true);
   }
 
   onTap(){
+    if (this.isOver){
+      this.scene.restart({ startTheme: this.theme });
+      return;
+    }
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // spawn immédiat après départ
+      // spawn immédiat (puis update cadencera)
       this.spawnPair(false);
       this.spawnAccum = 0;
     }
@@ -126,13 +131,15 @@ class GameScene extends Phaser.Scene {
   }
 
   update(time, delta){
+    if (this.isOver) return;
+
     // inclinaison du joueur
     const vy = this.player.body.velocity.y;
     if      (vy < -40) this.player.setAngle(-16);
     else if (vy > 140) this.player.setAngle(20);
     else               this.player.setAngle(0);
 
-    // cadence de spawn
+    // cadence spawn
     if (this.started){
       this.spawnAccum += delta;
       while (this.spawnAccum >= PROFILE.spawnDelay){
@@ -141,17 +148,22 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // 🔧 mouvement manuel + sync bodies
+    // mouvement manuel + sync bodies
     if (this.started){
-      const dx = PROFILE.pipeSpeed * (delta / 1000); // px/frame
+      const dx = PROFILE.pipeSpeed * (delta / 1000);
       for (let i = this.movers.length - 1; i >= 0; i--){
         const o = this.movers[i];
         if (!o.active) { this.movers.splice(i,1); continue; }
         o.x += dx;
-        if (o.body && o.body.updateFromGameObject) o.body.updateFromGameObject();
-        // nettoyage hors écran
+        if (o.body?.updateFromGameObject) o.body.updateFromGameObject();
         if (o.x < -PIPE_W_DISPLAY*2) { o.destroy(); this.movers.splice(i,1); }
       }
+    }
+
+    // alternance de thème
+    if (this.pairsSpawned > 0 && this.pairsSpawned % THEME_PERIOD === 0){
+      this.theme = (this.theme === 'light') ? 'dark' : 'light';
+      this.pairsSpawned++; // évite le rebouclage
     }
   }
 
@@ -168,9 +180,8 @@ class GameScene extends Phaser.Scene {
 
     const x = W + PIPE_W_DISPLAY * 0.6; // hors écran à droite
 
-    // === BOTTOM ===
-    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6);
-    bottomImg.setOrigin(0.5, 0);
+    // ===== BOTTOM =====
+    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6).setOrigin(0.5, 0);
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXb = PIPE_W_DISPLAY / nativeWb;
     const bottomH = Math.max(20, H - (gapY + gap/2) + PAD);
@@ -185,9 +196,8 @@ class GameScene extends Phaser.Scene {
     this.pipes.add(bottomImg);
     this.movers.push(bottomImg);
 
-    // === TOP ===
-    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(6);
-    topImg.setOrigin(0.5, 1);
+    // ===== TOP =====
+    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1);
     const nativeWt = topImg.width, nativeHt = topImg.height;
     const scaleXt = PIPE_W_DISPLAY / nativeWt;
     const topH = Math.max(20, gapY - gap/2 + PAD);
@@ -202,7 +212,7 @@ class GameScene extends Phaser.Scene {
     this.pipes.add(topImg);
     this.movers.push(topImg);
 
-    // === SENSOR SCORE ===
+    // ===== SENSOR SCORE =====
     const sensor = this.add.rectangle(x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
@@ -218,13 +228,12 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // Bonus occasionnel
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
       this.spawnBonus(x + 520, by);
     }
 
-    // auto-destroy au cas où
+    // fail-safe cleanup
     this.time.delayedCall(16000, () => [topImg, bottomImg, sensor].forEach(o => o && o.destroy()));
   }
 
@@ -233,11 +242,13 @@ class GameScene extends Phaser.Scene {
       .setDepth(7).setScale(0.55).setImmovable(true);
     bonus.body.setAllowGravity(false);
     this.movers.push(bonus);
+
     this.physics.add.overlap(this.player, bonus, () => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     });
+
     this.time.delayedCall(12000, () => bonus && bonus.destroy());
   }
 
@@ -252,12 +263,27 @@ class GameScene extends Phaser.Scene {
   }
 
   gameOver(){
-    if (!this.player.active) return;
-    this.player.disableBody(true, false);
-    this.player.setTint(0xff7a7a);
+    if (this.isOver) return;
+    this.isOver = true;
+    this.started = false;
+
+    // fige tout ce qui bouge
+    this.movers.forEach(o => o?.destroy());
+    this.movers = [];
+
+    // UI Game Over
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
-    this.add.text(W/2, H/2 - 110, 'Game Over', { fontFamily:'Georgia,serif', fontSize:72, color:'#fff' }).setOrigin(0.5).setDepth(101);
+    this.add.text(W/2, H/2 - 110, 'Game Over', { fontFamily:'Georgia,serif', fontSize:72, color:'#fff' })
+      .setOrigin(0.5).setDepth(101);
+    this.add.text(W/2, H/2 - 30, `Score : ${this.score}`, { fontFamily:'monospace', fontSize:52, color:'#cffff1' })
+      .setOrigin(0.5).setDepth(101);
+
+    const replay = this.add.text(W/2, H/2 + 70, 'Rejouer', {
+      fontFamily:'monospace', fontSize:48, color:'#fff',
+      backgroundColor:'#0db187', padding:{left:22,right:22,top:10,bottom:10}
+    }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    replay.on('pointerdown', ()=> this.scene.restart({ startTheme: this.theme }));
   }
 }
 
@@ -267,7 +293,7 @@ window.addEventListener('load', () => {
     parent: 'game-root',
     backgroundColor: '#9edff1',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
+    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } }, // gravité globale = 0
     scene: [PreloadScene, MenuScene, GameScene]
   });
 });
