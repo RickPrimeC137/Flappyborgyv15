@@ -15,7 +15,12 @@ const PIPE_BODY_W = 0.92;     // % de largeur utile pour la hitbox
 const PIPE_W_DISPLAY = 180;
 
 // ↓↓↓ Taille du joueur (modif demandée)
-const PLAYER_SCALE = 0.16;     // était ~0.22 ; ajuste si besoin
+const PLAYER_SCALE = 0.16;     // ajusté pour ce fond
+
+// --- NEW: fond & zone “sûre” adaptés à l’image ---
+const BG_KEY = 'bg_train';
+const PLAYFIELD_TOP_PCT = 0.58;    // haut de la zone où placer les gaps (≈ sommet des buissons)
+const PLAYFIELD_BOT_PCT = 0.90;    // bas de la zone (au-dessus de la voie ferrée)
 
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
@@ -33,6 +38,9 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
+    // --- NEW: fond ---
+    this.load.image(BG_KEY, 'bg_train.png');  // portrait 768x1366
+
     this.load.image('borgy', 'borgy_ingame.png');
     this.load.image('pipe_light_top',    'pipe_light_top.png');
     this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
@@ -47,6 +55,11 @@ class MenuScene extends Phaser.Scene {
   constructor(){ super('menu'); }
   create(){
     const W = this.scale.width, H = this.scale.height;
+
+    // --- NEW: fond en arrière-plan
+    const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
+    bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
+
     this.add.text(W/2, H*0.18, 'FlappyBorgy', { fontFamily:'Georgia,serif', fontSize:64, color:'#0b4a44' }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.32, 'Jouer', () => this.scene.start('game', { startTheme:'light' }));
     this.makeBtn(W/2, H*0.40, 'Quêtes', () => {
@@ -77,16 +90,16 @@ class GameScene extends Phaser.Scene {
 
     this.score = 0;
     this.pairsSpawned = 0;
-
-    // cadence de spawn “manuelle”
     this.spawnAccum = 0;
-
-    // registres pour le déplacement manuel
     this.movers = [];
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
+
+    // --- NEW: fond du niveau
+    const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
+    bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
     // Zone d’input plein écran
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
@@ -101,8 +114,8 @@ class GameScene extends Phaser.Scene {
     // Groupe tuyaux (pour collisions)
     this.pipes = this.physics.add.group();
 
-    // Joueur (↓ échelle réduite)
-    this.player = this.physics.add.sprite(W*0.18, H*0.45, 'borgy')
+    // Joueur (dimensionné pour ce fond)
+    this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), 'borgy')
       .setScale(PLAYER_SCALE)
       .setDepth(10)
       .setCollideWorldBounds(true);
@@ -133,7 +146,6 @@ class GameScene extends Phaser.Scene {
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
-
       this.spawnAccum = 0;
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
@@ -180,8 +192,12 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
-    const margin = 60;
-    const gapY = margin + gap/2 + Math.random() * (H - 2*margin - gap);
+    // --- NEW: la position verticale des gaps est bornée par le décor
+    const topBand = H * PLAYFIELD_TOP_PCT;
+    const botBand = H * PLAYFIELD_BOT_PCT;
+    const minY = topBand + gap/2;
+    const maxY = botBand - gap/2;
+    const gapY = Phaser.Math.Between(Math.round(minY), Math.round(maxY));
 
     const style = (this.theme === 'light') ? 'light' : 'dark';
     const keyTop = `pipe_${style}_top`;
@@ -238,7 +254,7 @@ class GameScene extends Phaser.Scene {
     this.pairsSpawned++;
 
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
+      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
       this.spawnBonus(x + 520, by);
     }
 
