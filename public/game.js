@@ -7,12 +7,12 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,
   gap: 260,          // taille de l’ouverture
-  spawnDelay: 1500   // ~1.5s
+  spawnDelay: 1500   // ~1.5s, cohérent avec SPAWN_EVERY de ton snippet
 };
 
 // Hypothèses “style canvas” (padding transparent dans le PNG)
 const PAD = 2;            // padding transparent sur la largeur (gauche/droite)
-const PIPE_BODY_W = 0.92; // proportion utile (sans padding)
+const PIPE_BODY_W = 0.92; // proportion utile (sans padding). On re-calculera en px via la largeur source.
 const PIPE_W_DISPLAY = 180; // largeur d’affichage à l’écran
 
 const THEME_PERIOD = 50;      // alterne clair/sombre tous les 50
@@ -78,13 +78,12 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.pairsSpawned = 0;
     this.followCaps = [];
-    this._pipeTexInfo = null; // largeur brute des textures (pour crop+hitbox)
+    this._pipeTexInfo = null; // largeur brute des textures (pour hitbox)
 
     // bonus
     this.multiplierActive = false;
     this.multTimer = null;
 
-    // handle timer ref (créée dans create)
     this.spawnTimer = null;
   }
 
@@ -114,7 +113,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
 
-    // MODIF B : gravité locale (initialement 0, activée au démarrage)
+    // ⬇️ MODIF B : gravité locale (initialement 0, activée au démarrage)
     this.player.setGravityY(0);
 
     // Aura bonus
@@ -125,21 +124,18 @@ class GameScene extends Phaser.Scene {
     // Collision player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-    // Prépare infos textures (largeurs source) pour crop/hitbox anti halo
+    // Infos textures (largeur source pour body utile)
     this._pipeTexInfo = this.computeTextureInfo();
 
     // Première paire (immobile tant que non démarré)
     this.spawnPair(true);
 
-    // 🔁 MODIF TIMER : créer le timer maintenant (en pause), on le relancera au tap
+    // Timer prêt mais en pause — on le relance au 1er tap
     this.spawnTimer = this.time.addEvent({
       delay: PROFILE.spawnDelay,
       loop: true,
       paused: true,
-      callback: () => {
-        console.log('[timer] tick');
-        this.spawnPair(false);
-      }
+      callback: () => this.spawnPair(false)
     });
   }
 
@@ -151,19 +147,18 @@ class GameScene extends Phaser.Scene {
   }
 
   onTap(){
-    console.log('[tap]');
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
 
-      // MODIF B : appliquer la gravité du profil au joueur au démarrage
+      // ⬇️ MODIF B : appliquer la gravité du profil au joueur au démarrage
       this.player.setGravityY(PROFILE.gravity);
 
       // mets en mouvement ce qui est déjà là
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
       if (this._lastSensor?.body) this._lastSensor.body.setVelocityX(PROFILE.pipeSpeed);
 
-      // spawn immédiat puis reprise du timer déjà créé
+      // spawn immédiat + reprise du timer
       this.spawnPair(false);
       if (this.spawnTimer) this.spawnTimer.paused = false;
     }
@@ -193,11 +188,10 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnPair(silentFirst){
-    console.log('[spawn] pair', { silentFirst });
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
-    // Position du centre de la gap avec marges (style canvas)
+    // Position du centre de la gap avec marges
     const margin = 60;
     const gapY = margin + gap/2 + Math.random() * (H - 2*margin - gap);
 
@@ -205,53 +199,44 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    // Info textures pour crop/hitbox
+    // Info textures pour body utile
     const srcW   = this._pipeTexInfo.widthPx;
     const useful = this._pipeTexInfo.usefulW;
-    const cropX  = PAD;
-    const cropW  = useful;
 
-    // position X d’apparition
+    // position X d’apparition (à droite de l’écran)
     const x = W + PIPE_W_DISPLAY * 0.6;
 
-    // BOTTOM (sous le trou)
-    const bottomImg = this.add.image(x, 0, keyBot).setDepth(5);
-    bottomImg.setCrop(cropX, 0, cropW, bottomImg.height);
+    // ===== BOTTOM =====
+    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(5);
     bottomImg.setOrigin(0.5, 0); // ancre en haut
-    // hauteur affichée = de gap bas jusqu’en bas écran
-    const bottomH = H - (gapY + gap/2) + PAD;
+    const bottomH = H - (gapY + gap/2) + PAD;               // hauteur visible
     bottomImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, bottomH));
     bottomImg.y = gapY + gap/2 - PAD;
+    bottomImg.setImmovable(true);
+    if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
 
-    this.physics.add.existing(bottomImg, false);
-    bottomImg.body.setAllowGravity(false).setImmovable(true);
-
-    // hitbox = seulement la partie utile (comme dans ton AABB)
+    // hitbox = seulement la partie utile
     const bodyWpx = PIPE_W_DISPLAY * (useful / srcW);
     const offsetX = (PIPE_W_DISPLAY - bodyWpx) / 2;
     bottomImg.body.setSize(bodyWpx, bottomImg.displayHeight, true);
     bottomImg.body.setOffset(offsetX, 0);
 
-    if (this.started) bottomImg.body.setVelocityX(PROFILE.pipeSpeed);
     this.pipes.add(bottomImg);
 
-    // TOP (au-dessus du trou)
-    const topImg = this.add.image(x, 0, keyTop).setDepth(5);
-    topImg.setCrop(cropX, 0, cropW, topImg.height);
+    // ===== TOP =====
+    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(5);
     topImg.setOrigin(0.5, 1); // ancre en bas
     const topH = gapY - gap/2 + PAD;
     topImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, topH));
     topImg.y = gapY - gap/2 + PAD;
+    topImg.setImmovable(true);
+    if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
 
-    this.physics.add.existing(topImg, false);
-    topImg.body.setAllowGravity(false).setImmovable(true);
     topImg.body.setSize(bodyWpx, topImg.displayHeight, true);
     topImg.body.setOffset(offsetX, topImg.displayHeight - topImg.body.height); // recalage
-
-    if (this.started) topImg.body.setVelocityX(PROFILE.pipeSpeed);
     this.pipes.add(topImg);
 
-    // Capteur score (fin et haut comme dans le canvas — dès qu’on dépasse le corps)
+    // ===== SENSOR SCORE =====
     const sensor = this.add.rectangle(x + bodyWpx/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
@@ -313,8 +298,6 @@ class GameScene extends Phaser.Scene {
     if (!this.player.active) return;
     this.player.disableBody(true, false);
     this.player.setTint(0xff7a7a);
-
-    // stop timer proprement
     if (this.spawnTimer) this.spawnTimer.remove(false);
 
     const W = this.scale.width, H = this.scale.height;
@@ -335,7 +318,7 @@ window.addEventListener('load', () => {
     parent: 'game-root',
     backgroundColor: '#9edff1',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } }, // gravité globale inchangée
+    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
     scene: [PreloadScene, MenuScene, GameScene]
   });
 });
