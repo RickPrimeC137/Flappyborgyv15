@@ -104,12 +104,26 @@ class GameScene extends Phaser.Scene {
     // Groupe tuyaux
     this.pipes = this.physics.add.group();
 
-    // Joueur
-    this.player = this.physics.add.sprite(W*0.22, H*0.45, 'borgy')
-      .setScale(0.22).setDepth(10).setCollideWorldBounds(true);
-    this.player.body.setAllowGravity(false);
-    this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
-                    .setOffset(this.player.width*0.225, this.player.height*0.25);
+   create(){
+  // ...
+  this.player = this.physics.add.sprite(W*0.22, H*0.45, 'borgy')
+    .setScale(0.22).setDepth(10).setCollideWorldBounds(true);
+
+  this.player.body.setAllowGravity(false);
+  this.player.setGravityY(0); // au départ
+
+  // ...
+}
+
+onTap(){
+  if (!this.started){
+    this.started = true;
+    this.player.body.setAllowGravity(true);
+    this.player.setGravityY(PROFILE.gravity);  // ← gravité locale
+    // ...
+  }
+  if (this.player.active) this.player.setVelocityY(PROFILE.jump);
+}
 
     // Aura bonus
     this.aura = this.add.circle(this.player.x, this.player.y,
