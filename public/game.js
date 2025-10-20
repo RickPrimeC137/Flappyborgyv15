@@ -123,8 +123,6 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // spawn immédiat (puis update cadencera)
-      this.spawnPair(false);
       this.spawnAccum = 0;
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
