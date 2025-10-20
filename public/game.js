@@ -102,7 +102,7 @@ class GameScene extends Phaser.Scene {
     this.pipes = this.physics.add.group();
 
     // Joueur (↓ échelle réduite)
-    this.player = this.physics.add.sprite(W*0.22, H*0.45, 'borgy')
+    this.player = this.physics.add.sprite(W*0.18, H*0.45, 'borgy')
       .setScale(PLAYER_SCALE)
       .setDepth(10)
       .setCollideWorldBounds(true);
@@ -112,8 +112,8 @@ class GameScene extends Phaser.Scene {
     const pw = this.player.displayWidth;
     const ph = this.player.displayHeight;
     this.player.body
-      .setSize(pw * 0.55, ph * 0.55, true)
-      .setOffset(pw * 0.225, ph * 0.25);
+      .setSize(pw * 0.45, ph * 0.45, true)
+      .setOffset(pw * 0.215, ph * 0.20);
 
     this.player.setGravityY(0); // Modif B : 0 avant le départ
 
