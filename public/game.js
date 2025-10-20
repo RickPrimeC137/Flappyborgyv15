@@ -7,15 +7,16 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,
   gap: 260,          // taille de l’ouverture
-  spawnDelay: 1500   // ~1.5s, cohérent avec SPAWN_EVERY de ton snippet
+  spawnDelay: 1500   // ~1.5s
 };
 
-// Hypothèses “style canvas” (padding transparent dans le PNG)
-const PAD = 2;            // padding transparent sur la largeur (gauche/droite)
-const PIPE_W_DISPLAY = 180; // largeur d’affichage à l’écran
+// Pas de crop → PAD ne sert plus à l’affichage, on garde pour marge éventuelle
+const PAD = 2;
+const PIPE_BODY_W = 0.92;     // largeur utile de la hitbox (92% de l’affichage)
+const PIPE_W_DISPLAY = 180;   // largeur d’affichage
 
-const THEME_PERIOD = 50;      // alterne clair/sombre tous les 50
-const ENABLE_BONUS = true;    // bonus SwissBorg
+const THEME_PERIOD = 50;
+const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 const BONUS_AURA_SOFT = 0x9FFFE0;
@@ -32,7 +33,6 @@ class PreloadScene extends Phaser.Scene {
     this.load.setPath('assets');
     this.load.image('borgy', 'borgy_ingame.png');
 
-    // 2 thèmes (haut/bas)
     this.load.image('pipe_light_top',    'pipe_light_top.png');
     this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
     this.load.image('pipe_dark_top',     'pipe_dark_top.png');
@@ -78,7 +78,6 @@ class GameScene extends Phaser.Scene {
     this.pairsSpawned = 0;
     this.followCaps = [];
 
-    // bonus
     this.multiplierActive = false;
     this.multTimer = null;
 
@@ -138,7 +137,7 @@ class GameScene extends Phaser.Scene {
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
-      this.player.setGravityY(PROFILE.gravity); // gravité locale appliquée
+      this.player.setGravityY(PROFILE.gravity);
 
       // mets en mouvement ce qui est déjà là
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
@@ -177,7 +176,7 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
-    // Position du centre de la gap avec marges (style canvas)
+    // Position du centre de la gap avec marges
     const margin = 60;
     const gapY = margin + gap/2 + Math.random() * (H - 2*margin - gap);
 
@@ -185,61 +184,42 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    // Récupère les tailles RÉELLES de chaque texture (haut et bas)
-    const texTop = this.textures.get(keyTop).getSourceImage();
-    const texBot = this.textures.get(keyBot).getSourceImage();
-
-    // Utiles (sans padding) pour CHAQUE texture
-    const usefulTop = Math.max(8, Math.floor(texTop.width - PAD*2));
-    const usefulBot = Math.max(8, Math.floor(texBot.width - PAD*2));
-
     // position X d’apparition
     const x = W + PIPE_W_DISPLAY * 0.6;
 
     // ===== BOTTOM =====
-    const bottomImg = this.add.image(x, 0, keyBot).setDepth(5);
-    bottomImg.setCrop(PAD, 0, usefulBot, texBot.height);       // crop spécifique
+    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(5);
     bottomImg.setOrigin(0.5, 0);
     const bottomH = H - (gapY + gap/2) + PAD;
     bottomImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, bottomH));
     bottomImg.y = gapY + gap/2 - PAD;
+    bottomImg.setImmovable(true).setAllowGravity(false);
+    if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
 
-    this.physics.add.existing(bottomImg, false);
-    bottomImg.body.setAllowGravity(false).setImmovable(true);
+    // hitbox utile (92% de la largeur affichée)
+    const bodyWpx = PIPE_W_DISPLAY * PIPE_BODY_W;
+    const offsetX = (PIPE_W_DISPLAY - bodyWpx) / 2;
+    bottomImg.body.setSize(bodyWpx, bottomImg.displayHeight, true);
+    bottomImg.body.setOffset(offsetX, 0);
 
-    // hitbox utile (spécifique au bas)
-    const bodyWpxBot = PIPE_W_DISPLAY * (usefulBot / texBot.width);
-    const offsetXBot = (PIPE_W_DISPLAY - bodyWpxBot) / 2;
-    bottomImg.body.setSize(bodyWpxBot, bottomImg.displayHeight, true);
-    bottomImg.body.setOffset(offsetXBot, 0);
-
-    if (this.started) bottomImg.body.setVelocityX(PROFILE.pipeSpeed);
     this.pipes.add(bottomImg);
 
     // ===== TOP =====
-    const topImg = this.add.image(x, 0, keyTop).setDepth(5);
-    topImg.setCrop(PAD, 0, usefulTop, texTop.height);          // crop spécifique
+    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(5);
     topImg.setOrigin(0.5, 1);
     const topH = gapY - gap/2 + PAD;
     topImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, topH));
     topImg.y = gapY - gap/2 + PAD;
+    topImg.setImmovable(true).setAllowGravity(false);
+    if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
 
-    this.physics.add.existing(topImg, false);
-    topImg.body.setAllowGravity(false).setImmovable(true);
+    topImg.body.setSize(bodyWpx, topImg.displayHeight, true);
+    topImg.body.setOffset(offsetX, topImg.displayHeight - topImg.body.height);
 
-    // hitbox utile (spécifique au haut)
-    const bodyWpxTop = PIPE_W_DISPLAY * (usefulTop / texTop.width);
-    const offsetXTop = (PIPE_W_DISPLAY - bodyWpxTop) / 2;
-    topImg.body.setSize(bodyWpxTop, topImg.displayHeight, true);
-    topImg.body.setOffset(offsetXTop, topImg.displayHeight - topImg.body.height);
-
-    if (this.started) topImg.body.setVelocityX(PROFILE.pipeSpeed);
     this.pipes.add(topImg);
 
     // ===== SENSOR SCORE =====
-    // utilise la + grande largeur utile pour être sûr de passer "après" le corps
-    const bodyWpxMax = Math.max(bodyWpxTop, bodyWpxBot);
-    const sensor = this.add.rectangle(x + bodyWpxMax/2 + 6, H*0.5, 8, H, 0x000000, 0);
+    const sensor = this.add.rectangle(x + bodyWpx/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
     if (this.started) sensor.body.setVelocityX(PROFILE.pipeSpeed);
@@ -254,13 +234,11 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // Bonus occasionnel
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), 200, H-220);
       this.spawnBonus(x + 520, by);
     }
 
-    // Nettoyage retardé
     this.time.delayedCall(16000, () => [topImg, bottomImg, sensor].forEach(o => o && o.destroy()));
   }
 
