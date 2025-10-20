@@ -3,7 +3,7 @@
 const GAME_W = 768, GAME_H = 1366;
 
 const PROFILE = {
-  gravity: 3000,
+  gravity: 1400,
   jump: -380,
   pipeSpeed: -220,
   gap: 260,          // taille de l’ouverture
