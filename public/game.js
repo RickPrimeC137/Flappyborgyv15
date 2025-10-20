@@ -14,6 +14,9 @@ const PAD = 2;
 const PIPE_BODY_W = 0.92;     // % de largeur utile pour la hitbox
 const PIPE_W_DISPLAY = 180;
 
+// ↓↓↓ Taille du joueur (modif demandée)
+const PLAYER_SCALE = 0.18;     // était ~0.22 ; ajuste si besoin
+
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
@@ -98,12 +101,20 @@ class GameScene extends Phaser.Scene {
     // Groupe tuyaux (pour collisions)
     this.pipes = this.physics.add.group();
 
-    // Joueur
+    // Joueur (↓ échelle réduite)
     this.player = this.physics.add.sprite(W*0.22, H*0.45, 'borgy')
-      .setScale(0.22).setDepth(10).setCollideWorldBounds(true);
+      .setScale(PLAYER_SCALE)
+      .setDepth(10)
+      .setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
-    this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
-                    .setOffset(this.player.width*0.225, this.player.height*0.25);
+
+    // Hitbox recalibrée sur la taille affichée
+    const pw = this.player.displayWidth;
+    const ph = this.player.displayHeight;
+    this.player.body
+      .setSize(pw * 0.55, ph * 0.55, true)
+      .setOffset(pw * 0.225, ph * 0.25);
+
     this.player.setGravityY(0); // Modif B : 0 avant le départ
 
     // Collisions player vs pipes
