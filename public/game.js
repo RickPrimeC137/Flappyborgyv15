@@ -10,7 +10,6 @@ const PROFILE = {
   spawnDelay: 1500   // ~1.5s
 };
 
-// Pas de crop → PAD ne sert plus à l’affichage, on garde pour marge éventuelle
 const PAD = 2;
 const PIPE_BODY_W = 0.92;     // largeur utile de la hitbox (92% de l’affichage)
 const PIPE_W_DISPLAY = 180;   // largeur d’affichage
@@ -32,12 +31,10 @@ class PreloadScene extends Phaser.Scene {
 
     this.load.setPath('assets');
     this.load.image('borgy', 'borgy_ingame.png');
-
     this.load.image('pipe_light_top',    'pipe_light_top.png');
     this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
     this.load.image('pipe_dark_top',     'pipe_dark_top.png');
     this.load.image('pipe_dark_bottom',  'pipe_dark_bottom.png');
-
     if (ENABLE_BONUS) this.load.image('bonus_sb', 'sb_token_user.png');
   }
   create(){ this.scene.start('menu'); }
@@ -73,14 +70,11 @@ class GameScene extends Phaser.Scene {
   init(data){
     this.started = false;
     this.theme = data?.startTheme || 'light';
-
     this.score = 0;
     this.pairsSpawned = 0;
     this.followCaps = [];
-
     this.multiplierActive = false;
     this.multTimer = null;
-
     this.spawnTimer = null;
   }
 
@@ -109,9 +103,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setAllowGravity(false);
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
-
-    // Modif B : gravité locale (0 au départ)
-    this.player.setGravityY(0);
+    this.player.setGravityY(0); // Modif B : gravité locale à 0 au départ
 
     // Aura bonus
     this.aura = this.add.circle(this.player.x, this.player.y,
@@ -193,7 +185,8 @@ class GameScene extends Phaser.Scene {
     const bottomH = H - (gapY + gap/2) + PAD;
     bottomImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, bottomH));
     bottomImg.y = gapY + gap/2 - PAD;
-    bottomImg.setImmovable(true).setAllowGravity(false);
+    bottomImg.setImmovable(true);
+    bottomImg.body.setAllowGravity(false);           // <-- FIX: via body
     if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
 
     // hitbox utile (92% de la largeur affichée)
@@ -210,7 +203,8 @@ class GameScene extends Phaser.Scene {
     const topH = gapY - gap/2 + PAD;
     topImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, topH));
     topImg.y = gapY - gap/2 + PAD;
-    topImg.setImmovable(true).setAllowGravity(false);
+    topImg.setImmovable(true);
+    topImg.body.setAllowGravity(false);             // <-- FIX: via body
     if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
 
     topImg.body.setSize(bodyWpx, topImg.displayHeight, true);
@@ -245,7 +239,7 @@ class GameScene extends Phaser.Scene {
   spawnBonus(x, y){
     const bonus = this.physics.add.image(x, y, 'bonus_sb')
       .setDepth(7).setScale(0.55).setImmovable(true);
-    bonus.body.setAllowGravity(false);
+    bonus.body.setAllowGravity(false);              // on était déjà bon ici
     if (this.started) bonus.body.setVelocityX(PROFILE.pipeSpeed);
 
     this.physics.add.overlap(this.player, bonus, () => {
@@ -298,7 +292,7 @@ window.addEventListener('load', () => {
     parent: 'game-root',
     backgroundColor: '#9edff1',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } }, // gravité globale inchangée
+    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
     scene: [PreloadScene, MenuScene, GameScene]
   });
 });
