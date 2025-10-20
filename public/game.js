@@ -12,7 +12,6 @@ const PROFILE = {
 
 // Hypothèses “style canvas” (padding transparent dans le PNG)
 const PAD = 2;            // padding transparent sur la largeur (gauche/droite)
-const PIPE_BODY_W = 0.92; // proportion utile (sans padding). On re-calculera en px via la largeur source.
 const PIPE_W_DISPLAY = 180; // largeur d’affichage à l’écran
 
 const THEME_PERIOD = 50;      // alterne clair/sombre tous les 50
@@ -78,7 +77,6 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.pairsSpawned = 0;
     this.followCaps = [];
-    this._pipeTexInfo = null; // largeur brute des textures (pour hitbox)
 
     // bonus
     this.multiplierActive = false;
@@ -113,7 +111,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(this.player.width*0.55, this.player.height*0.55, true)
                     .setOffset(this.player.width*0.225, this.player.height*0.25);
 
-    // ⬇️ MODIF B : gravité locale (initialement 0, activée au démarrage)
+    // Modif B : gravité locale (0 au départ)
     this.player.setGravityY(0);
 
     // Aura bonus
@@ -124,13 +122,10 @@ class GameScene extends Phaser.Scene {
     // Collision player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-    // Infos textures (largeur source pour body utile)
-    this._pipeTexInfo = this.computeTextureInfo();
-
     // Première paire (immobile tant que non démarré)
     this.spawnPair(true);
 
-    // Timer prêt mais en pause — on le relance au 1er tap
+    // Timer prêt mais en pause — on le relancera au 1er tap
     this.spawnTimer = this.time.addEvent({
       delay: PROFILE.spawnDelay,
       loop: true,
@@ -139,20 +134,11 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  computeTextureInfo(){
-    const lightTop = this.textures.get('pipe_light_top').getSourceImage();
-    const widthPx  = lightTop.width;      // largeur brute d’un PNG
-    const usefulW  = Math.max(8, Math.floor(widthPx - PAD*2));  // zone utile sans padding
-    return { widthPx, usefulW };
-  }
-
   onTap(){
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
-
-      // ⬇️ MODIF B : appliquer la gravité du profil au joueur au démarrage
-      this.player.setGravityY(PROFILE.gravity);
+      this.player.setGravityY(PROFILE.gravity); // gravité locale appliquée
 
       // mets en mouvement ce qui est déjà là
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(PROFILE.pipeSpeed); });
@@ -191,7 +177,7 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
-    // Position du centre de la gap avec marges
+    // Position du centre de la gap avec marges (style canvas)
     const margin = 60;
     const gapY = margin + gap/2 + Math.random() * (H - 2*margin - gap);
 
@@ -199,45 +185,61 @@ class GameScene extends Phaser.Scene {
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    // Info textures pour body utile
-    const srcW   = this._pipeTexInfo.widthPx;
-    const useful = this._pipeTexInfo.usefulW;
+    // Récupère les tailles RÉELLES de chaque texture (haut et bas)
+    const texTop = this.textures.get(keyTop).getSourceImage();
+    const texBot = this.textures.get(keyBot).getSourceImage();
 
-    // position X d’apparition (à droite de l’écran)
+    // Utiles (sans padding) pour CHAQUE texture
+    const usefulTop = Math.max(8, Math.floor(texTop.width - PAD*2));
+    const usefulBot = Math.max(8, Math.floor(texBot.width - PAD*2));
+
+    // position X d’apparition
     const x = W + PIPE_W_DISPLAY * 0.6;
 
     // ===== BOTTOM =====
-    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(5);
-    bottomImg.setOrigin(0.5, 0); // ancre en haut
-    const bottomH = H - (gapY + gap/2) + PAD;               // hauteur visible
+    const bottomImg = this.add.image(x, 0, keyBot).setDepth(5);
+    bottomImg.setCrop(PAD, 0, usefulBot, texBot.height);       // crop spécifique
+    bottomImg.setOrigin(0.5, 0);
+    const bottomH = H - (gapY + gap/2) + PAD;
     bottomImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, bottomH));
     bottomImg.y = gapY + gap/2 - PAD;
-    bottomImg.setImmovable(true);
-    if (this.started) bottomImg.setVelocityX(PROFILE.pipeSpeed);
 
-    // hitbox = seulement la partie utile
-    const bodyWpx = PIPE_W_DISPLAY * (useful / srcW);
-    const offsetX = (PIPE_W_DISPLAY - bodyWpx) / 2;
-    bottomImg.body.setSize(bodyWpx, bottomImg.displayHeight, true);
-    bottomImg.body.setOffset(offsetX, 0);
+    this.physics.add.existing(bottomImg, false);
+    bottomImg.body.setAllowGravity(false).setImmovable(true);
 
+    // hitbox utile (spécifique au bas)
+    const bodyWpxBot = PIPE_W_DISPLAY * (usefulBot / texBot.width);
+    const offsetXBot = (PIPE_W_DISPLAY - bodyWpxBot) / 2;
+    bottomImg.body.setSize(bodyWpxBot, bottomImg.displayHeight, true);
+    bottomImg.body.setOffset(offsetXBot, 0);
+
+    if (this.started) bottomImg.body.setVelocityX(PROFILE.pipeSpeed);
     this.pipes.add(bottomImg);
 
     // ===== TOP =====
-    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(5);
-    topImg.setOrigin(0.5, 1); // ancre en bas
+    const topImg = this.add.image(x, 0, keyTop).setDepth(5);
+    topImg.setCrop(PAD, 0, usefulTop, texTop.height);          // crop spécifique
+    topImg.setOrigin(0.5, 1);
     const topH = gapY - gap/2 + PAD;
     topImg.setDisplaySize(PIPE_W_DISPLAY, Math.max(20, topH));
     topImg.y = gapY - gap/2 + PAD;
-    topImg.setImmovable(true);
-    if (this.started) topImg.setVelocityX(PROFILE.pipeSpeed);
 
-    topImg.body.setSize(bodyWpx, topImg.displayHeight, true);
-    topImg.body.setOffset(offsetX, topImg.displayHeight - topImg.body.height); // recalage
+    this.physics.add.existing(topImg, false);
+    topImg.body.setAllowGravity(false).setImmovable(true);
+
+    // hitbox utile (spécifique au haut)
+    const bodyWpxTop = PIPE_W_DISPLAY * (usefulTop / texTop.width);
+    const offsetXTop = (PIPE_W_DISPLAY - bodyWpxTop) / 2;
+    topImg.body.setSize(bodyWpxTop, topImg.displayHeight, true);
+    topImg.body.setOffset(offsetXTop, topImg.displayHeight - topImg.body.height);
+
+    if (this.started) topImg.body.setVelocityX(PROFILE.pipeSpeed);
     this.pipes.add(topImg);
 
     // ===== SENSOR SCORE =====
-    const sensor = this.add.rectangle(x + bodyWpx/2 + 6, H*0.5, 8, H, 0x000000, 0);
+    // utilise la + grande largeur utile pour être sûr de passer "après" le corps
+    const bodyWpxMax = Math.max(bodyWpxTop, bodyWpxBot);
+    const sensor = this.add.rectangle(x + bodyWpxMax/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
     if (this.started) sensor.body.setVelocityX(PROFILE.pipeSpeed);
@@ -318,7 +320,7 @@ window.addEventListener('load', () => {
     parent: 'game-root',
     backgroundColor: '#9edff1',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
+    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } }, // gravité globale inchangée
     scene: [PreloadScene, MenuScene, GameScene]
   });
 });
