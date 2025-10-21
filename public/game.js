@@ -32,11 +32,14 @@ const BONUS_DURATION = 10000;
 
 // Anti “réapparition” & couverture bord d’écran
 const KILL_MARGIN = 260;  // px à gauche avant destruction forcée
-const EXTRA_LEN   = 80;   // (plus utile ici, laissé pour compat)
+const EXTRA_LEN   = 80;   // (non utilisé pour la hauteur, gardé pour compat)
 
-// >>> Couverture totale + joints sans jour
+// Couverture totale + joints sans jour
 const PIPE_OVERSCAN = 140;   // dépassement haut/bas pour couvrir l'écran
 const JOINT_OVERLAP = 1;     // chevauchement de 1 px au joint haut/bas
+
+// >>> Nouveauté : bandes de mort (empêche de sortir de la zone jouable)
+const ENABLE_KILL_BANDS = true;
 
 /* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
@@ -72,7 +75,7 @@ class MenuScene extends Phaser.Scene {
     this.add.text(W/2, H*0.18, 'FlappyBorgy', { fontFamily:'Georgia,serif', fontSize:64, color:'#0b4a44' }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.32, 'Jouer', () => this.scene.start('game', { startTheme:'light' }));
     this.makeBtn(W/2, H*0.40, 'Quêtes', () => {
-      const t = this.add.text(W/2, H*0.48, 'Quêtes (à venir) ✨', {fontFamily:'monospace', fontSize:28, color:'#0b4a4'}).setOrigin(0.5);
+      const t = this.add.text(W/2, H*0.48, 'Quêtes (à venir) ✨', {fontFamily:'monospace', fontSize:28, color:'#0b4a44'}).setOrigin(0.5);
       this.time.delayedCall(1500, ()=>t.destroy());
     });
     this.add.text(W/2, H*0.86, 'Tap/Espace pour sauter\nÉvitez les tuyaux',
@@ -144,6 +147,21 @@ class GameScene extends Phaser.Scene {
 
     this.player.setGravityY(0); // avant le départ
 
+    // >>> Bandes de mort invisibles (empêchent le hors-zone)
+    if (ENABLE_KILL_BANDS){
+      const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
+      const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
+
+      this.killTop = this.add.rectangle(W/2, topBand/2, W, topBand, 0x00ff00, 0).setDepth(0);
+      this.physics.add.existing(this.killTop, true);
+
+      this.killBottom = this.add.rectangle(W/2, (H + botBand)/2, W, H - botBand, 0xff0000, 0).setDepth(0);
+      this.physics.add.existing(this.killBottom, true);
+
+      this.physics.add.overlap(this.player, this.killTop,    () => this.gameOver(), null, this);
+      this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
+    }
+
     // Collisions player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
@@ -195,7 +213,7 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Kill de sûreté: détruit tout pipe hors écran même s'il n'est plus référencé
+    // Kill de sûreté
     this.pipes?.children?.iterate(p => {
       if (!p || !p.active) return;
       if (p.x + p.displayWidth * 0.5 < -KILL_MARGIN) p.destroy();
@@ -287,7 +305,7 @@ class GameScene extends Phaser.Scene {
     this.movers.push(sensor);
 
     this.physics.add.overlap(this.player, sensor, () => {
-      if (!sensor.active || !sensor.isScore) return;
+      if (this.isOver || !sensor.active || !sensor.isScore) return; // garde si crash
       sensor.destroy();
       this.addScore(1);
     });
