@@ -7,7 +7,7 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,       // px/s (vers la gauche)
   gap: 260,              // ouverture par défaut
-  spawnDelay: 2000       // rythme proche Flappy Bird (était 15000 pour tests)
+  spawnDelay: 2000       // rythme proche Flappy Bird
 };
 
 const PAD = 2;
@@ -32,9 +32,9 @@ const BONUS_DURATION = 10000;
 
 // Anti “réapparition” & couverture bord d’écran
 const KILL_MARGIN = 260;  // px à gauche avant destruction forcée
-const EXTRA_LEN   = 80;   // (plus utilisé pour la hauteur mais on le garde si besoin)
+const EXTRA_LEN   = 80;   // (plus utile ici, laissé pour compat)
 
-// >>> NOUVEAU : couverture totale + joints sans jour
+// >>> Couverture totale + joints sans jour
 const PIPE_OVERSCAN = 140;   // dépassement haut/bas pour couvrir l'écran
 const JOINT_OVERLAP = 1;     // chevauchement de 1 px au joint haut/bas
 
@@ -72,7 +72,7 @@ class MenuScene extends Phaser.Scene {
     this.add.text(W/2, H*0.18, 'FlappyBorgy', { fontFamily:'Georgia,serif', fontSize:64, color:'#0b4a44' }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.32, 'Jouer', () => this.scene.start('game', { startTheme:'light' }));
     this.makeBtn(W/2, H*0.40, 'Quêtes', () => {
-      const t = this.add.text(W/2, H*0.48, 'Quêtes (à venir) ✨', {fontFamily:'monospace', fontSize:28, color:'#0b4a44'}).setOrigin(0.5);
+      const t = this.add.text(W/2, H*0.48, 'Quêtes (à venir) ✨', {fontFamily:'monospace', fontSize:28, color:'#0b4a4'}).setOrigin(0.5);
       this.time.delayedCall(1500, ()=>t.destroy());
     });
     this.add.text(W/2, H*0.86, 'Tap/Espace pour sauter\nÉvitez les tuyaux',
@@ -112,7 +112,7 @@ class GameScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
-    // >>> arrondi des positions pour éviter tout liseré
+    // Arrondi des positions (évite les seams)
     this.cameras.main.roundPixels = true;
 
     // Zone d’input plein écran
@@ -211,56 +211,56 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ========= spawnPair ROBUSTE =========
   spawnPair(silentFirst){
     const W = this.scale.width, H = this.scale.height;
-    const gap = PROFILE.gap;
 
-    // Bande jouable
-    const topBand = H * PLAYFIELD_TOP_PCT;
-    const botBand = H * PLAYFIELD_BOT_PCT;
+    // 1) Bornes sûres (liées au décor)
+    const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
+    const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
+    const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT); // rebord bas max
 
-    // Limite précise: rebord du tuyau bas ne descend pas sous PIPE_RIM_MAX_PCT
-    const rimLimit = H * PIPE_RIM_MAX_PCT;
-    const maxY_from_band = botBand - gap/2;
-    const maxY_limit     = rimLimit - gap/2 + PAD;
-    let minY = topBand + gap/2;
-    let maxY = Math.min(maxY_from_band, maxY_limit);
+    // gap effectif (protège si la bande jouable est trop petite)
+    const playable = Math.max(40, BOT_BAND - TOP_BAND);
+    const MIN_GAP = 90; // mini jouable si on doit réduire
+    const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
 
-    if (maxY < minY) { const c = (topBand + botBand) * 0.5; minY = maxY = Phaser.Math.Clamp(c, minY, maxY_from_band); }
+    // centre du gap borné
+    let minY = TOP_BAND + Math.floor(GAP/2);
+    let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
+    if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
+    const gapY = Phaser.Math.Between(minY, maxY);
 
-    const gapY = Phaser.Math.Between(Math.round(minY), Math.round(maxY));
-
+    // 2) Clés d’assets
     const style = (this.theme === 'light') ? 'light' : 'dark';
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    const x = W + PIPE_W_DISPLAY * 0.6; // hors écran à droite
+    const x = W + PIPE_W_DISPLAY * 0.6; // spawn à droite
 
-    // ===== création sprites =====
-    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6).setOrigin(0.5, 0); // ancre au RIM haut
-    const topImg    = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1); // ancre au RIM bas
+    // 3) Sprites (origins: top=0.5,1 / bottom=0.5,0)
+    const topImg    = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1);
+    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6).setOrigin(0.5, 0);
 
+    const nativeWt = topImg.width,  nativeHt = topImg.height;
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
-    const nativeWt = topImg.width,    nativeHt = topImg.height;
-    const scaleXb  = PIPE_W_DISPLAY / nativeWb;
     const scaleXt  = PIPE_W_DISPLAY / nativeWt;
+    const scaleXb  = PIPE_W_DISPLAY / nativeWb;
 
-    // >>> NOUVEAU : positions de rebords + hauteurs avec overscan et chevauchement
-    const yTopRim    = Math.round(gapY - gap/2 + (PAD - JOINT_OVERLAP));
-    const yBottomRim = Math.round(gapY + gap/2 - (PAD - JOINT_OVERLAP));
+    // 4) Visuel robuste (overscan + chevauchement + arrondis)
+    const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
+    const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
-    const topH    = Math.max(20, Math.ceil(yTopRim      + PIPE_OVERSCAN));   // du haut de l'écran (0) jusqu'au rim haut
-    const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN)); // du rim bas jusqu'au bas de l'écran
+    const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));           // du haut de l'écran jusqu'au rim haut
+    const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));  // du rim bas au bas de l'écran
 
-    // échelle verticale exacte
     topImg.setScale(scaleXt, topH / nativeHt);
     bottomImg.setScale(scaleXb, bottomH / nativeHb);
 
-    // place les rebords (les origins fixent le rim au y donné)
-    topImg.y    = yTopRim;
-    bottomImg.y = yBottomRim;
+    topImg.y    = yTopRim;     // rim haut
+    bottomImg.y = yBottomRim;  // rim bas
 
-    // corps physiques (hitbox centrée et resserrée)
+    // 5) Bodies & collisions
     const displayWt = nativeWt * scaleXt;
     topImg.setImmovable(true).body.setAllowGravity(false);
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
@@ -271,13 +271,13 @@ class GameScene extends Phaser.Scene {
     bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
 
-    bottomImg.setData('isPipe', true);
     topImg.setData('isPipe', true);
-    this.pipes.add(bottomImg);
+    bottomImg.setData('isPipe', true);
     this.pipes.add(topImg);
-    this.movers.push(bottomImg, topImg);
+    this.pipes.add(bottomImg);
+    this.movers.push(topImg, bottomImg);
 
-    // ===== SENSOR SCORE =====
+    // 6) Sensor score
     const sensor = this.add.rectangle(x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
@@ -294,13 +294,14 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
+    // bonus
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
-        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
+        GAME_H*PLAYFIELD_TOP_PCT+40, GAME_H*PLAYFIELD_BOT_PCT-40);
       this.spawnBonus(x + 520, by);
     }
 
-    // fail-safe cleanup (aussi annulé par removeAllEvents() au Game Over)
+    // fail-safe cleanup
     this.time.delayedCall(16000, () => [topImg, bottomImg, sensor].forEach(o => o && o.destroy()));
   }
 
