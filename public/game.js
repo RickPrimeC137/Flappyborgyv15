@@ -32,7 +32,11 @@ const BONUS_DURATION = 10000;
 
 // Anti “réapparition” & couverture bord d’écran
 const KILL_MARGIN = 260;  // px à gauche avant destruction forcée
-const EXTRA_LEN   = 80;   // px ajoutés à la longueur des tuyaux (haut/bas)
+const EXTRA_LEN   = 80;   // (plus utilisé pour la hauteur mais on le garde si besoin)
+
+// >>> NOUVEAU : couverture totale + joints sans jour
+const PIPE_OVERSCAN = 140;   // dépassement haut/bas pour couvrir l'écran
+const JOINT_OVERLAP = 1;     // chevauchement de 1 px au joint haut/bas
 
 /* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
@@ -107,6 +111,9 @@ class GameScene extends Phaser.Scene {
     // Fond
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
+
+    // >>> arrondi des positions pour éviter tout liseré
+    this.cameras.main.roundPixels = true;
 
     // Zone d’input plein écran
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
@@ -219,7 +226,6 @@ class GameScene extends Phaser.Scene {
     let minY = topBand + gap/2;
     let maxY = Math.min(maxY_from_band, maxY_limit);
 
-    // garde-fous si gap trop grand / limites inversées
     if (maxY < minY) { const c = (topBand + botBand) * 0.5; minY = maxY = Phaser.Math.Clamp(c, minY, maxY_from_band); }
 
     const gapY = Phaser.Math.Between(Math.round(minY), Math.round(maxY));
@@ -230,39 +236,46 @@ class GameScene extends Phaser.Scene {
 
     const x = W + PIPE_W_DISPLAY * 0.6; // hors écran à droite
 
-    // ===== BOTTOM =====
-    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6).setOrigin(0.5, 0);
+    // ===== création sprites =====
+    const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6).setOrigin(0.5, 0); // ancre au RIM haut
+    const topImg    = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1); // ancre au RIM bas
+
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
-    const scaleXb = PIPE_W_DISPLAY / nativeWb;
-    const bottomH = Math.max(20, H - (gapY + gap/2) + PAD + EXTRA_LEN); // rallongé
+    const nativeWt = topImg.width,    nativeHt = topImg.height;
+    const scaleXb  = PIPE_W_DISPLAY / nativeWb;
+    const scaleXt  = PIPE_W_DISPLAY / nativeWt;
+
+    // >>> NOUVEAU : positions de rebords + hauteurs avec overscan et chevauchement
+    const yTopRim    = Math.round(gapY - gap/2 + (PAD - JOINT_OVERLAP));
+    const yBottomRim = Math.round(gapY + gap/2 - (PAD - JOINT_OVERLAP));
+
+    const topH    = Math.max(20, Math.ceil(yTopRim      + PIPE_OVERSCAN));   // du haut de l'écran (0) jusqu'au rim haut
+    const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN)); // du rim bas jusqu'au bas de l'écran
+
+    // échelle verticale exacte
+    topImg.setScale(scaleXt, topH / nativeHt);
     bottomImg.setScale(scaleXb, bottomH / nativeHb);
-    bottomImg.y = gapY + gap/2 - PAD;
-    bottomImg.setImmovable(true).body.setAllowGravity(false);
+
+    // place les rebords (les origins fixent le rim au y donné)
+    topImg.y    = yTopRim;
+    bottomImg.y = yBottomRim;
+
+    // corps physiques (hitbox centrée et resserrée)
+    const displayWt = nativeWt * scaleXt;
+    topImg.setImmovable(true).body.setAllowGravity(false);
+    topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
+    topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
 
     const displayWb = nativeWb * scaleXb;
+    bottomImg.setImmovable(true).body.setAllowGravity(false);
     bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
 
     bottomImg.setData('isPipe', true);
-    this.pipes.add(bottomImg);
-    this.movers.push(bottomImg);
-
-    // ===== TOP =====
-    const topImg = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1);
-    const nativeWt = topImg.width, nativeHt = topImg.height;
-    const scaleXt = PIPE_W_DISPLAY / nativeWt;
-    const topH = Math.max(20, gapY - gap/2 + PAD + EXTRA_LEN); // rallongé
-    topImg.setScale(scaleXt, topH / nativeHt);
-    topImg.y = gapY - gap/2 + PAD;
-    topImg.setImmovable(true).body.setAllowGravity(false);
-
-    const displayWt = nativeWt * scaleXt;
-    topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
-    topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
-
     topImg.setData('isPipe', true);
+    this.pipes.add(bottomImg);
     this.pipes.add(topImg);
-    this.movers.push(topImg);
+    this.movers.push(bottomImg, topImg);
 
     // ===== SENSOR SCORE =====
     const sensor = this.add.rectangle(x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6, H*0.5, 8, H, 0x000000, 0);
