@@ -1,33 +1,40 @@
-/* FlappyBorgy — déplacement manuel (robuste), gravité locale (modif B) */
+/* FlappyBorgy — mobile clean build (fond train, limites visuelles, anti-fantômes) */
 
 const GAME_W = 768, GAME_H = 1366;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,   // px/s (gauche)
-  gap: 260,
-  spawnDelay: 2000   // ms
+  pipeSpeed: -220,       // px/s (vers la gauche)
+  gap: 260,              // ouverture par défaut
+  spawnDelay: 2000       // rythme proche Flappy Bird (était 15000 pour tests)
 };
 
 const PAD = 2;
-const PIPE_BODY_W = 0.92;     // % de largeur utile pour la hitbox
+const PIPE_BODY_W = 0.92;   // % de largeur utile de hitbox
 const PIPE_W_DISPLAY = 180;
 
-// ↓↓↓ Taille du joueur (modif demandée)
-const PLAYER_SCALE = 0.16;     // ajusté pour ce fond
+// Taille du joueur
+const PLAYER_SCALE = 0.16;
 
-// --- NEW: fond & zone “sûre” adaptés à l’image ---
+// Fond & bande jouable (en % de la hauteur écran)
 const BG_KEY = 'bg_train';
-const PLAYFIELD_TOP_PCT = 0.58;    // haut de la zone où placer les gaps (≈ sommet des buissons)
-const PLAYFIELD_BOT_PCT = 0.90;    // bas de la zone (au-dessus de la voie ferrée)
+const PLAYFIELD_TOP_PCT = 0.20;   // haut de la zone de gaps
+const PLAYFIELD_BOT_PCT = 0.95;   // bas de la zone de gaps
+
+// Limite de rebord bas: empêche le tuyau du bas de descendre dans la zone “train/sol”
+const PIPE_RIM_MAX_PCT = 0.78;    // ajuste 0.76–0.80 selon ton image
 
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
-const BONUS_AURA_SOFT = 0x9FFFE0;
 
+// Anti “réapparition” & couverture bord d’écran
+const KILL_MARGIN = 260;  // px à gauche avant destruction forcée
+const EXTRA_LEN   = 80;   // px ajoutés à la longueur des tuyaux (haut/bas)
+
+/* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super('preload'); }
   preload(){
@@ -38,9 +45,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
-    // --- NEW: fond ---
-    this.load.image(BG_KEY, 'bg_train.png');  // portrait 768x1366
-
+    this.load.image(BG_KEY, 'bg_train.png'); // portrait 768x1366
     this.load.image('borgy', 'borgy_ingame.png');
     this.load.image('pipe_light_top',    'pipe_light_top.png');
     this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
@@ -51,12 +56,12 @@ class PreloadScene extends Phaser.Scene {
   create(){ this.scene.start('menu'); }
 }
 
+/* ================== MENU ================== */
 class MenuScene extends Phaser.Scene {
   constructor(){ super('menu'); }
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // --- NEW: fond en arrière-plan
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
@@ -80,6 +85,7 @@ class MenuScene extends Phaser.Scene {
   }
 }
 
+/* ================== GAME ================== */
 class GameScene extends Phaser.Scene {
   constructor(){ super('game'); }
 
@@ -91,13 +97,14 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.pairsSpawned = 0;
     this.spawnAccum = 0;
+
     this.movers = [];
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // --- NEW: fond du niveau
+    // Fond
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
@@ -114,21 +121,21 @@ class GameScene extends Phaser.Scene {
     // Groupe tuyaux (pour collisions)
     this.pipes = this.physics.add.group();
 
-    // Joueur (dimensionné pour ce fond)
+    // Joueur
     this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), 'borgy')
       .setScale(PLAYER_SCALE)
       .setDepth(10)
       .setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
 
-    // Hitbox recalibrée sur la taille affichée
+    // Hitbox
     const pw = this.player.displayWidth;
     const ph = this.player.displayHeight;
     this.player.body
       .setSize(pw * 0.45, ph * 0.45, true)
       .setOffset(pw * 0.215, ph * 0.20);
 
-    this.player.setGravityY(0); // Modif B : 0 avant le départ
+    this.player.setGravityY(0); // avant le départ
 
     // Collisions player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
@@ -174,11 +181,20 @@ class GameScene extends Phaser.Scene {
       const dx = PROFILE.pipeSpeed * (delta / 1000);
       for (let i = this.movers.length - 1; i >= 0; i--){
         const o = this.movers[i];
-        if (!o.active) { this.movers.splice(i,1); continue; }
+        if (!o || !o.active) { this.movers.splice(i,1); continue; }
         o.x += dx;
         if (o.body?.updateFromGameObject) o.body.updateFromGameObject();
-        if (o.x < -PIPE_W_DISPLAY*2) { o.destroy(); this.movers.splice(i,1); }
+        if (o.x < -KILL_MARGIN) { o.destroy(); this.movers.splice(i,1); }
       }
+    }
+
+    // Kill de sûreté: détruit tout pipe hors écran même s'il n'est plus référencé
+    this.pipes?.children?.iterate(p => {
+      if (!p || !p.active) return;
+      if (p.x + p.displayWidth * 0.5 < -KILL_MARGIN) p.destroy();
+    });
+    if (this._lastSensor?.active && this._lastSensor.x < -KILL_MARGIN) {
+      this._lastSensor.destroy();
     }
 
     // alternance de thème
@@ -192,11 +208,20 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const gap = PROFILE.gap;
 
-    // --- NEW: la position verticale des gaps est bornée par le décor
+    // Bande jouable
     const topBand = H * PLAYFIELD_TOP_PCT;
     const botBand = H * PLAYFIELD_BOT_PCT;
-    const minY = topBand + gap/2;
-    const maxY = botBand - gap/2;
+
+    // Limite précise: rebord du tuyau bas ne descend pas sous PIPE_RIM_MAX_PCT
+    const rimLimit = H * PIPE_RIM_MAX_PCT;
+    const maxY_from_band = botBand - gap/2;
+    const maxY_limit     = rimLimit - gap/2 + PAD;
+    let minY = topBand + gap/2;
+    let maxY = Math.min(maxY_from_band, maxY_limit);
+
+    // garde-fous si gap trop grand / limites inversées
+    if (maxY < minY) { const c = (topBand + botBand) * 0.5; minY = maxY = Phaser.Math.Clamp(c, minY, maxY_from_band); }
+
     const gapY = Phaser.Math.Between(Math.round(minY), Math.round(maxY));
 
     const style = (this.theme === 'light') ? 'light' : 'dark';
@@ -209,7 +234,7 @@ class GameScene extends Phaser.Scene {
     const bottomImg = this.physics.add.image(x, 0, keyBot).setDepth(6).setOrigin(0.5, 0);
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXb = PIPE_W_DISPLAY / nativeWb;
-    const bottomH = Math.max(20, H - (gapY + gap/2) + PAD);
+    const bottomH = Math.max(20, H - (gapY + gap/2) + PAD + EXTRA_LEN); // rallongé
     bottomImg.setScale(scaleXb, bottomH / nativeHb);
     bottomImg.y = gapY + gap/2 - PAD;
     bottomImg.setImmovable(true).body.setAllowGravity(false);
@@ -218,6 +243,7 @@ class GameScene extends Phaser.Scene {
     bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
 
+    bottomImg.setData('isPipe', true);
     this.pipes.add(bottomImg);
     this.movers.push(bottomImg);
 
@@ -225,7 +251,7 @@ class GameScene extends Phaser.Scene {
     const topImg = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1);
     const nativeWt = topImg.width, nativeHt = topImg.height;
     const scaleXt = PIPE_W_DISPLAY / nativeWt;
-    const topH = Math.max(20, gapY - gap/2 + PAD);
+    const topH = Math.max(20, gapY - gap/2 + PAD + EXTRA_LEN); // rallongé
     topImg.setScale(scaleXt, topH / nativeHt);
     topImg.y = gapY - gap/2 + PAD;
     topImg.setImmovable(true).body.setAllowGravity(false);
@@ -234,6 +260,7 @@ class GameScene extends Phaser.Scene {
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
     topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
 
+    topImg.setData('isPipe', true);
     this.pipes.add(topImg);
     this.movers.push(topImg);
 
@@ -242,6 +269,7 @@ class GameScene extends Phaser.Scene {
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false).setImmovable(true);
     sensor.isScore = !silentFirst;
+    sensor.setData('isSensor', true);
     this._lastSensor = sensor;
     this.movers.push(sensor);
 
@@ -254,11 +282,12 @@ class GameScene extends Phaser.Scene {
     this.pairsSpawned++;
 
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160), H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
+      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
+        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
       this.spawnBonus(x + 520, by);
     }
 
-    // fail-safe cleanup
+    // fail-safe cleanup (aussi annulé par removeAllEvents() au Game Over)
     this.time.delayedCall(16000, () => [topImg, bottomImg, sensor].forEach(o => o && o.destroy()));
   }
 
@@ -292,9 +321,14 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    // fige tout ce qui bouge
+    // stoppe tous les timers/DelayedCall attachés à la scène
+    this.time.removeAllEvents();
+
+    // nettoie
     this.movers.forEach(o => o?.destroy());
     this.movers = [];
+    this.pipes.clear(true, true);
+    if (this._lastSensor?.active) this._lastSensor.destroy();
 
     // UI Game Over
     const W = this.scale.width, H = this.scale.height;
@@ -318,7 +352,8 @@ window.addEventListener('load', () => {
     parent: 'game-root',
     backgroundColor: '#9edff1',
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } }, // gravité globale = 0
-    scene: [PreloadScene, MenuScene, GameScene]
+    physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
+    scene: [PreloadScene, MenuScene, GameScene],
+    pixelArt: true    // rendu net pour le style pixel
   });
 });
