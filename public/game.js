@@ -19,8 +19,8 @@ const PLAYER_SCALE = 0.16;     // ajusté pour ce fond
 
 // --- NEW: fond & zone “sûre” adaptés à l’image ---
 const BG_KEY = 'bg_train';
-const PLAYFIELD_TOP_PCT = 0.20;    // haut de la zone où placer les gaps (≈ sommet des buissons)
-const PLAYFIELD_BOT_PCT = 0.95;    // bas de la zone (au-dessus de la voie ferrée)
+const PLAYFIELD_TOP_PCT = 0.30;    // haut de la zone où placer les gaps (≈ sommet des buissons)
+const PLAYFIELD_BOT_PCT = 0.90;    // bas de la zone (au-dessus de la voie ferrée)
 
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
