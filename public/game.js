@@ -11,10 +11,8 @@
 const TG = window.Telegram?.WebApp || null;
 if (TG) {
   try {
-    TG.ready();       // indique au WebView qu’on est prêt
-    TG.expand();      // prend toute la hauteur (optionnel)
-    // TG.setHeaderColor('#0db187');    // (optionnel) thème
-    // TG.setBackgroundColor('#0a2a2f'); // (optionnel) thème
+    TG.ready();
+    TG.expand();
   } catch {}
 }
 
@@ -227,13 +225,20 @@ class GameScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
     }
 
-    // Collisions
+    // Collisions & overlaps
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_player, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false;
       sensor.destroy();
       this.addScore(1);
+    }, null, this);
+
+    // ✅ Overlap bonus (correctif)
+    this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
+      if (!bonus.active) return;
+      bonus.destroy();
+      this.activateMultiplier();
     }, null, this);
 
     // Première paire (affichée mais immobile tant que le jeu n’a pas commencé)
@@ -449,4 +454,3 @@ window.addEventListener('load', () => {
     fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
-
