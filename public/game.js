@@ -1,41 +1,39 @@
-/* FlappyBorgy — build montagnes 768x1152 (mobile/PC robuste) */
+/* FlappyBorgy — build montagnes (768x1152), mobile/desktop robuste */
 
-const GAME_W = 768, GAME_H = 1152;   // ← adapté au nouveau fond
+const GAME_W = 768, GAME_H = 1152;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,       // px/s (vers la gauche)
-  gap: 260,              // ouverture par défaut
-  spawnDelay: 2000       // rythme proche Flappy Bird
+  pipeSpeed: -220,   // px/s (vers la gauche)
+  gap: 250,          // ouverture par défaut (un poil plus serrée sur 1152px de haut)
+  spawnDelay: 2000   // rythme proche Flappy Bird
 };
 
 const PAD = 2;
-const PIPE_BODY_W = 0.92;   // % de largeur utile de hitbox
-const PIPE_W_DISPLAY = 170; // léger ajustement pour 1152px de haut
+const PIPE_BODY_W = 0.92;      // % de largeur utile de hitbox
+const PIPE_W_DISPLAY = 180;
 
-// Taille du joueur (fond 1152px → un peu plus grand que sur 1366px)
+// Taille du joueur (ajustée au nouveau fond/hauteur)
 const PLAYER_SCALE = 0.18;
 
-// Fond & bande jouable (en % de la hauteur écran)
-const BG_KEY = 'bg_mountains';  // image: assets/bg_mountains.png (768x1152)
-const PLAYFIELD_TOP_PCT = 0.18; // haut de la zone (sous les nuages)
-const PLAYFIELD_BOT_PCT = 0.88; // bas de la zone (au-dessus des collines/rails)
-
-// Limite de rebord bas: empêche le tuyau du bas de descendre sur les rails
-const PIPE_RIM_MAX_PCT = 0.83;  // ajuste 0.82–0.85 selon ta capture exacte
+// Fond & bande jouable (en % de la hauteur écran) — calibré pour l’image fournie
+const BG_KEY = 'bg_mountains';
+const PLAYFIELD_TOP_PCT = 0.18;  // haut des gaps (sous le ciel “libre”)
+const PLAYFIELD_BOT_PCT = 0.88;  // bas des gaps (au-dessus des grandes collines / voie)
+const PIPE_RIM_MAX_PCT  = 0.80;  // le “rebord” du tube bas ne descend jamais sous ~haut des rails
 
 const THEME_PERIOD = 50;
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-// Couverture/robustesse
-const KILL_MARGIN = 260;      // kill à gauche
-const PIPE_OVERSCAN = 160;    // dépassement haut/bas pour couvrir l'écran
-const JOINT_OVERLAP = 2;      // chevauchement au joint haut/bas
+// Couverture / robustesse visuelle
+const KILL_MARGIN = 260;     // kill à gauche
+const PIPE_OVERSCAN = 140;   // dépassement haut/bas pour couvrir l'écran
+const JOINT_OVERLAP = 1;     // chevauchement au joint pour éviter tout jour
 
-// Bandes de mort haut/bas (empêche la triche par le top/bottom)
+// Bandes de mort : empêche Borgy d'aller tout en haut / tout en bas
 const ENABLE_KILL_BANDS = true;
 
 /* ================== PRELOAD ================== */
@@ -49,7 +47,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
-    this.load.image(BG_KEY, 'bg_mountains.png'); // 768x1152
+    this.load.image(BG_KEY, 'bg_mountains.png'); // 768x1152 recommandé
     this.load.image('borgy', 'borgy_ingame.png');
     this.load.image('pipe_light_top',    'pipe_light_top.png');
     this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
@@ -68,18 +66,18 @@ class MenuScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
-    this.add.text(W/2, H*0.12, 'FlappyBorgy', { fontFamily:'Georgia,serif', fontSize:58, color:'#0b4a44' }).setOrigin(0.5);
-    this.makeBtn(W/2, H*0.26, 'Jouer', () => this.scene.start('game', { startTheme:'light' }));
-    this.makeBtn(W/2, H*0.34, 'Quêtes', () => {
-      const t = this.add.text(W/2, H*0.42, 'Quêtes (à venir) ✨', {fontFamily:'monospace', fontSize:26, color:'#0b4a44'}).setOrigin(0.5);
+    this.add.text(W/2, H*0.14, 'FlappyBorgy', { fontFamily:'Georgia,serif', fontSize:60, color:'#0b4a44' }).setOrigin(0.5);
+    this.makeBtn(W/2, H*0.28, 'Jouer',  () => this.scene.start('game', { startTheme:'light' }));
+    this.makeBtn(W/2, H*0.36, 'Quêtes', () => {
+      const t = this.add.text(W/2, H*0.44, 'Quêtes (à venir) ✨', {fontFamily:'monospace', fontSize:26, color:'#0b4a44'}).setOrigin(0.5);
       this.time.delayedCall(1500, ()=>t.destroy());
     });
-    this.add.text(W/2, H*0.90, 'Tap/Espace pour sauter — Évitez les tuyaux',
+    this.add.text(W/2, H*0.90, 'Tap/Espace pour sauter — évitez les tuyaux',
       { fontFamily:'monospace', fontSize:22, color:'#0b4a44', align:'center' }).setOrigin(0.5);
   }
   makeBtn(x,y,label,cb){
     const t = this.add.text(x,y,label,{ fontFamily:'monospace', fontSize:34, color:'#fff',
-      backgroundColor:'#12a38a', padding:{left:18,right:18,top:12,bottom:10} })
+      backgroundColor:'#12a38a', padding:{left:18,right:18,top:10,bottom:10} })
       .setOrigin(0.5).setInteractive({useHandCursor:true});
     t.on('pointerover', ()=> t.setBackgroundColor('#0f8e78'));
     t.on('pointerout',  ()=> t.setBackgroundColor('#12a38a'));
@@ -100,7 +98,7 @@ class GameScene extends Phaser.Scene {
     this.score = 0;
     this.pairsSpawned = 0;
 
-    // Groupes
+    // Groupes physiques
     this.pipes   = null;
     this.sensors = null;
     this.bonuses = null;
@@ -115,7 +113,7 @@ class GameScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
-    // Rendu net
+    // Seam killer
     this.cameras.main.roundPixels = true;
 
     // Groupes
@@ -123,14 +121,14 @@ class GameScene extends Phaser.Scene {
     this.sensors = this.physics.add.group();
     this.bonuses = this.physics.add.group();
 
-    // Input plein écran
+    // Input
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on('pointerdown', () => this.onTap());
     this.input.keyboard.on('keydown-SPACE', () => this.onTap());
 
     // UI
-    this.scoreText = this.add.text(24, 20, 'Score: 0', {
-      fontFamily:'monospace', fontSize:44, color:'#fff', stroke:'#0a3a38', strokeThickness:8
+    this.scoreText = this.add.text(24, 18, 'Score: 0', {
+      fontFamily:'monospace', fontSize:46, color:'#fff', stroke:'#0a3a38', strokeThickness:8
     }).setDepth(20);
 
     // Joueur
@@ -148,7 +146,7 @@ class GameScene extends Phaser.Scene {
       .setOffset(pw * 0.215, ph * 0.20);
     this.player.setGravityY(0);
 
-    // Kill-bands (haut/bas)
+    // Kill-bands
     if (ENABLE_KILL_BANDS){
       const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
       const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
@@ -163,7 +161,7 @@ class GameScene extends Phaser.Scene {
     // Collisions player vs pipes
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
 
-    // Score overlap
+    // Score
     this.physics.add.overlap(this.player, this.sensors, (_player, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false;
@@ -184,7 +182,8 @@ class GameScene extends Phaser.Scene {
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
-      // Spawn fiable via timer
+
+      // Spawn timer (robuste mobile)
       this.spawnEvent = this.time.addEvent({
         delay: PROFILE.spawnDelay,
         loop: true,
@@ -197,29 +196,37 @@ class GameScene extends Phaser.Scene {
   update(){
     if (this.isOver) return;
 
-    // inclinaison
+    // inclinaison du joueur
     const vy = this.player.body.velocity.y;
     if      (vy < -40) this.player.setAngle(-16);
     else if (vy > 140) this.player.setAngle(20);
     else               this.player.setAngle(0);
 
     // Kill de sûreté à gauche
-    this.pipes.children.iterate(p => { if (p && p.active && p.x + p.displayWidth*0.5 < -KILL_MARGIN) p.destroy(); });
-    this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
-    this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
+    this.pipes.children.iterate(p => {
+      if (!p || !p.active) return;
+      if (p.x + p.displayWidth*0.5 < -KILL_MARGIN) p.destroy();
+    });
+    this.sensors.children.iterate(s => {
+      if (!s || !s.active) return;
+      if (s.x < -KILL_MARGIN) s.destroy();
+    });
+    this.bonuses.children.iterate(b => {
+      if (!b || !b.active) return;
+      if (b.x < -KILL_MARGIN) b.destroy();
+    });
 
-    // alternance de thème (si tu utilises 2 skins de tuyaux)
+    // Alternance de thème (si tu utilises des pipes light/dark)
     if (this.pairsSpawned > 0 && this.pairsSpawned % THEME_PERIOD === 0){
       this.theme = (this.theme === 'light') ? 'dark' : 'light';
       this.pairsSpawned++;
     }
   }
 
-  // ========= spawnPair (robuste) =========
+  // ========= Generation des tuyaux (overscan, joints propres) =========
   spawnPair(silentFirst){
     const W = this.scale.width, H = this.scale.height;
 
-    // Bornes liées au décor
     const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
     const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
     const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
@@ -233,12 +240,11 @@ class GameScene extends Phaser.Scene {
     if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
-    // Clés d’assets
     const style = (this.theme === 'light') ? 'light' : 'dark';
     const keyTop = `pipe_${style}_top`;
     const keyBot = `pipe_${style}_bottom`;
 
-    const x = W + PIPE_W_DISPLAY * 0.6; // spawn à droite
+    const x = W + PIPE_W_DISPLAY * 0.6;
 
     // Sprites
     const topImg    = this.physics.add.image(x, 0, keyTop).setDepth(6).setOrigin(0.5, 1);
@@ -249,7 +255,6 @@ class GameScene extends Phaser.Scene {
     const scaleXt  = PIPE_W_DISPLAY / nativeWt;
     const scaleXb  = PIPE_W_DISPLAY / nativeWb;
 
-    // Overscan + chevauchement
     const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
     const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
@@ -262,7 +267,7 @@ class GameScene extends Phaser.Scene {
     topImg.y    = yTopRim;
     bottomImg.y = yBottomRim;
 
-    // Bodies & collisions
+    // Bodies
     const displayWt = nativeWt * scaleXt;
     topImg.setImmovable(true).body.setAllowGravity(false);
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
@@ -273,7 +278,7 @@ class GameScene extends Phaser.Scene {
     bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
 
-    // Mouvement via vélocité (fiable mobile)
+    // Mouvement via vélocité
     topImg.body.setVelocityX(PROFILE.pipeSpeed);
     bottomImg.body.setVelocityX(PROFILE.pipeSpeed);
 
@@ -318,24 +323,21 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    // stoppe le timer de spawn
     if (this.spawnEvent) { this.spawnEvent.remove(false); this.spawnEvent = null; }
     this.time.removeAllEvents();
 
-    // nettoie
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
 
-    // UI Game Over
     const W = this.scale.width, H = this.scale.height;
-    this.add.rectangle(W/2, H/2, W*0.8, 340, 0x12323a, 0.92).setDepth(100);
-    this.add.text(W/2, H/2 - 110, 'Game Over', { fontFamily:'Georgia,serif', fontSize:66, color:'#fff' })
+    this.add.rectangle(W/2, H/2, W*0.8, 320, 0x12323a, 0.92).setDepth(100);
+    this.add.text(W/2, H/2 - 100, 'Game Over', { fontFamily:'Georgia,serif', fontSize:68, color:'#fff' })
       .setOrigin(0.5).setDepth(101);
-    this.add.text(W/2, H/2 - 30, `Score : ${this.score}`, { fontFamily:'monospace', fontSize:48, color:'#cffff1' })
+    this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:'monospace', fontSize:48, color:'#cffff1' })
       .setOrigin(0.5).setDepth(101);
 
-    const replay = this.add.text(W/2, H/2 + 70, 'Rejouer', {
+    const replay = this.add.text(W/2, H/2 + 60, 'Rejouer', {
       fontFamily:'monospace', fontSize:44, color:'#fff',
       backgroundColor:'#0db187', padding:{left:22,right:22,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
@@ -351,6 +353,8 @@ window.addEventListener('load', () => {
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
     physics: { default: 'arcade', arcade: { gravity:{y:0}, debug:false } },
     scene: [PreloadScene, MenuScene, GameScene],
-    pixelArt: true
+    pixelArt: true,
+    // (optionnel pour synchroniser le rendu PC/mobile)
+    fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
