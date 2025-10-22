@@ -19,7 +19,7 @@ if (!BOT_TOKEN) {
 const app = express();
 
 const ALLOWED_ORIGINS = [
-  "https://flappyborgyv15.onrender.com",
+  "https://flappyborgyv15-1.onrender.com",
   "http://localhost:3000",
   "http://localhost:5173"
 ];
