@@ -1,11 +1,24 @@
 /* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard) */
 /* Domaine du jeu : https://flappyborgyv15.onrender.com
-   API supposée sous le même domaine : /api
+   API : https://rickprimec137-flappyborgyv15.onrender.com  (modifie si besoin)
+
    Endpoints côté serveur:
-     POST /api/score       { score:number, initData:string }
+     POST /api/score                  { score:number, initData:string }
      GET  /api/leaderboard?limit=10  -> { ok:true, list:[{name,best}] }
 */
 
+// ========== Telegram WebApp (SDK déjà inclus dans index.html) ==========
+const TG = window.Telegram?.WebApp || null;
+if (TG) {
+  try {
+    TG.ready();       // indique au WebView qu’on est prêt
+    TG.expand();      // prend toute la hauteur (optionnel)
+    // TG.setHeaderColor('#0db187');    // (optionnel) thème
+    // TG.setBackgroundColor('#0a2a2f'); // (optionnel) thème
+  } catch {}
+}
+
+// ========== Constantes jeu ==========
 const GAME_W = 1024, GAME_H = 1536;
 
 const PROFILE = {
@@ -43,13 +56,15 @@ const BONUS_DURATION = 10000;
 
 // ================== LEADERBOARD (client) ==================
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
+
+// renvoie la string initData Telegram (ou null hors Telegram)
 function tgInitData(){
-  try { return (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) || null; }
+  try { return TG?.initData || null; }
   catch { return null; }
 }
 async function postScore(score){
   const initData = tgInitData();
-  if (!initData) return; // hors Telegram: on n’envoie pas
+  if (!initData) return; // hors Telegram => on n’envoie pas
   try{
     await fetch(`${API_BASE}/api/score`, {
       method:"POST",
@@ -77,7 +92,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
-    this.load.image(BG_KEY, 'bg_mountains.jpg'); // <— JPG confirmé
+    this.load.image(BG_KEY, 'bg_mountains.jpg'); // JPG
     this.load.image('borgy', 'borgy_ingame.png');
 
     // PIPES: uniquement la variante "light"
@@ -85,8 +100,6 @@ class PreloadScene extends Phaser.Scene {
     this.load.image('pipe_bottom', 'pipe_light_bottom.png');
 
     if (ENABLE_BONUS) this.load.image('bonus_sb', 'sb_token_user.png');
-
-    // this.load.on('loaderror', f => console.warn('✗ loaderror', f.key, f.src)); // debug
   }
   create(){ this.scene.start('menu'); }
 }
@@ -140,7 +153,9 @@ class MenuScene extends Phaser.Scene {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    close.on("pointerdown", ()=> [panel, title, close, ...this.children.list.filter(o=>o.depth>=depth && o!==panel && o!==title && o!==close)].forEach(o=>o?.destroy()));
+    const destroyAll = () =>
+      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    close.on("pointerdown", destroyAll);
   }
 }
 
@@ -246,8 +261,8 @@ class GameScene extends Phaser.Scene {
         callback: () => this.spawnPair(false)
       });
 
-      // Si on est dans Telegram, prépare la WebApp (couleurs etc.)
-      try { Telegram?.WebApp?.expand?.(); } catch {}
+      // Optionnel: adapter la WebApp Telegram
+      try { TG?.expand?.(); } catch {}
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
@@ -386,13 +401,13 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on('pointerdown', ()=> this.scene.restart());
 
-    // ⬇️ Envoi du score (si dans Telegram) puis affichage du leaderboard
+    // Envoi du score (si dans Telegram) puis affichage du leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
   }
 
-  // réutilise l’overlay du menu pour afficher le ranking in-game
+  // overlay de ranking in-game
   showLeaderboard(list){
     const W = this.scale.width, H = this.scale.height;
     const depth = 300;
@@ -416,7 +431,9 @@ class GameScene extends Phaser.Scene {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    close.on("pointerdown", ()=> [panel, title, close, ...this.children.list.filter(o=>o.depth>=depth && o!==panel && o!==title && o!==close)].forEach(o=>o?.destroy()));
+    const destroyAll = () =>
+      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    close.on("pointerdown", destroyAll);
   }
 }
 
@@ -432,3 +449,4 @@ window.addEventListener('load', () => {
     fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
+
