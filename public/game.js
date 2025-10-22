@@ -42,7 +42,7 @@ const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
 // ================== LEADERBOARD (client) ==================
-const API_BASE = ""; // même origine → "" ou "/" (on utilisera /api/...)
+const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 function tgInitData(){
   try { return (window.Telegram && Telegram.WebApp && Telegram.WebApp.initData) || null; }
   catch { return null; }
