@@ -48,7 +48,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
-    this.load.image(BG_KEY, 'bg_mountains.png'); // 1024x1536
+    this.load.image(BG_KEY, 'bg_mountains.jpg'); // 1024x1536
     this.load.image('borgy', 'borgy_ingame.png');
     this.load.image('pipe_light_top',    'pipe_light_top.png');
     this.load.image('pipe_light_bottom', 'pipe_light_bottom.png');
