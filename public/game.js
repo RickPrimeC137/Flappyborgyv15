@@ -1,68 +1,42 @@
-/* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard) */
-/* Domaine du jeu : https://flappyborgyv15.onrender.com
-   API : https://rickprimec137-flappyborgyv15.onrender.com  (modifie si besoin)
-
-   Endpoints côté serveur:
-     POST /api/score                  { score:number, initData:string }
-     GET  /api/leaderboard?limit=10  -> { ok:true, list:[{name,best}] }
+/* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
+   Front: https://flappyborgyv15-1.onrender.com
+   API  : https://rickprimec137-flappyborgyv15.onrender.com
 */
 
-// ========== Telegram WebApp (SDK déjà inclus dans index.html) ==========
 const TG = window.Telegram?.WebApp || null;
-if (TG) {
-  try {
-    TG.ready();
-    TG.expand();
-  } catch {}
-}
+if (TG) { try { TG.ready(); TG.expand(); } catch {} }
 
-// ========== Constantes jeu ==========
+/* ===== Constantes ===== */
 const GAME_W = 1024, GAME_H = 1536;
-
-const PROFILE = {
-  gravity: 1400,
-  jump: -380,
-  pipeSpeed: -220,   // px/s (vers la gauche)
-  gap: 270,          // ouverture par défaut
-  spawnDelay: 2000   // rythme proche Flappy Bird
-};
+const PROFILE = { gravity:1400, jump:-380, pipeSpeed:-220, gap:270, spawnDelay:2000 };
 
 const PAD = 2;
-const PIPE_BODY_W = 0.92;      // % largeur utile hitbox
-const PIPE_W_DISPLAY = 180;    // largeur visuelle du tuyau
+const PIPE_BODY_W = 0.92;
+const PIPE_W_DISPLAY = 180;
+const PLAYER_SCALE = 0.17;
 
-const PLAYER_SCALE = 0.17;     // taille Borgy pour 1536px de haut
-
-// Calibrage pour l'image 1024x1536
 const BG_KEY = 'bg_mountains';
-const PLAYFIELD_TOP_PCT = 0.16;   // ~246 px
-const PLAYFIELD_BOT_PCT = 0.90;   // ~1382 px
-const PIPE_RIM_MAX_PCT  = 0.82;   // ~1259 px (au-dessus des rails)
+const PLAYFIELD_TOP_PCT = 0.16;
+const PLAYFIELD_BOT_PCT = 0.90;
+const PIPE_RIM_MAX_PCT  = 0.82;
 
-// Visuel/robustesse
-const PIPE_OVERSCAN = 160;   // couvre tout l'écran sans jour
-const JOINT_OVERLAP = 1;     // chevauchement au joint
-const KILL_MARGIN   = 260;   // kill à gauche
+const PIPE_OVERSCAN = 160;
+const JOINT_OVERLAP = 1;
+const KILL_MARGIN   = 260;
 
-// Kill-bands: empêche de “passer” tout en haut/bas
 const ENABLE_KILL_BANDS = true;
 
-// Bonus
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-// ================== LEADERBOARD (client) ==================
+/* ====== Leaderboard client ====== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
+const tgInitData = () => { try { return TG?.initData || null; } catch { return null; } };
 
-// renvoie la string initData Telegram (ou null hors Telegram)
-function tgInitData(){
-  try { return TG?.initData || null; }
-  catch { return null; }
-}
 async function postScore(score){
   const initData = tgInitData();
-  if (!initData) return; // hors Telegram => on n’envoie pas
+  if (!initData) return;
   try{
     await fetch(`${API_BASE}/api/score`, {
       method:"POST",
@@ -90,13 +64,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
-    this.load.image(BG_KEY, 'bg_mountains.jpg'); // JPG
+    this.load.image(BG_KEY, 'bg_mountains.jpg');
     this.load.image('borgy', 'borgy_ingame.png');
-
-    // PIPES: uniquement la variante "light"
     this.load.image('pipe_top',    'pipe_light_top.png');
     this.load.image('pipe_bottom', 'pipe_light_bottom.png');
-
     if (ENABLE_BONUS) this.load.image('bonus_sb', 'sb_token_user.png');
   }
   create(){ this.scene.start('menu'); }
@@ -132,9 +103,8 @@ class MenuScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const depth = 500;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
+    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
 
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
@@ -164,15 +134,15 @@ class GameScene extends Phaser.Scene {
   init(){
     this.started = false;
     this.isOver  = false;
-
     this.score = 0;
     this.pairsSpawned = 0;
 
-    this.pipes   = null;
+    this.pipes = null;
     this.sensors = null;
     this.bonuses = null;
 
-    this.spawnEvent = null;
+    // Accumulateur de spawn (remplace time.addEvent)
+    this.spawnAccum = 0;
   }
 
   create(){
@@ -183,7 +153,11 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Groupes physiques
+    // Sécurité contre ralentissements WebView
+    this.time.timeScale = 1;
+    if (this.physics?.world) this.physics.world.timeScale = 1;
+
+    // Groupes
     this.pipes   = this.physics.add.group();
     this.sensors = this.physics.add.group();
     this.bonuses = this.physics.add.group();
@@ -200,17 +174,11 @@ class GameScene extends Phaser.Scene {
 
     // Joueur
     this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), 'borgy')
-      .setScale(PLAYER_SCALE)
-      .setDepth(10)
-      .setCollideWorldBounds(true);
+      .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
 
-    // Hitbox
-    const pw = this.player.displayWidth;
-    const ph = this.player.displayHeight;
-    this.player.body
-      .setSize(pw * 0.45, ph * 0.45, true)
-      .setOffset(pw * 0.215, ph * 0.20);
+    const pw = this.player.displayWidth, ph = this.player.displayHeight;
+    this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
     // Kill-bands
@@ -225,7 +193,7 @@ class GameScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
     }
 
-    // Collisions & overlaps
+    // Collisions
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_player, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
@@ -234,54 +202,48 @@ class GameScene extends Phaser.Scene {
       this.addScore(1);
     }, null, this);
 
-    // ✅ Overlap bonus (correctif)
-    this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
-      if (!bonus.active) return;
-      bonus.destroy();
-      this.activateMultiplier();
-    }, null, this);
-
-    // Première paire (affichée mais immobile tant que le jeu n’a pas commencé)
+    // Première paire (à l’arrêt tant que non démarré)
     this.spawnPair(true);
   }
 
   onTap(){
-    if (this.isOver){
-      this.scene.restart();
-      return;
-    }
+    if (this.isOver){ this.scene.restart(); return; }
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // Met en mouvement la paire initiale si présente
+      // Mets en mouvement ce qui existe déjà
       this.pipes.children.iterate(p => p?.body?.setVelocityX(PROFILE.pipeSpeed));
       this.sensors.children.iterate(s => s?.body?.setVelocityX(PROFILE.pipeSpeed));
 
-      // Timer de spawn (robuste mobile)
-      this.spawnEvent = this.time.addEvent({
-        delay: PROFILE.spawnDelay,
-        loop: true,
-        callback: () => this.spawnPair(false)
-      });
+      // reset accumulateur de spawn
+      this.spawnAccum = 0;
 
-      // Optionnel: adapter la WebApp Telegram
       try { TG?.expand?.(); } catch {}
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
 
-  update(){
+  update(_time, delta){
     if (this.isOver) return;
 
-    // Inclinaison du joueur
+    // Inclinaison
     const vy = this.player.body.velocity.y;
     if      (vy < -40) this.player.setAngle(-16);
     else if (vy > 140) this.player.setAngle(20);
     else               this.player.setAngle(0);
 
-    // Kill de sûreté à gauche
+    // Spawn robuste: accumulateur basé sur delta
+    if (this.started){
+      this.spawnAccum += delta;
+      while (this.spawnAccum >= PROFILE.spawnDelay){
+        this.spawnAccum -= PROFILE.spawnDelay;
+        this.spawnPair(false);
+      }
+    }
+
+    // Nettoyage gauche
     this.pipes.children.iterate(p => {
       if (!p || !p.active) return;
       if (p.x + p.displayWidth*0.5 < -KILL_MARGIN) p.destroy();
@@ -290,7 +252,7 @@ class GameScene extends Phaser.Scene {
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
   }
 
-  // ========= Génération d’une paire (pipes light only) =========
+  /* ===== Spawn d’une paire ===== */
   spawnPair(silentFirst){
     const W = this.scale.width, H = this.scale.height;
 
@@ -308,13 +270,12 @@ class GameScene extends Phaser.Scene {
     const gapY = Phaser.Math.Between(minY, maxY);
 
     const x = W + PIPE_W_DISPLAY * 0.6;
-    const vx = this.started ? PROFILE.pipeSpeed : 0;   // immobile avant le tap
+    const vx = this.started ? PROFILE.pipeSpeed : 0;
 
-    // Sprites tuyaux (uniquement light)
-    const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(6).setOrigin(0.5, 1);
+    const topImg    = this.physics.add.image(x, 0, 'pipe_top').setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(6).setOrigin(0.5, 0);
 
-    const nativeWt = topImg.width,  nativeHt = topImg.height;
+    const nativeWt = topImg.width, nativeHt = topImg.height;
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXt  = PIPE_W_DISPLAY / nativeWt;
     const scaleXb  = PIPE_W_DISPLAY / nativeWb;
@@ -327,71 +288,52 @@ class GameScene extends Phaser.Scene {
 
     topImg.setScale(scaleXt, topH / nativeHt);
     bottomImg.setScale(scaleXb, bottomH / nativeHb);
+    topImg.y = yTopRim; bottomImg.y = yBottomRim;
 
-    topImg.y    = yTopRim;
-    bottomImg.y = yBottomRim;
-
-    // Bodies & mouvement
     const displayWt = nativeWt * scaleXt;
     topImg.setImmovable(true).body.setAllowGravity(false);
-    topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
+    topImg.body.setSize(displayWt*PIPE_BODY_W, topImg.displayHeight, true);
     topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
     topImg.body.setVelocityX(vx);
 
     const displayWb = nativeWb * scaleXb;
     bottomImg.setImmovable(true).body.setAllowGravity(false);
-    bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
+    bottomImg.body.setSize(displayWb*PIPE_BODY_W, bottomImg.displayHeight, true);
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
     bottomImg.body.setVelocityX(vx);
 
-    this.pipes.add(topImg);
-    this.pipes.add(bottomImg);
+    this.pipes.add(topImg); this.pipes.add(bottomImg);
 
     // Sensor score
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
-    sensor.body.setAllowGravity(false);
-    sensor.body.setImmovable(true);
-    sensor.body.setVelocityX(vx);
+    sensor.body.setAllowGravity(false).setImmovable(true).setVelocityX(vx);
     sensor.isScore = !silentFirst;
     this.sensors.add(sensor);
 
     this.pairsSpawned++;
 
-    // Bonus éventuel
+    // Bonus
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
         H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
       const bonus = this.physics.add.image(x + 520, by, 'bonus_sb')
         .setDepth(7).setScale(0.55).setImmovable(true);
-      bonus.body.setAllowGravity(false);
-      bonus.body.setVelocityX(PROFILE.pipeSpeed);
+      bonus.body.setAllowGravity(false).setVelocityX(PROFILE.pipeSpeed);
       this.bonuses.add(bonus);
     }
   }
 
-  activateMultiplier(){
-    this.multiplierActive = true;
-    this.time.delayedCall(BONUS_DURATION, () => { this.multiplierActive = false; });
-  }
-
-  addScore(n){
-    this.score += this.multiplierActive ? n*2 : n;
-    this.scoreText.setText('Score: ' + this.score);
-  }
+  activateMultiplier(){ this.multiplierActive = true; this.time.delayedCall(BONUS_DURATION, () => { this.multiplierActive = false; }); }
+  addScore(n){ this.score += this.multiplierActive ? n*2 : n; this.scoreText.setText('Score: ' + this.score); }
 
   gameOver(){
     if (this.isOver) return;
-    this.isOver = true;
-    this.started = false;
+    this.isOver = true; this.started = false;
 
-    if (this.spawnEvent) { this.spawnEvent.remove(false); this.spawnEvent = null; }
     this.time.removeAllEvents();
-
-    this.pipes.clear(true, true);
-    this.sensors.clear(true, true);
-    this.bonuses.clear(true, true);
+    this.pipes.clear(true, true); this.sensors.clear(true, true); this.bonuses.clear(true, true);
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 320, 0x12323a, 0.92).setDepth(100);
@@ -406,20 +348,17 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on('pointerdown', ()=> this.scene.restart());
 
-    // Envoi du score (si dans Telegram) puis affichage du leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
   }
 
-  // overlay de ranking in-game
   showLeaderboard(list){
     const W = this.scale.width, H = this.scale.height;
     const depth = 300;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
+    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
 
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
