@@ -11,8 +11,8 @@
 const TG = window.Telegram?.WebApp || null;
 if (TG) {
   try {
-    TG.ready();       // prêt
-    TG.expand();      // pleine hauteur (optionnel)
+    TG.ready();
+    TG.expand();
   } catch {}
 }
 
@@ -24,7 +24,7 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,   // px/s (vers la gauche)
   gap: 270,          // ouverture par défaut
-  spawnDelay: 2000   // rythme proche Flappy Bird
+  spawnDelay: 2000   // rythme proche Flappy Bird (ms)
 };
 
 const PAD = 2;
@@ -172,8 +172,9 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    // Planificateur de spawn sans timer
-    this.nextSpawnAt = Number.POSITIVE_INFINITY;
+    // Remplace le timer par un cooldown
+    this.spawnCooldown = 0;     // ms restant avant prochain spawn
+    this.lastTime = 0;          // mémorise le timestamp précédent (ms)
   }
 
   create(){
@@ -235,7 +236,7 @@ class GameScene extends Phaser.Scene {
       this.addScore(1);
     }, null, this);
 
-    // ✅ Overlap bonus (correctif)
+    // Bonus
     this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
       if (!bonus.active) return;
       bonus.destroy();
@@ -244,6 +245,9 @@ class GameScene extends Phaser.Scene {
 
     // Première paire (affichée mais immobile tant que le jeu n’a pas commencé)
     this.spawnPair(true);
+
+    // Init du “time”
+    this.lastTime = this.time.now;
   }
 
   onTap(){
@@ -260,8 +264,8 @@ class GameScene extends Phaser.Scene {
       this.pipes.children.iterate(p => p?.body?.setVelocityX(PROFILE.pipeSpeed));
       this.sensors.children.iterate(s => s?.body?.setVelocityX(PROFILE.pipeSpeed));
 
-      // Première échéance de spawn (remplace les timers)
-      this.nextSpawnAt = this.time.now + PROFILE.spawnDelay;
+      // Démarre le cooldown
+      this.spawnCooldown = PROFILE.spawnDelay;
 
       try { TG?.expand?.(); } catch {}
     }
@@ -270,17 +274,6 @@ class GameScene extends Phaser.Scene {
 
   update(){
     if (this.isOver) return;
-
-    // ⬇️ Spawner indépendant des timers (rattrape si throttling)
-    if (this.started) {
-      const now = this.time.now;
-      let spawned = 0;
-      while (now >= this.nextSpawnAt && spawned < 3) {
-        this.spawnPair(false);
-        this.nextSpawnAt += PROFILE.spawnDelay;
-        spawned++;
-      }
-    }
 
     // Inclinaison du joueur
     const vy = this.player.body.velocity.y;
@@ -295,6 +288,19 @@ class GameScene extends Phaser.Scene {
     });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
+
+    // ---------- Spawner SANS timer (robuste WebView) ----------
+    const now = this.time.now;
+    const dt  = now - this.lastTime;      // delta ms
+    this.lastTime = now;
+
+    if (this.started) {
+      this.spawnCooldown -= dt;
+      if (this.spawnCooldown <= 0) {
+        this.spawnPair(false);
+        this.spawnCooldown += PROFILE.spawnDelay; // réarme
+      }
+    }
   }
 
   // ========= Génération d’une paire (pipes light only) =========
@@ -393,10 +399,9 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    // Arrêt du planificateur
-    this.nextSpawnAt = Number.POSITIVE_INFINITY;
+    // plus de timer, mais on garde cette ligne au cas où
+    this.time.removeAllEvents();
 
-    // Nettoyage visuel
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
