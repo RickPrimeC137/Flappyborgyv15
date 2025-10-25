@@ -1,37 +1,34 @@
-/* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard) */
-/* Domaine du jeu : https://flappyborgyv15.onrender.com
-   API : https://rickprimec137-flappyborgyv15.onrender.com  (modifie si besoin)
+/* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
+   Domaine du jeu : https://flappyborgyv15.onrender.com
+   API : https://rickprimec137-flappyborgyv15.onrender.com
 
    Endpoints côté serveur:
      POST /api/score                  { score:number, initData:string }
      GET  /api/leaderboard?limit=10  -> { ok:true, list:[{name,best}] }
 */
 
-// ========== Telegram WebApp (SDK déjà inclus dans index.html) ==========
+// ====== Telegram WebApp (SDK déjà inclus dans index.html) ======
 const TG = window.Telegram?.WebApp || null;
 if (TG) {
-  try {
-    TG.ready();
-    TG.expand();
-  } catch {}
+  try { TG.ready(); TG.expand(); } catch {}
 }
 
-// ========== Constantes jeu ==========
+// ====== Constantes jeu ======
 const GAME_W = 1024, GAME_H = 1536;
+const DEBUG_SPAWN = false;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
   pipeSpeed: -220,   // px/s (vers la gauche)
   gap: 270,          // ouverture par défaut
-  spawnDelay: 2000   // rythme proche Flappy Bird (ms)
+  spawnDelay: 2000   // rythme proche Flappy Bird
 };
 
 const PAD = 2;
 const PIPE_BODY_W = 0.92;      // % largeur utile hitbox
 const PIPE_W_DISPLAY = 180;    // largeur visuelle du tuyau
-
-const PLAYER_SCALE = 0.17;     // taille Borgy pour 1536px de haut
+const PLAYER_SCALE = 0.17;     // taille Borgy
 
 // Calibrage pour l'image 1024x1536
 const BG_KEY = 'bg_mountains';
@@ -40,11 +37,11 @@ const PLAYFIELD_BOT_PCT = 0.90;   // ~1382 px
 const PIPE_RIM_MAX_PCT  = 0.82;   // ~1259 px (au-dessus des rails)
 
 // Visuel/robustesse
-const PIPE_OVERSCAN = 160;   // couvre tout l'écran sans jour
-const JOINT_OVERLAP = 1;     // chevauchement au joint
-const KILL_MARGIN   = 260;   // kill à gauche
+const PIPE_OVERSCAN = 160;
+const JOINT_OVERLAP = 1;
+const KILL_MARGIN   = 260;
 
-// Kill-bands: empêche de “passer” tout en haut/bas
+// Kill-bands
 const ENABLE_KILL_BANDS = true;
 
 // Bonus
@@ -55,14 +52,13 @@ const BONUS_DURATION = 10000;
 // ================== LEADERBOARD (client) ==================
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 
-// renvoie la string initData Telegram (ou null hors Telegram)
 function tgInitData(){
   try { return TG?.initData || null; }
   catch { return null; }
 }
 async function postScore(score){
   const initData = tgInitData();
-  if (!initData) return; // hors Telegram => on n’envoie pas
+  if (!initData) return;
   try{
     await fetch(`${API_BASE}/api/score`, {
       method:"POST",
@@ -172,9 +168,10 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    // Remplace le timer par un cooldown
-    this.spawnCooldown = 0;     // ms restant avant prochain spawn
-    this.lastTime = 0;          // mémorise le timestamp précédent (ms)
+    // Timers robustes
+    this.spawnEvent = null;         // timer Phaser
+    this.spawnIntervalId = null;    // fallback setInterval
+    this.lastSpawnAt = performance.now(); // time guard
   }
 
   create(){
@@ -235,19 +232,14 @@ class GameScene extends Phaser.Scene {
       sensor.destroy();
       this.addScore(1);
     }, null, this);
-
-    // Bonus
     this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     }, null, this);
 
-    // Première paire (affichée mais immobile tant que le jeu n’a pas commencé)
+    // Première paire
     this.spawnPair(true);
-
-    // Init du “time”
-    this.lastTime = this.time.now;
   }
 
   onTap(){
@@ -260,12 +252,29 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // Met en mouvement la paire initiale si présente
+      // Met en mouvement la paire initiale
       this.pipes.children.iterate(p => p?.body?.setVelocityX(PROFILE.pipeSpeed));
       this.sensors.children.iterate(s => s?.body?.setVelocityX(PROFILE.pipeSpeed));
 
-      // Démarre le cooldown
-      this.spawnCooldown = PROFILE.spawnDelay;
+      // Timer de spawn (Phaser)
+      this.spawnEvent = this.time.addEvent({
+        delay: PROFILE.spawnDelay,
+        loop: true,
+        callback: () => {
+          if (DEBUG_SPAWN) console.log('[spawn] Phaser timer');
+          this.spawnPair(false);
+        }
+      });
+
+      // Fallback setInterval (au cas où le timer serait throttle)
+      this.spawnIntervalId = setInterval(() => {
+        if (this.isOver || !this.started) return;
+        const now = performance.now();
+        if (now - this.lastSpawnAt >= PROFILE.spawnDelay * 1.1) {
+          if (DEBUG_SPAWN) console.warn('[spawn] setInterval fallback');
+          this.spawnPair(false);
+        }
+      }, Math.max(300, Math.floor(PROFILE.spawnDelay / 4)));
 
       try { TG?.expand?.(); } catch {}
     }
@@ -289,16 +298,12 @@ class GameScene extends Phaser.Scene {
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
-    // ---------- Spawner SANS timer (robuste WebView) ----------
-    const now = this.time.now;
-    const dt  = now - this.lastTime;      // delta ms
-    this.lastTime = now;
-
-    if (this.started) {
-      this.spawnCooldown -= dt;
-      if (this.spawnCooldown <= 0) {
+    // Garde-fou : si le prochain spawn est "en retard", on force
+    if (this.started && !this.isOver) {
+      const now = performance.now();
+      if (now - this.lastSpawnAt > PROFILE.spawnDelay * 1.6) {
+        if (DEBUG_SPAWN) console.warn('[spawn] guard in update()');
         this.spawnPair(false);
-        this.spawnCooldown += PROFILE.spawnDelay; // réarme
       }
     }
   }
@@ -321,9 +326,9 @@ class GameScene extends Phaser.Scene {
     const gapY = Phaser.Math.Between(minY, maxY);
 
     const x = W + PIPE_W_DISPLAY * 0.6;
-    const vx = this.started ? PROFILE.pipeSpeed : 0;   // immobile avant le tap
+    const vx = this.started ? PROFILE.pipeSpeed : 0;
 
-    // Sprites tuyaux (uniquement light)
+    // Sprites tuyaux
     const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(6).setOrigin(0.5, 0);
 
@@ -371,6 +376,8 @@ class GameScene extends Phaser.Scene {
     this.sensors.add(sensor);
 
     this.pairsSpawned++;
+    this.lastSpawnAt = performance.now();
+    if (DEBUG_SPAWN) console.log(`[spawn] pair #${this.pairsSpawned} @x=${x}`);
 
     // Bonus éventuel
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
@@ -399,9 +406,12 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    // plus de timer, mais on garde cette ligne au cas où
+    // Stop timers
+    if (this.spawnEvent) { this.spawnEvent.remove(false); this.spawnEvent = null; }
+    if (this.spawnIntervalId) { clearInterval(this.spawnIntervalId); this.spawnIntervalId = null; }
     this.time.removeAllEvents();
 
+    // Nettoyage
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
@@ -419,7 +429,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on('pointerdown', ()=> this.scene.restart());
 
-    // Envoi du score (si dans Telegram) puis affichage du leaderboard
+    // Envoi du score + leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
