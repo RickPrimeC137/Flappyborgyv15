@@ -3,48 +3,38 @@
    API : https://rickprimec137-flappyborgyv15.onrender.com
 */
 
-// ========== Telegram WebApp ==========
 const TG = window.Telegram?.WebApp || null;
 if (TG) { try { TG.ready(); TG.expand(); } catch {} }
 
-// ========== Constantes jeu ==========
+// ========= Constantes jeu =========
 const GAME_W = 1024, GAME_H = 1536;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,   // px/s (vers la gauche)
-  gap: 270,          // ouverture par défaut
-  spawnDelay: 2000   // rythme proche Flappy Bird
+  pipeSpeed: -220,
+  gap: 270,
+  spawnDelay: 2000
 };
 
 const PAD = 2;
-const PIPE_BODY_W = 0.92;      // % largeur utile hitbox
-const PIPE_W_DISPLAY = 180;    // largeur visuelle du tuyau
-const PLAYER_SCALE = 0.17;     // taille Borgy pour 1536px de haut
+const PIPE_BODY_W = 0.92;
+const PIPE_W_DISPLAY = 180;
+const PLAYER_SCALE = 0.17;
 
 const BG_KEY = 'bg_mountains';
+const PLAYFIELD_TOP_PCT = 0.16;
+const PLAYFIELD_BOT_PCT = 0.90;
+const PIPE_RIM_MAX_PCT  = 0.82;
 
-// ⚠️ Réglages élargis pour s’adapter à tout fond
-const PLAYFIELD_TOP_PCT = 0.08;  // plus haut = plus de place
-const PLAYFIELD_BOT_PCT = 0.97;  // plus bas  = plus de place
-const PIPE_RIM_MAX_PCT  = 0.97;  // ne bride plus la base
+const PIPE_OVERSCAN = 160;
+const JOINT_OVERLAP = 1;
+const KILL_MARGIN   = 260;
 
-// Visuel/robustesse
-const PIPE_OVERSCAN = 220;   // couvre tout l'écran sans jour
-const JOINT_OVERLAP = 1;     // chevauchement au joint
-const KILL_MARGIN   = 260;   // kill à gauche
-
-// Kill-bands: empêche de “passer” tout en haut/bas
 const ENABLE_KILL_BANDS = true;
-
-// Bonus
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
-
-// (debug facultatif)
-const DEBUG_GUIDES = false;   // passe à true pour afficher des lignes repères
 
 // ================== LEADERBOARD (client) ==================
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
@@ -83,9 +73,9 @@ class PreloadScene extends Phaser.Scene {
     this.load.image(BG_KEY, 'bg_mountains.jpg');
     this.load.image('borgy', 'borgy_ingame.png');
 
-    // PIPES: uniquement la variante "light"
-    this.load.image('pipe_top',    'pipe_light_top.png');
-    this.load.image('pipe_bottom', 'pipe_light_bottom.png');
+    // 👉 Anti-cache pour les tuyaux
+    this.load.image('pipe_top',    'pipe_light_top.png?v=2');
+    this.load.image('pipe_bottom', 'pipe_light_bottom.png?v=2');
 
     if (ENABLE_BONUS) this.load.image('bonus_sb', 'sb_token_user.png');
   }
@@ -162,51 +152,35 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    // Accumulateur de spawn basé sur delta (robuste WebView)
+    // Accumulateur pour spawns (fiable WebView)
     this.spawnAcc = 0;
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // Fond
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Repères visuels (debug)
-    if (DEBUG_GUIDES){
-      const t = Math.round(H * PLAYFIELD_TOP_PCT);
-      const b = Math.round(H * PLAYFIELD_BOT_PCT);
-      const r = Math.round(H * PIPE_RIM_MAX_PCT);
-      this.add.line(W/2, t, 0, 0, W, 0, 0xff0000, 0.6).setDepth(99);
-      this.add.line(W/2, b, 0, 0, W, 0, 0x00ff00, 0.6).setDepth(99);
-      this.add.line(W/2, r, 0, 0, W, 0, 0x0000ff, 0.6).setDepth(99);
-    }
-
-    // Groupes
     this.pipes   = this.physics.add.group();
     this.sensors = this.physics.add.group();
     this.bonuses = this.physics.add.group();
 
-    // Input
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on('pointerdown', () => this.onTap());
     this.input.keyboard.on('keydown-SPACE', () => this.onTap());
 
-    // UI
     this.scoreText = this.add.text(24, 18, 'Score: 0', {
       fontFamily:'monospace', fontSize:46, color:'#fff', stroke:'#0a3a38', strokeThickness:8
     }).setDepth(20);
 
-    // Joueur
     this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), 'borgy')
       .setScale(PLAYER_SCALE)
       .setDepth(10)
       .setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
 
-    // Hitbox
     const pw = this.player.displayWidth;
     const ph = this.player.displayHeight;
     this.player.body
@@ -214,7 +188,6 @@ class GameScene extends Phaser.Scene {
       .setOffset(pw * 0.215, ph * 0.20);
     this.player.setGravityY(0);
 
-    // Kill-bands
     if (ENABLE_KILL_BANDS){
       const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
       const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
@@ -226,7 +199,6 @@ class GameScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
     }
 
-    // Collisions / overlaps
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_player, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
@@ -234,13 +206,14 @@ class GameScene extends Phaser.Scene {
       sensor.destroy();
       this.addScore(1);
     }, null, this);
+
     this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     }, null, this);
 
-    // Première paire (affichée mais immobile tant que le jeu n’a pas commencé)
+    // 1ʳᵉ paire affichée mais immobile
     this.spawnPair(true);
   }
 
@@ -254,11 +227,11 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // Met en mouvement la paire initiale si présente
+      // Met en mouvement la paire initiale
       this.pipes.children.iterate(p => p?.body?.setVelocityX(PROFILE.pipeSpeed));
       this.sensors.children.iterate(s => s?.body?.setVelocityX(PROFILE.pipeSpeed));
 
-      // Reset de l’accumulateur
+      // Reset de l’accumulateur de spawn
       this.spawnAcc = 0;
 
       try { TG?.expand?.(); } catch {}
@@ -310,12 +283,12 @@ class GameScene extends Phaser.Scene {
     if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
-    const x = W + PIPE_W_DISPLAY * 0.6;
-    const vx = this.started ? PROFILE.pipeSpeed : 0;   // immobile avant le tap
+    // 👉 Entre plus vite dans l’écran
+    const x  = W + 40;
+    const vx = this.started ? PROFILE.pipeSpeed : 0;
 
-    // Sprites tuyaux (uniquement light)
-    const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(6).setOrigin(0.5, 1);
-    const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(6).setOrigin(0.5, 0);
+    const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setOrigin(0.5, 1).setDepth(50);
+    const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setOrigin(0.5, 0).setDepth(50);
 
     const scaleXt  = PIPE_W_DISPLAY / topImg.width;
     const scaleXb  = PIPE_W_DISPLAY / bottomImg.width;
@@ -332,7 +305,6 @@ class GameScene extends Phaser.Scene {
     topImg.y    = yTopRim;
     bottomImg.y = yBottomRim;
 
-    // Bodies & mouvement
     const displayWt = topImg.width * scaleXt;
     topImg.setImmovable(true).body.setAllowGravity(false);
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
@@ -348,7 +320,6 @@ class GameScene extends Phaser.Scene {
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
-    // Sensor score
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
@@ -360,18 +331,17 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // Bonus éventuel
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
         H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
       const bonus = this.physics.add.image(x + 520, by, 'bonus_sb')
-        .setDepth(7).setScale(0.55).setImmovable(true);
+        .setDepth(55).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
       bonus.body.setVelocityX(PROFILE.pipeSpeed);
       this.bonuses.add(bonus);
     }
 
-    // petit log de debug
+    // debug court
     try { console.log('[spawn] pair', { x, gapY, GAP, vx }); } catch {}
   }
 
@@ -407,13 +377,11 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on('pointerdown', ()=> this.scene.restart());
 
-    // Envoi du score puis leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
   }
 
-  // overlay de ranking in-game
   showLeaderboard(list){
     const W = this.scale.width, H = this.scale.height;
     const depth = 300;
