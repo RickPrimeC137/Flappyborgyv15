@@ -45,9 +45,12 @@ const KILL_MARGIN   = 260;
 const ENABLE_KILL_BANDS = true;
 
 // Bonus
-const ENABLE_BONUS   = true;
-const BONUS_EVERY    = 30;
+const ENABLE_BONUS = true;
+const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
+
+// DEBUG: forcer les N premières paires à apparaître à l’écran
+const FORCE_ONSCREEN_FIRST_N = 3;
 
 /* ================== LEADERBOARD (client) ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
