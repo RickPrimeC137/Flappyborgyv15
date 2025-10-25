@@ -1,61 +1,55 @@
 /* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
-   Domaine du jeu : https://flappyborgyv15.onrender.com
+   Domaine du jeu : https://flappyborgyv15-1.onrender.com (statique)
    API : https://rickprimec137-flappyborgyv15.onrender.com
-
-   Endpoints côté serveur:
-     POST /api/score                  { score:number, initData:string }
-     GET  /api/leaderboard?limit=10   -> { ok:true, list:[{name,best}] }
 */
 
-// ========= Telegram WebApp (SDK déjà inclus dans index.html) =========
+/* ================== DEBUG ================== */
+const DEBUG_SPAWN = true;       // mets false pour couper les logs
+/* =========================================== */
+
+/* ========== Telegram WebApp ========== */
 const TG = window.Telegram?.WebApp || null;
 if (TG) {
-  try {
-    TG.ready();       // prêt
-    TG.expand();      // pleine hauteur
-  } catch {}
+  try { TG.ready(); TG.expand(); } catch {}
 }
 
-// ========= Constantes jeu =========
+/* ========== Constantes jeu ========== */
 const GAME_W = 1024, GAME_H = 1536;
-
-// Debug pipe spawn (visible + logs). Laisser à false en prod.
-const DEBUG_SPAWN = false;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,   // px/s (vers la gauche)
-  gap: 270,          // ouverture par défaut
-  spawnDelay: 2000   // rythme proche Flappy Bird
+  pipeSpeed: -220,    // px/s (vers la gauche)
+  gap: 270,           // ouverture par défaut
+  spawnDelay: 2000    // intervalle entre paires
 };
 
 const PAD = 2;
-const PIPE_BODY_W = 0.92;      // % largeur utile hitbox
-const PIPE_W_DISPLAY = 180;    // largeur visuelle du tuyau
+const PIPE_BODY_W = 0.92;       // largeur utile hitbox en %
+const PIPE_W_DISPLAY = 180;     // largeur visuelle du tuyau
 
-const PLAYER_SCALE = 0.17;     // taille Borgy pour 1536px de haut
+const PLAYER_SCALE = 0.17;
 
 // Calibrage pour l'image 1024x1536
 const BG_KEY = 'bg_mountains';
-const PLAYFIELD_TOP_PCT = 0.16;   // ~246 px
-const PLAYFIELD_BOT_PCT = 0.90;   // ~1382 px
-const PIPE_RIM_MAX_PCT  = 0.82;   // ~1259 px (au-dessus des rails)
+const PLAYFIELD_TOP_PCT = 0.16;  // ~246 px
+const PLAYFIELD_BOT_PCT = 0.90;  // ~1382 px
+const PIPE_RIM_MAX_PCT  = 0.82;  // ~1259 px (au-dessus des rails)
 
 // Visuel/robustesse
-const PIPE_OVERSCAN = 160;   // couvre tout l'écran sans jour
-const JOINT_OVERLAP = 1;     // chevauchement au joint
-const KILL_MARGIN   = 260;   // kill à gauche
+const PIPE_OVERSCAN = 160;
+const JOINT_OVERLAP = 1;
+const KILL_MARGIN   = 260;
 
-// Kill-bands: empêche de “passer” tout en haut/bas
+// Kill-bands
 const ENABLE_KILL_BANDS = true;
 
 // Bonus
-const ENABLE_BONUS = true;
-const BONUS_EVERY = 30;
+const ENABLE_BONUS   = true;
+const BONUS_EVERY    = 30;
 const BONUS_DURATION = 10000;
 
-// ================== LEADERBOARD (client) ==================
+/* ================== LEADERBOARD (client) ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 
 // renvoie la string initData Telegram (ou null hors Telegram)
@@ -63,6 +57,7 @@ function tgInitData(){
   try { return TG?.initData || null; }
   catch { return null; }
 }
+
 async function postScore(score){
   const initData = tgInitData();
   if (!initData) return; // hors Telegram => on n’envoie pas
@@ -74,6 +69,7 @@ async function postScore(score){
     });
   }catch(e){ console.warn("score post error", e); }
 }
+
 async function fetchLeaderboard(limit=10){
   try{
     const r = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}`);
@@ -93,7 +89,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.on('progress', p => { fg.width = (W*0.52) * p; pct.setText(Math.round(p*100)+'%'); });
 
     this.load.setPath('assets');
-    this.load.image(BG_KEY, 'bg_mountains.jpg'); // JPG
+    this.load.image(BG_KEY, 'bg_mountains.jpg');
     this.load.image('borgy', 'borgy_ingame.png');
 
     // PIPES: uniquement la variante "light"
@@ -175,7 +171,7 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    this.spawnEvent = null;
+    this.globalSpawn = null; // timer global
   }
 
   create(){
@@ -237,12 +233,24 @@ class GameScene extends Phaser.Scene {
       this.addScore(1);
     }, null, this);
 
-    // Overlap bonus
-    this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
-      if (!bonus.active) return;
-      bonus.destroy();
-      this.activateMultiplier();
-    }, null, this);
+    // Overlap bonus (si activé)
+    if (ENABLE_BONUS){
+      this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
+        if (!bonus.active) return;
+        bonus.destroy();
+        this.activateMultiplier();
+      }, null, this);
+    }
+
+    // Timer global prêt mais PAUSÉ (démarré au 1er tap)
+    this.globalSpawn = this.time.addEvent({
+      delay: PROFILE.spawnDelay,
+      loop: true,
+      paused: true,
+      callback: () => {
+        if (!this.isOver && this.started) this.spawnPair(false);
+      }
+    });
 
     // Première paire (affichée mais immobile tant que le jeu n’a pas commencé)
     this.spawnPair(true);
@@ -258,16 +266,12 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // Met en mouvement la paire initiale si présente
+      // Met en mouvement la paire initiale
       this.pipes.children.iterate(p => p?.body?.setVelocityX(PROFILE.pipeSpeed));
       this.sensors.children.iterate(s => s?.body?.setVelocityX(PROFILE.pipeSpeed));
 
-      // Timer de spawn
-      this.spawnEvent = this.time.addEvent({
-        delay: PROFILE.spawnDelay,
-        loop: true,
-        callback: () => this.spawnPair(false)
-      });
+      // Démarre le timer global
+      if (this.globalSpawn) this.globalSpawn.paused = false;
 
       try { TG?.expand?.(); } catch {}
     }
@@ -292,7 +296,7 @@ class GameScene extends Phaser.Scene {
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
   }
 
-  // ========= Génération d’une paire (pipes light only) =========
+  // ========= Génération d’une paire =========
   spawnPair(silentFirst){
     const W = this.scale.width, H = this.scale.height;
 
@@ -309,21 +313,21 @@ class GameScene extends Phaser.Scene {
     if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
-    // ✅ Spawn hors-écran à droite (~90px)
-    const x  = W + Math.ceil(PIPE_W_DISPLAY * 0.5);
-    const vx = this.started ? PROFILE.pipeSpeed : 0;   // immobile avant le tap
+    // Hors écran à droite (sécurisé)
+    const x  = W + Math.max(90, PIPE_W_DISPLAY);
+    const vx = this.started ? PROFILE.pipeSpeed : 0;
 
-    if (DEBUG_SPAWN) {
+    if (DEBUG_SPAWN){
+      console.log('[spawn] pair', { x, gapY, vx, t: (this.time.now|0) });
       const mark = this.add.rectangle(x, H/2, 4, H, 0xff00ff, 0.25).setDepth(9999);
-      this.time.delayedCall(400, () => mark.destroy());
-      console.log('[spawn] pair', { x, gapY, vx });
+      this.time.delayedCall(350, () => mark.destroy());
     }
 
-    // Sprites tuyaux (uniquement light)
+    // Sprites tuyaux
     const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(50).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(50).setOrigin(0.5, 0);
 
-    const nativeWt = topImg.width,  nativeHt = topImg.height;
+    const nativeWt = topImg.width,    nativeHt = topImg.height;
     const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXt  = PIPE_W_DISPLAY / nativeWt;
     const scaleXb  = PIPE_W_DISPLAY / nativeWb;
@@ -395,9 +399,11 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    if (this.spawnEvent) { this.spawnEvent.remove(false); this.spawnEvent = null; }
-    this.time.removeAllEvents();
+    // Re-pause le timer de spawn
+    if (this.globalSpawn) this.globalSpawn.paused = true;
 
+    // nettoie tout
+    this.time.removeAllEvents();
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
