@@ -1,20 +1,26 @@
 /* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
-   Domaine front : https://flappyborgyv15.onrender.com
+   Domaine du jeu : https://flappyborgyv15.onrender.com
    API : https://rickprimec137-flappyborgyv15.onrender.com
 
    Endpoints côté serveur:
      POST /api/score                  { score:number, initData:string }
-     GET  /api/leaderboard?limit=10  -> { ok:true, list:[{name,best}] }
+     GET  /api/leaderboard?limit=10   -> { ok:true, list:[{name,best}] }
 */
 
-// ========== Telegram WebApp (SDK déjà inclus dans index.html) ==========
+// ========= Telegram WebApp (SDK déjà inclus dans index.html) =========
 const TG = window.Telegram?.WebApp || null;
 if (TG) {
-  try { TG.ready(); TG.expand(); } catch {}
+  try {
+    TG.ready();       // prêt
+    TG.expand();      // pleine hauteur
+  } catch {}
 }
 
-// ========== Constantes jeu ==========
+// ========= Constantes jeu =========
 const GAME_W = 1024, GAME_H = 1536;
+
+// Debug pipe spawn (visible + logs). Laisser à false en prod.
+const DEBUG_SPAWN = false;
 
 const PROFILE = {
   gravity: 1400,
@@ -25,38 +31,41 @@ const PROFILE = {
 };
 
 const PAD = 2;
-const PIPE_BODY_W   = 0.92;  // % largeur utile hitbox
-const PIPE_W_DISPLAY = 180;  // largeur visuelle du tuyau
-const PLAYER_SCALE   = 0.17;
+const PIPE_BODY_W = 0.92;      // % largeur utile hitbox
+const PIPE_W_DISPLAY = 180;    // largeur visuelle du tuyau
 
+const PLAYER_SCALE = 0.17;     // taille Borgy pour 1536px de haut
+
+// Calibrage pour l'image 1024x1536
 const BG_KEY = 'bg_mountains';
-const PLAYFIELD_TOP_PCT = 0.16;  // ~246 px
-const PLAYFIELD_BOT_PCT = 0.90;  // ~1382 px
-const PIPE_RIM_MAX_PCT  = 0.82;  // ~1259 px
+const PLAYFIELD_TOP_PCT = 0.16;   // ~246 px
+const PLAYFIELD_BOT_PCT = 0.90;   // ~1382 px
+const PIPE_RIM_MAX_PCT  = 0.82;   // ~1259 px (au-dessus des rails)
 
-const PIPE_OVERSCAN = 160;
-const JOINT_OVERLAP = 1;
-const KILL_MARGIN   = 260;
+// Visuel/robustesse
+const PIPE_OVERSCAN = 160;   // couvre tout l'écran sans jour
+const JOINT_OVERLAP = 1;     // chevauchement au joint
+const KILL_MARGIN   = 260;   // kill à gauche
 
+// Kill-bands: empêche de “passer” tout en haut/bas
 const ENABLE_KILL_BANDS = true;
 
 // Bonus
-const ENABLE_BONUS   = true;
-const BONUS_EVERY    = 30;
+const ENABLE_BONUS = true;
+const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
-
-// ===== Debug =====
-const DEBUG_SPAWN = true; // mets à false quand tout est ok
 
 // ================== LEADERBOARD (client) ==================
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 
+// renvoie la string initData Telegram (ou null hors Telegram)
 function tgInitData(){
-  try { return TG?.initData || null; } catch { return null; }
+  try { return TG?.initData || null; }
+  catch { return null; }
 }
 async function postScore(score){
   const initData = tgInitData();
-  if (!initData) return;
+  if (!initData) return; // hors Telegram => on n’envoie pas
   try{
     await fetch(`${API_BASE}/api/score`, {
       method:"POST",
@@ -193,9 +202,10 @@ class GameScene extends Phaser.Scene {
     }).setDepth(20);
 
     // Joueur
-    this.player = this.physics.add.sprite(
-      W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), 'borgy'
-    ).setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
+    this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), 'borgy')
+      .setScale(PLAYER_SCALE)
+      .setDepth(10)
+      .setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
 
     // Hitbox
@@ -218,7 +228,7 @@ class GameScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
     }
 
-    // Collisions/overlaps
+    // Collisions & overlaps
     this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_player, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
@@ -227,7 +237,7 @@ class GameScene extends Phaser.Scene {
       this.addScore(1);
     }, null, this);
 
-    // Bonus
+    // Overlap bonus
     this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
       if (!bonus.active) return;
       bonus.destroy();
@@ -299,9 +309,9 @@ class GameScene extends Phaser.Scene {
     if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
-    // *** Nouveau : spawn visible au bord droit ***
-    const x  = W - (PIPE_W_DISPLAY * 0.5) - 2;
-    const vx = this.started ? PROFILE.pipeSpeed : 0;
+    // ✅ Spawn hors-écran à droite (~90px)
+    const x  = W + Math.ceil(PIPE_W_DISPLAY * 0.5);
+    const vx = this.started ? PROFILE.pipeSpeed : 0;   // immobile avant le tap
 
     if (DEBUG_SPAWN) {
       const mark = this.add.rectangle(x, H/2, 4, H, 0xff00ff, 0.25).setDepth(9999);
@@ -310,11 +320,11 @@ class GameScene extends Phaser.Scene {
     }
 
     // Sprites tuyaux (uniquement light)
-    const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setOrigin(0.5, 1).setDepth(50);
-    const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setOrigin(0.5, 0).setDepth(50);
+    const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(50).setOrigin(0.5, 1);
+    const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(50).setOrigin(0.5, 0);
 
-    const nativeWt = topImg.width,     nativeHt = topImg.height;
-    const nativeWb = bottomImg.width,  nativeHb = bottomImg.height;
+    const nativeWt = topImg.width,  nativeHt = topImg.height;
+    const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
     const scaleXt  = PIPE_W_DISPLAY / nativeWt;
     const scaleXb  = PIPE_W_DISPLAY / nativeWb;
 
@@ -346,7 +356,7 @@ class GameScene extends Phaser.Scene {
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
-    // Sensor score (au milieu du gap, collé au bord droit de la hitbox)
+    // Sensor score
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
@@ -405,6 +415,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on('pointerdown', ()=> this.scene.restart());
 
+    // Envoi du score (si dans Telegram) puis affichage du leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
