@@ -221,8 +221,7 @@ class GameScene extends Phaser.Scene {
       this.activateMultiplier();
     }, null, this);
 
-    // Première paire (affichée mais immobile tant que pas démarré)
-    this.spawnPair(true);
+    // ⚠️ AUCUNE PAIRE AU DEMARRAGE (on attend le premier tap)
   }
 
   onTap(){
@@ -235,11 +234,10 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // Met en mouvement la paire initiale si présente
-      this.pipes.children.iterate(p => p?.body?.setVelocityX(PROFILE.pipeSpeed));
-      this.sensors.children.iterate(s => s?.body?.setVelocityX(PROFILE.pipeSpeed));
+      // ▶️ Génère immédiatement la 1ʳᵉ paire au premier tap
+      this.spawnPair(false);
 
-      // Reset de l’accumulateur
+      // Reset de l’accumulateur pour que la suivante arrive après spawnDelay
       this.spawnAcc = 0;
 
       try { TG?.expand?.(); } catch {}
@@ -295,7 +293,7 @@ class GameScene extends Phaser.Scene {
     if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
-    // X de spawn : toujours hors écran à droite (évite les “loin et mal”)
+    // X de spawn : toujours hors écran à droite
     const x = W + PIPE_W_DISPLAY;
     const vx = this.started ? PROFILE.pipeSpeed : 0; // immobile avant le tap
 
