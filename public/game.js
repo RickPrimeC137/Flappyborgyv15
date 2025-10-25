@@ -296,93 +296,112 @@ class GameScene extends Phaser.Scene {
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
   }
 
-  // ========= Génération d’une paire =========
-  spawnPair(silentFirst){
-    const W = this.scale.width, H = this.scale.height;
+// === debug: force les N premières paires à spawn dans l'écran ===
+const FORCE_ONSCREEN_FIRST_N = 3;
 
-    const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
-    const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
-    const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
+spawnPair(silentFirst){
+  const W = this.scale.width, H = this.scale.height;
 
-    const playable = Math.max(40, BOT_BAND - TOP_BAND);
-    const MIN_GAP = 90;
-    const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
+  const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
+  const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
+  const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
 
-    let minY = TOP_BAND + Math.floor(GAP/2);
-    let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
-    if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
-    const gapY = Phaser.Math.Between(minY, maxY);
+  const playable = Math.max(40, BOT_BAND - TOP_BAND);
+  const MIN_GAP = 90;
+  const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
 
-    // Hors écran à droite (sécurisé)
-    const x  = W + Math.max(90, PIPE_W_DISPLAY);
-    const vx = this.started ? PROFILE.pipeSpeed : 0;
+  let minY = TOP_BAND + Math.floor(GAP/2);
+  let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
+  if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
+  const gapY = Phaser.Math.Between(minY, maxY);
 
-    if (DEBUG_SPAWN){
-      console.log('[spawn] pair', { x, gapY, vx, t: (this.time.now|0) });
-      const mark = this.add.rectangle(x, H/2, 4, H, 0xff00ff, 0.25).setDepth(9999);
-      this.time.delayedCall(350, () => mark.destroy());
-    }
+  // --- position X de spawn ---
+  let x  = W + Math.max(90, PIPE_W_DISPLAY);     // hors écran à droite (par défaut)
+  let vx = this.started ? PROFILE.pipeSpeed : 0;
 
-    // Sprites tuyaux
-    const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(50).setOrigin(0.5, 1);
-    const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(50).setOrigin(0.5, 0);
-
-    const nativeWt = topImg.width,    nativeHt = topImg.height;
-    const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
-    const scaleXt  = PIPE_W_DISPLAY / nativeWt;
-    const scaleXb  = PIPE_W_DISPLAY / nativeWb;
-
-    const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
-    const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
-
-    const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));
-    const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));
-
-    topImg.setScale(scaleXt, topH / nativeHt);
-    bottomImg.setScale(scaleXb, bottomH / nativeHb);
-
-    topImg.y    = yTopRim;
-    bottomImg.y = yBottomRim;
-
-    // Bodies & mouvement
-    const displayWt = nativeWt * scaleXt;
-    topImg.setImmovable(true).body.setAllowGravity(false);
-    topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
-    topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
-    topImg.body.setVelocityX(vx);
-
-    const displayWb = nativeWb * scaleXb;
-    bottomImg.setImmovable(true).body.setAllowGravity(false);
-    bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
-    bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
-    bottomImg.body.setVelocityX(vx);
-
-    this.pipes.add(topImg);
-    this.pipes.add(bottomImg);
-
-    // Sensor score
-    const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
-    const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
-    this.physics.add.existing(sensor, false);
-    sensor.body.setAllowGravity(false);
-    sensor.body.setImmovable(true);
-    sensor.body.setVelocityX(vx);
-    sensor.isScore = !silentFirst;
-    this.sensors.add(sensor);
-
-    this.pairsSpawned++;
-
-    // Bonus éventuel
-    if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
-        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
-      const bonus = this.physics.add.image(x + 520, by, 'bonus_sb')
-        .setDepth(55).setScale(0.55).setImmovable(true);
-      bonus.body.setAllowGravity(false);
-      bonus.body.setVelocityX(PROFILE.pipeSpeed);
-      this.bonuses.add(bonus);
-    }
+  // force à l'écran pour valider visuellement les 3 premières paires
+  if (this.pairsSpawned < FORCE_ONSCREEN_FIRST_N) {
+    x  = W - 10;          // visible immédiatement
+    vx = PROFILE.pipeSpeed;
   }
+
+  if (DEBUG_SPAWN){
+    console.log('[spawn] pair', { x, gapY, vx, t:(this.time.now|0) });
+    const mark = this.add.rectangle(x, H/2, 4, H, 0xff00ff, 0.25).setDepth(9999);
+    this.time.delayedCall(350, () => mark.destroy());
+  }
+
+  // --- création des sprites ---
+  const topImg    = this.physics.add.image(x, 0, 'pipe_top'   ).setDepth(100).setOrigin(0.5, 1);
+  const bottomImg = this.physics.add.image(x, 0, 'pipe_bottom').setDepth(100).setOrigin(0.5, 0);
+
+  // sécurité au cas où
+  topImg.setAlpha(1).clearTint();
+  bottomImg.setAlpha(1).clearTint();
+
+  const nativeWt = topImg.width,    nativeHt = topImg.height;
+  const nativeWb = bottomImg.width, nativeHb = bottomImg.height;
+  const scaleXt  = PIPE_W_DISPLAY / nativeWt;
+  const scaleXb  = PIPE_W_DISPLAY / nativeWb;
+
+  const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
+  const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
+
+  const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));
+  const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));
+
+  topImg.setScale(scaleXt, topH / nativeHt);
+  bottomImg.setScale(scaleXb, bottomH / nativeHb);
+
+  topImg.y    = yTopRim;
+  bottomImg.y = yBottomRim;
+
+  // bodies + mouvement
+  const displayWt = nativeWt * scaleXt;
+  topImg.setImmovable(true).body.setAllowGravity(false);
+  topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
+  topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
+  topImg.body.setVelocityX(vx);
+
+  const displayWb = nativeWb * scaleXb;
+  bottomImg.setImmovable(true).body.setAllowGravity(false);
+  bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
+  bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
+  bottomImg.body.setVelocityX(vx);
+
+  this.pipes.add(topImg);
+  this.pipes.add(bottomImg);
+
+  // capteur de score
+  const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
+  const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0).setDepth(101);
+  this.physics.add.existing(sensor, false);
+  sensor.body.setAllowGravity(false);
+  sensor.body.setImmovable(true);
+  sensor.body.setVelocityX(vx);
+  sensor.isScore = !silentFirst;
+  this.sensors.add(sensor);
+
+  // marqueurs visuels sur les lèvres (debug)
+  if (DEBUG_SPAWN){
+    const dot1 = this.add.circle(x, yTopRim,    6, 0x00ff00, 0.8).setDepth(110);
+    const dot2 = this.add.circle(x, yBottomRim, 6, 0x00ff00, 0.8).setDepth(110);
+    this.tweens.add({ targets:[dot1,dot2], alpha:0, duration:500, onComplete:()=>{dot1.destroy(); dot2.destroy();} });
+  }
+
+  this.pairsSpawned++;
+
+  // bonus éventuel
+  if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
+    const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
+      H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
+    const bonus = this.physics.add.image(x + 520, by, 'bonus_sb')
+      .setDepth(105).setScale(0.55).setImmovable(true);
+    bonus.body.setAllowGravity(false);
+    bonus.body.setVelocityX(PROFILE.pipeSpeed);
+    this.bonuses.add(bonus);
+  }
+}
 
   activateMultiplier(){
     this.multiplierActive = true;
