@@ -3,59 +3,62 @@
    API : https://rickprimec137-flappyborgyv15.onrender.com
 */
 
-// ========== Telegram WebApp ==========
+/* ================== Telegram WebApp ================== */
 const TG = window.Telegram?.WebApp || null;
 if (TG) { try { TG.ready(); TG.expand(); } catch {} }
 
-// ========== Constantes jeu ==========
+/* ================== Constantes jeu ================== */
 const GAME_W = 1024, GAME_H = 1536;
 
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,     // px/s vers la gauche (négatif)
+  pipeSpeed: -220,     // px/s vers la gauche (augmentera)
   gap: 270,            // ouverture par défaut
-  spawnDelay: 2000     // ms entre paires (base)
+  spawnDelay: 2000     // ms (réduit avec la difficulté)
 };
 
 const PAD = 2;
-const PIPE_BODY_W    = 0.92;  // % largeur utile hitbox
-const PIPE_W_DISPLAY = 180;   // largeur visuelle des tuyaux
-const PLAYER_SCALE   = 0.17;  // taille Borgy
+const PIPE_BODY_W    = 0.92;
+const PIPE_W_DISPLAY = 180;
+const PLAYER_SCALE   = 0.17;
 
-// Calibrage pour bg 1024x1536
-const BG_KEY            = "bg_mountains";
+const BG_KEY = "bg_mountains";
 const PLAYFIELD_TOP_PCT = 0.16;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
 
-// Visuel/robustesse
 const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
 const KILL_MARGIN   = 260;
 
-// Sécurité verticale
 const ENABLE_KILL_BANDS = true;
 
-// Bonus (désactivables)
-const ENABLE_BONUS   = true;
-const BONUS_EVERY    = 30;
+const ENABLE_BONUS = true;
+const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-// Aucune paire avant le premier tap
-const SHOW_FIRST_PAIR = false;
+/* ======= Difficulté / anti-superposition ======= */
+const DIFF = {
+  stepMs: 15000,            // toutes les 15 s
+  speedDelta: -20,          // +20 px/s vers la gauche
+  delayDelta: -150,         // -150 ms au rythme
+  minSpeed: -380,           // borne
+  minDelay: 1100,           // borne -> évite les colonnes trop serrées
+  cooldownMs: 250           // anti "burst" (1 spawn min. toutes 250 ms)
+};
+const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6; // position d'apparition
 
-// ================== LEADERBOARD (client) ==================
+/* ================== LEADERBOARD (client) ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
-
 function tgInitData(){ try { return TG?.initData || null; } catch { return null; } }
 async function postScore(score){
   const initData = tgInitData();
-  if (!initData) return; // hors Telegram => on n’envoie pas
+  if (!initData) return;
   try{
     await fetch(`${API_BASE}/api/score`, {
-      method:"POST",
-      headers:{ "Content-Type":"application/json" },
+      method: "POST",
+      headers: { "Content-Type":"application/json" },
       body: JSON.stringify({ score, initData })
     });
   }catch(e){ console.warn("score post error", e); }
@@ -160,17 +163,17 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    // Spawns (timer + accumulateur de secours)
-    this.spawnLoop = null;
-    this.spawnAcc  = 0;
+    // Horloge de spawn (évite les bursts et la superposition)
+    this.nextSpawnAt = Infinity;  // activé au 1er tap
+    this.lastSpawnMs = -1;
 
-    // Montée de difficulté
-    this.speedLevel = 0;
-    this.speedRampEvent = null;
+    // Progression
+    this.curSpeed = PROFILE.pipeSpeed;
+    this.curDelay = PROFILE.spawnDelay;
 
-    // Debug overlay
+    // Debug optionnel
     this.DEBUG = false;
-    this._dbg = null;
+    this.debugTxt = null;
   }
 
   create(){
@@ -186,7 +189,7 @@ class GameScene extends Phaser.Scene {
     this.sensors = this.physics.add.group();
     this.bonuses = this.physics.add.group();
 
-    // Inputs
+    // Input
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on("pointerdown", () => this.onTap());
     this.input.keyboard.on("keydown-SPACE", () => this.onTap());
@@ -197,7 +200,7 @@ class GameScene extends Phaser.Scene {
     }).setDepth(20);
 
     if (this.DEBUG){
-      this._dbg = this.add.text(14, 74, "", {fontFamily:"monospace", fontSize:16, color:"#bff"}).setDepth(20);
+      this.debugTxt = this.add.text(16, 64, "", { fontFamily: "monospace", fontSize: 16, color: "#bff" }).setDepth(20);
     }
 
     // Joueur
@@ -208,11 +211,8 @@ class GameScene extends Phaser.Scene {
     this.player.body.setAllowGravity(false);
 
     // Hitbox joueur
-    const pw = this.player.displayWidth;
-    const ph = this.player.displayHeight;
-    this.player.body
-      .setSize(pw * 0.45, ph * 0.45, true)
-      .setOffset(pw * 0.215, ph * 0.20);
+    const pw = this.player.displayWidth, ph = this.player.displayHeight;
+    this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
     // Kill-bands
@@ -228,103 +228,80 @@ class GameScene extends Phaser.Scene {
     }
 
     // Collisions / overlaps
-    this.physics.add.overlap(this.player, this.pipes, () => this.gameOver(), null, this);
-    this.physics.add.overlap(this.player, this.sensors, (_player, sensor) => {
+    this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
+    this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false;
       sensor.destroy();
       this.addScore(1);
     }, null, this);
-    this.physics.add.overlap(this.player, this.bonuses, (_player, bonus) => {
+    this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
     }, null, this);
 
-    // Aucune paire tant que le jeu n’a pas commencé
-    if (SHOW_FIRST_PAIR) this.spawnPair(true);
-  }
-
-  startSpawnLoop(){
-    // Timer récurrent + reset accumulateur de secours
-    this.spawnLoop?.remove(false);
-    this.spawnLoop = this.time.addEvent({
-      delay: PROFILE.spawnDelay,
+    // Progression toutes les 15s
+    this.time.addEvent({
+      delay: DIFF.stepMs,
       loop: true,
-      callback: () => this.spawnPair(false)
+      callback: () => {
+        // borne et update
+        this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
+        this.curDelay = Math.max(DIFF.minDelay, this.curDelay + DIFF.delayDelta);
+        // assure que le prochain spawn ne "rattrape" pas en rafale
+        if (this.started) this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
+      }
     });
-    this.spawnAcc = 0;
   }
 
   onTap(){
-    if (this.isOver){
-      this.scene.restart();
-      return;
-    }
+    if (this.isOver){ this.scene.restart(); return; }
+
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // Met en mouvement ce qui serait déjà présent
-      const v = PROFILE.pipeSpeed;
-      this.pipes.children.iterate(p => p?.body?.setVelocityX(v));
-      this.sensors.children.iterate(s => s?.body?.setVelocityX(v));
-      this.bonuses.children.iterate(b => b?.body?.setVelocityX(v));
-
-      // Premier spawn + boucle
-      this.spawnPair(false);
-      this.startSpawnLoop();
-
-      // Montée de difficulté toutes les 15s
-      this.speedRampEvent?.remove(false);
-      this.speedRampEvent = this.time.addEvent({
-        delay: 15000,
-        loop: true,
-        callback: () => this.bumpDifficulty()
-      });
+      // 1er déclenchement planifié
+      this.nextSpawnAt = this.time.now + this.curDelay;
+      this.lastSpawnMs = -1;
 
       try { TG?.expand?.(); } catch {}
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
 
-  update(_time, delta){
+  update(){
     if (this.isOver) return;
 
-    // Inclinaison du joueur
+    // Inclinaison joueur
     const vy = this.player.body.velocity.y;
-    if      (vy < -40) this.player.setAngle(-16);
-    else if (vy > 140) this.player.setAngle(20);
-    else               this.player.setAngle(0);
+    this.player.setAngle(vy < -40 ? -16 : (vy > 140 ? 20 : 0));
 
-    // Accumulateur de secours (en cas de timer capricieux)
-    if (this.started){
-      this.spawnAcc += delta;
-      while (this.spawnAcc >= PROFILE.spawnDelay){
-        this.spawnAcc -= PROFILE.spawnDelay;
+    // Planification simple (pas de while -> 1 seul spawn possible)
+    if (this.started && this.time.now >= this.nextSpawnAt){
+      if (this.lastSpawnMs < 0 || (this.time.now - this.lastSpawnMs) >= DIFF.cooldownMs){
         this.spawnPair(false);
+        this.lastSpawnMs = this.time.now;
       }
+      this.nextSpawnAt = this.time.now + this.curDelay;
     }
 
-    // Filet: réapplique la vitesse (certaines WebViews la “perdent”)
+    // Filet : garantie de vitesse
     if (this.started){
-      const v = PROFILE.pipeSpeed;
-      this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(v); });
-      this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(v); });
-      this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(v); });
+      this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
+      this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
+      this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
     }
 
-    // Kill de sûreté à gauche
+    // Nettoyage à gauche
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
-    // Debug overlay
-    if (this.DEBUG && this._dbg){
-      this._dbg.setText(
-        `d:${PROFILE.spawnDelay}  v:${PROFILE.pipeSpeed}  lvl:${this.speedLevel}  pairs:${this.pairsSpawned}`
-      );
+    if (this.DEBUG && this.debugTxt){
+      this.debugTxt.setText(`speed:${this.curSpeed}  delay:${this.curDelay}  next:${Math.max(0, Math.ceil(this.nextSpawnAt - this.time.now))}ms`);
     }
   }
 
@@ -345,34 +322,27 @@ class GameScene extends Phaser.Scene {
     if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
-    const x  = W + PIPE_W_DISPLAY * 0.6;
-    const vx = this.started ? PROFILE.pipeSpeed : 0;
+    const x  = W + SPAWN_X_OFFSET;
+    const vx = this.started ? this.curSpeed : 0;
 
-    // Sprites
     const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
 
-    // Échelle horizontale seulement (largeur visuelle fixe)
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
 
-    // Rims (bords visibles)
     const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
     const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
-    // Hauteurs d’images pour couvrir l’écran
     const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));
     const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));
 
-    // Mise à l’échelle
     topImg.setScale(scaleXt, topH / topImg.height);
     bottomImg.setScale(scaleXb, bottomH / bottomImg.height);
 
-    // Placement final
     topImg.y    = yTopRim;
     bottomImg.y = yBottomRim;
 
-    // Bodies & mouvement
     const displayWt = topImg.width * scaleXt;
     topImg.setImmovable(true).body.setAllowGravity(false);
     topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
@@ -407,32 +377,9 @@ class GameScene extends Phaser.Scene {
       const bonus = this.physics.add.image(x + 520, by, "bonus_sb")
         .setDepth(7).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
-      bonus.body.setVelocityX(PROFILE.pipeSpeed);
+      bonus.body.setVelocityX(this.curSpeed);
       this.bonuses.add(bonus);
     }
-
-    if (this.DEBUG) console.log("[spawn] pair", { x, gapY, GAP, vx });
-  }
-
-  bumpDifficulty(){
-    this.speedLevel++;
-
-    // Accélère le défilement et la cadence
-    PROFILE.pipeSpeed -= 20;                                // +20 px/s en vitesse absolue
-    PROFILE.spawnDelay = Math.max(1200, PROFILE.spawnDelay - 100);
-
-    // Réapplique aux éléments déjà présents
-    const v = PROFILE.pipeSpeed;
-    this.pipes.children.iterate(p => p?.body?.setVelocityX(v));
-    this.sensors.children.iterate(s => s?.body?.setVelocityX(v));
-    this.bonuses.children.iterate(b => b?.body?.setVelocityX(v));
-
-    // Recrée la boucle de spawn avec le nouveau delay
-    if (this.started) this.startSpawnLoop();
-
-    if (this.DEBUG) console.log("[difficulty]", {
-      level: this.speedLevel, pipeSpeed: PROFILE.pipeSpeed, spawnDelay: PROFILE.spawnDelay
-    });
   }
 
   activateMultiplier(){
@@ -450,13 +397,6 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    // Stop timers
-    this.spawnLoop?.remove(false);
-    this.spawnLoop = null;
-    this.speedRampEvent?.remove(false);
-    this.speedRampEvent = null;
-
-    // Nettoyage entités
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
