@@ -1,7 +1,6 @@
 {
   "name": "flappyborgy-api",
   "version": "1.0.0",
-  "description": "Leaderboard Telegram pour FlappyBorgy (Express + better-sqlite3)",
   "type": "module",
   "main": "server.js",
   "scripts": {
@@ -11,9 +10,8 @@
     "node": "20.x"
   },
   "dependencies": {
-    "better-sqlite3": "^9.0.0",
+    "express": "^4.19.2",
     "cors": "^2.8.5",
-    "express": "^4.19.2"
-  },
-  "license": "MIT"
+    "@supabase/supabase-js": "^2.48.0"
+  }
 }
