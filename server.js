@@ -21,7 +21,6 @@ app.set("trust proxy", 1);
 
 const ALLOWED_ORIGINS = [
   "https://flappyborgyv15-1.onrender.com", // static site (Render)
-  "https://flappyborgyv15.onrender.com",   // ancien éventuel
   "http://localhost:3000",
   "http://localhost:5173"
 ];
