@@ -56,6 +56,8 @@ db.exec(`
 // Vérif officielle Telegram WebApp (HMAC SHA-256)
 function verifyInitData(initDataRaw, botToken) {
   if (!initDataRaw) return null;
+
+  // Construire data_check_string (tous les champs sauf 'hash')
   const url = new URLSearchParams(initDataRaw);
   const hash = url.get("hash");
   url.delete("hash");
@@ -65,8 +67,10 @@ function verifyInitData(initDataRaw, botToken) {
     .sort()
     .join("\n");
 
-  const secretKey = crypto.createHash("sha256")
-    .update("WebAppData" + botToken)
+  // ✅ Clé secrète correcte pour Telegram Web Apps :
+  // secret_key = HMAC_SHA256(bot_token, key="WebAppData")
+  const secretKey = crypto.createHmac("sha256", "WebAppData")
+    .update(botToken)
     .digest();
 
   const hmac = crypto.createHmac("sha256", secretKey)
@@ -75,7 +79,7 @@ function verifyInitData(initDataRaw, botToken) {
 
   if (hmac !== hash) return null;
 
-  // user est en JSON dans le champ "user"
+  // 'user' est du JSON dans le champ 'user'
   try {
     const obj = Object.fromEntries(new URLSearchParams(initDataRaw).entries());
     return JSON.parse(obj.user || "{}");
