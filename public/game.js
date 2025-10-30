@@ -38,30 +38,30 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-// ====== Musique de fond (unique pour tout le jeu) ======
+/* ============ Musique de fond (unique) ============ */
 function ensureBgm(scene) {
   const gm = scene.game;
 
   // (ré)initialise si besoin
   if (!gm._bgm || gm._bgm.isDestroyed) {
-    gm._bgm = scene.sound.add('bgm', {
+    gm._bgm = scene.sound.add("bgm", {
       loop: true,
-      volume: 0.35,   // ajuste à ton goût
+      volume: 0.35,
     });
   }
 
-  // iOS/Telegram WebView: l’audio est verrouillé tant qu’il n’y a pas eu d’interaction
+  // iOS/Telegram WebView : audio verrouillé tant qu'il n'y a pas eu d'interaction
   const start = () => { if (!gm._bgm.isPlaying) gm._bgm.play(); };
 
   if (scene.sound.locked) {
-    scene.input.once('pointerdown', start);
-    scene.input.keyboard?.once('keydown-SPACE', start);
+    scene.input.once("pointerdown", start);
+    scene.input.keyboard?.once("keydown-SPACE", start);
   } else {
     start();
   }
 
-  // Reprend/Met en pause automatiquement si tu changes d’onglet
- scene.game.events.off(Phaser.Core.Events.BLUR);
+  // Reprend/met en pause si tu quittes/reviens
+  scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
   scene.game.events.on(Phaser.Core.Events.FOCUS, () => {
@@ -117,7 +117,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
-    this.load.audio('bgm', 'bgm.mp3');
+    this.load.audio("bgm", "bgm.mp3");            // << ton mp3
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
   }
   create(){ this.scene.start("menu"); }
@@ -130,29 +130,31 @@ class MenuScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
-     ensureBgm(this);
 
-     // 2) bouton mute
-  const muteBtn = this.add.text(W - 70, 30, "🔊", {
-    fontFamily: "monospace",
-    fontSize: 42,
-    color: "#fff"
-  })
-  .setOrigin(0.5)
-  .setDepth(50)
-  .setInteractive({ useHandCursor: true });
+    // lance / reprend la musique
+    ensureBgm(this);
 
-  muteBtn.on("pointerdown", () => {
-    const s = this.game._bgm;
-    if (!s) return;
-    if (s.mute) {
-      s.setMute(false);
-      muteBtn.setText("🔊");
-    } else {
-      s.setMute(true);
-      muteBtn.setText("🔇");
-    }
-  });
+    // bouton mute
+    const muteBtn = this.add.text(W - 70, 30, "🔊", {
+      fontFamily: "monospace",
+      fontSize: 42,
+      color: "#fff"
+    })
+      .setOrigin(0.5)
+      .setDepth(50)
+      .setInteractive({ useHandCursor: true });
+
+    muteBtn.on("pointerdown", () => {
+      const s = this.game._bgm;
+      if (!s) return;
+      if (s.mute) {
+        s.setMute(false);
+        muteBtn.setText("🔊");
+      } else {
+        s.setMute(true);
+        muteBtn.setText("🔇");
+      }
+    });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
@@ -218,7 +220,7 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    // Horloge de spawn (évite les bursts et la superposition)
+    // Horloge de spawn
     this.nextSpawnAt = Infinity;  // activé au 1er tap
     this.lastSpawnMs = -1;
 
@@ -226,13 +228,15 @@ class GameScene extends Phaser.Scene {
     this.curSpeed = PROFILE.pipeSpeed;
     this.curDelay = PROFILE.spawnDelay;
 
-    // Debug optionnel
     this.DEBUG = false;
     this.debugTxt = null;
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
+
+    // S'assurer que la musique continue même après restart
+    ensureBgm(this);
 
     // Fond
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
@@ -301,24 +305,26 @@ class GameScene extends Phaser.Scene {
       delay: DIFF.stepMs,
       loop: true,
       callback: () => {
-        // borne et update
         this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
         this.curDelay = Math.max(DIFF.minDelay, this.curDelay + DIFF.delayDelta);
-        // assure que le prochain spawn ne "rattrape" pas en rafale
-        if (this.started) this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
+        if (this.started) {
+          this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
+        }
       }
     });
   }
 
   onTap(){
-    if (this.isOver){ this.scene.restart(); return; }
+    if (this.isOver){
+      this.scene.restart();
+      return;
+    }
 
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // 1er déclenchement planifié
       this.nextSpawnAt = this.time.now + this.curDelay;
       this.lastSpawnMs = -1;
 
@@ -334,7 +340,7 @@ class GameScene extends Phaser.Scene {
     const vy = this.player.body.velocity.y;
     this.player.setAngle(vy < -40 ? -16 : (vy > 140 ? 20 : 0));
 
-    // Planification simple (pas de while -> 1 seul spawn possible)
+    // Spawns
     if (this.started && this.time.now >= this.nextSpawnAt){
       if (this.lastSpawnMs < 0 || (this.time.now - this.lastSpawnMs) >= DIFF.cooldownMs){
         this.spawnPair(false);
@@ -343,14 +349,14 @@ class GameScene extends Phaser.Scene {
       this.nextSpawnAt = this.time.now + this.curDelay;
     }
 
-    // Filet : garantie de vitesse
+    // Garantie de vitesse
     if (this.started){
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
       this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
       this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
     }
 
-    // Nettoyage à gauche
+    // Nettoyage
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
@@ -374,7 +380,10 @@ class GameScene extends Phaser.Scene {
 
     let minY = TOP_BAND + Math.floor(GAP/2);
     let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
-    if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
+    if (maxY < minY) {
+      const c = Math.round((TOP_BAND + BOT_BAND)/2);
+      minY = maxY = c;
+    }
     const gapY = Phaser.Math.Between(minY, maxY);
 
     const x  = W + SPAWN_X_OFFSET;
@@ -427,8 +436,11 @@ class GameScene extends Phaser.Scene {
 
     // Bonus
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
-        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
+      const by = Phaser.Math.Clamp(
+        gapY + Phaser.Math.Between(-160,160),
+        H*PLAYFIELD_TOP_PCT+40,
+        H*PLAYFIELD_BOT_PCT-40
+      );
       const bonus = this.physics.add.image(x + 520, by, "bonus_sb")
         .setDepth(7).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
