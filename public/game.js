@@ -38,6 +38,36 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
+// ====== Musique de fond (unique pour tout le jeu) ======
+function ensureBgm(scene) {
+  const gm = scene.game;
+
+  // (ré)initialise si besoin
+  if (!gm._bgm || gm._bgm.isDestroyed) {
+    gm._bgm = scene.sound.add('bgm', {
+      loop: true,
+      volume: 0.35,   // ajuste à ton goût
+    });
+  }
+
+  // iOS/Telegram WebView: l’audio est verrouillé tant qu’il n’y a pas eu d’interaction
+  const start = () => { if (!gm._bgm.isPlaying) gm._bgm.play(); };
+
+  if (scene.sound.locked) {
+    scene.input.once('pointerdown', start);
+    scene.input.keyboard?.once('keydown-SPACE', start);
+  } else {
+    start();
+  }
+
+  // Reprend/Met en pause automatiquement si tu changes d’onglet
+  scene.game.events.off(Phaser.Core.Events.BLUR);
+  scene.game.events.off(Phaser.Core.Events.FOCUS);
+  scene.game.events.on(Phaser.Core.Events.BLUR,  () => gm._bgm?.pause());
+  scene.game.events.on(Phaser.Core.Events.FOCUS, () => { if (!scene.sound.locked) gm._bgm?.resume(); });
+});
+}
+
 /* ======= Difficulté / anti-superposition ======= */
 const DIFF = {
   stepMs: 15000,            // toutes les 15 s
@@ -86,6 +116,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
+    this.load.audio('bgm', 'bgm.mp3');
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
   }
   create(){ this.scene.start("menu"); }
@@ -98,6 +129,29 @@ class MenuScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
+     ensureBgm(this);
+
+     // 2) bouton mute
+  const muteBtn = this.add.text(W - 70, 30, "🔊", {
+    fontFamily: "monospace",
+    fontSize: 42,
+    color: "#fff"
+  })
+  .setOrigin(0.5)
+  .setDepth(50)
+  .setInteractive({ useHandCursor: true });
+
+  muteBtn.on("pointerdown", () => {
+    const s = this.game._bgm;
+    if (!s) return;
+    if (s.mute) {
+      s.setMute(false);
+      muteBtn.setText("🔊");
+    } else {
+      s.setMute(true);
+      muteBtn.setText("🔇");
+    }
+  });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
