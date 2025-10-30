@@ -61,11 +61,12 @@ function ensureBgm(scene) {
   }
 
   // Reprend/Met en pause automatiquement si tu changes d’onglet
-  scene.game.events.off(Phaser.Core.Events.BLUR);
+ scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
-  scene.game.events.on(Phaser.Core.Events.BLUR,  () => gm._bgm?.pause());
-  scene.game.events.on(Phaser.Core.Events.FOCUS, () => { if (!scene.sound.locked) gm._bgm?.resume(); });
-});
+  scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
+  scene.game.events.on(Phaser.Core.Events.FOCUS, () => {
+    if (!scene.sound.locked) gm._bgm?.resume();
+  });
 }
 
 /* ======= Difficulté / anti-superposition ======= */
