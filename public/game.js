@@ -117,7 +117,9 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
-    this.load.audio("bgm", "bgm.mp3");            // << ton mp3
+    this.load.audio("bgm", "bgm.mp3");
+    // 🔊 nouveau : son de game over
+    this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
   }
   create(){ this.scene.start("menu"); }
@@ -144,16 +146,19 @@ class MenuScene extends Phaser.Scene {
       .setDepth(50)
       .setInteractive({ useHandCursor: true });
 
+    // on garde un flag global pour que les autres scènes sachent si on est mute
+    if (typeof this.game._muted === "undefined") {
+      this.game._muted = false;
+    }
+
     muteBtn.on("pointerdown", () => {
       const s = this.game._bgm;
-      if (!s) return;
-      if (s.mute) {
-        s.setMute(false);
-        muteBtn.setText("🔊");
-      } else {
-        s.setMute(true);
-        muteBtn.setText("🔇");
-      }
+      const currentlyMuted = this.game._muted === true;
+
+      if (s) s.setMute(!currentlyMuted);
+      this.game._muted = !currentlyMuted;
+
+      muteBtn.setText(this.game._muted ? "🔇" : "🔊");
     });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
@@ -273,6 +278,11 @@ class GameScene extends Phaser.Scene {
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
+
+    // on prépare le son de game over ici
+    this.sfxGameOver = this.sound.add("sfx_gameover", {
+      volume: 0.75
+    });
 
     // Kill-bands
     if (ENABLE_KILL_BANDS){
@@ -463,6 +473,17 @@ class GameScene extends Phaser.Scene {
     if (this.isOver) return;
     this.isOver = true;
     this.started = false;
+
+    // 🔊 joue le son de game over (si pas mute)
+    if (!this.game._muted && this.sfxGameOver) {
+      // on coupe un peu la musique pendant le son
+      const bgm = this.game._bgm;
+      if (bgm) bgm.setVolume(0.15);
+      this.sfxGameOver.once("complete", () => {
+        if (bgm && !this.game._muted) bgm.setVolume(0.35);
+      });
+      this.sfxGameOver.play();
+    }
 
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
