@@ -303,7 +303,7 @@ class GameScene extends Phaser.Scene {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false;
       sensor.destroy();
-      this.addScore(1); // 👉 ICI ça joue le petit wouf
+      this.addScore(1); // joue le petit wouf
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
       if (!bonus.active) return;
@@ -501,12 +501,23 @@ class GameScene extends Phaser.Scene {
     this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
 
-    const replay = this.add.text(W/2, H/2 + 60, "Rejouer", {
+    // bouton rejouer
+    const replay = this.add.text(W/2, H/2 + 40, "Rejouer", {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on("pointerdown", ()=> this.scene.restart());
 
+    // bouton menu principal
+    const back = this.add.text(W/2, H/2 + 120, "Menu principal", {
+      fontFamily:"monospace", fontSize:38, color:"#fff",
+      backgroundColor:"#0a869b", padding:{left:22,right:22,top:8,bottom:8}
+    }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    back.on("pointerdown", () => {
+      this.scene.start("menu");
+    });
+
+    // envoi score + affiche leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
