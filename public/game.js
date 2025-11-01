@@ -104,7 +104,7 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
-/* ================== PRELOAD (avec vidéo) ================== */
+/* ================== PRELOAD (vidéo affichée en haut) ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
   preload(){
@@ -112,16 +112,16 @@ class PreloadScene extends Phaser.Scene {
 
     this.load.setPath("assets");
 
-    // 1) vidéo de chargement
+    // vidéo
     this.load.video("loading_vid", "intro.mp4", "loadeddata", false, true);
 
-    // 2) le reste des assets
+    // images
     this.load.image(BG_KEY,        "bg_mountains.jpg");
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
-    // 2 pistes de fond
+    // musiques
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
 
@@ -131,7 +131,7 @@ class PreloadScene extends Phaser.Scene {
 
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
 
-    // barre de chargement par-dessus
+    // barre de chargement (en bas)
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
     const fgBar = this.add.rectangle(W*0.24, H*0.8, 2, 12, 0x17a689).setOrigin(0,0.5);
     const pct   = this.add.text(W/2, H*0.8+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#fff"}).setOrigin(0.5);
@@ -143,26 +143,33 @@ class PreloadScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // on affiche la vidéo (en fond)
-    const vid = this.add.video(W/2, H/2, "loading_vid")
+    // vidéo centrée en HAUT (pas plein écran)
+    const vid = this.add.video(W/2, H*0.26, "loading_vid")
       .setOrigin(0.5)
-      .setDepth(-10);
+      .setDepth(-1)
+      .setMute(true);
 
-    vid.setDisplaySize(W, H);
-    vid.setMute(true);
+    // quand la vidéo est prête, on la resize
+    vid.on("play", () => {
+      const el = vid.video;
+      if (!el) return;
+      const vw = el.videoWidth;
+      const vh = el.videoHeight;
+      if (!vw || !vh) return;
+      const targetW = W * 0.6;         // 60% de largeur
+      const scale   = targetW / vw;
+      vid.setDisplaySize(targetW, vh * scale);
+    });
+
     vid.play(true);
 
-    // fallback si le webview bloque l'autoplay
+    // fallback clic
     this.input.once("pointerdown", () => {
-      if (!vid.isPlaying()) {
-        vid.play(true);
-      }
+      if (!vid.isPlaying()) vid.play(true);
     });
 
-    // petit délai pour que la vidéo se voie puis on va au menu
-    this.time.delayedCall(350, () => {
-      this.scene.start("menu");
-    });
+    // on enchaîne
+    this.time.delayedCall(350, () => this.scene.start("menu"));
   }
 }
 
