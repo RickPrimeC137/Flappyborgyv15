@@ -118,8 +118,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
     this.load.audio("bgm", "bgm.mp3");
-    // 🔊 nouveau : son de game over
+    // 🔊 son de game over
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
+    // 🔊 son à chaque passage de tuyau
+    this.load.audio("sfx_score", "flappy_borgy_wouf_chiot_0_2s.wav");
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
   }
   create(){ this.scene.start("menu"); }
@@ -146,7 +148,7 @@ class MenuScene extends Phaser.Scene {
       .setDepth(50)
       .setInteractive({ useHandCursor: true });
 
-    // on garde un flag global pour que les autres scènes sachent si on est mute
+    // flag global
     if (typeof this.game._muted === "undefined") {
       this.game._muted = false;
     }
@@ -279,10 +281,9 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
-    // on prépare le son de game over ici
-    this.sfxGameOver = this.sound.add("sfx_gameover", {
-      volume: 0.75
-    });
+    // 🔊 sons
+    this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
+    this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
 
     // Kill-bands
     if (ENABLE_KILL_BANDS){
@@ -302,7 +303,7 @@ class GameScene extends Phaser.Scene {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false;
       sensor.destroy();
-      this.addScore(1);
+      this.addScore(1); // 👉 ICI ça joue le petit wouf
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
       if (!bonus.active) return;
@@ -467,6 +468,11 @@ class GameScene extends Phaser.Scene {
   addScore(n){
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
+
+    // 🔊 petit wouf à chaque point
+    if (!this.game._muted && this.sfxScore) {
+      this.sfxScore.play();
+    }
   }
 
   gameOver(){
@@ -476,7 +482,6 @@ class GameScene extends Phaser.Scene {
 
     // 🔊 joue le son de game over (si pas mute)
     if (!this.game._muted && this.sfxGameOver) {
-      // on coupe un peu la musique pendant le son
       const bgm = this.game._bgm;
       if (bgm) bgm.setVolume(0.15);
       this.sfxGameOver.once("complete", () => {
