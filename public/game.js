@@ -1,6 +1,7 @@
 /* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
    Domaine du jeu : https://flappyborgyv15.onrender.com
    API : https://rickprimec137-flappyborgyv15.onrender.com
+   ⚠️ Mets ta vidéo dans /assets et appelle-la intro.mp4 (ou change le nom plus bas)
 */
 
 /* ================== Telegram WebApp ================== */
@@ -42,16 +43,12 @@ const BONUS_DURATION = 10000;
 function ensureBgm(scene) {
   const gm = scene.game;
 
-  // (ré)initialise si besoin
   if (!gm._bgm || gm._bgm.isDestroyed) {
-    // choisis 1 des 2 musiques chargées
     const key = Math.random() < 0.5 ? "bgm" : "bgm_alt";
     gm._bgm = scene.sound.add(key, {
       loop: true,
       volume: 0.35,
     });
-
-    // respecte le mute global si défini
     if (gm._muted === true) {
       gm._bgm.setMute(true);
     }
@@ -107,17 +104,18 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
-/* ================== PRELOAD ================== */
+/* ================== PRELOAD (avec vidéo) ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
   preload(){
     const W = this.scale.width, H = this.scale.height;
-    const bgBar = this.add.rectangle(W/2, H*0.55, W*0.52, 12, 0x000000, 0.15).setOrigin(0.5);
-    const fgBar = this.add.rectangle(W*0.24, H*0.55, 2, 12, 0x17a689).setOrigin(0,0.5);
-    const pct   = this.add.text(W/2, H*0.55+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#044"}).setOrigin(0.5);
-    this.load.on("progress", p => { fgBar.width = (W*0.52)*p; pct.setText(Math.round(p*100)+"%"); });
 
     this.load.setPath("assets");
+
+    // 1) vidéo de chargement
+    this.load.video("loading_vid", "intro.mp4", "loadeddata", false, true);
+
+    // 2) le reste des assets
     this.load.image(BG_KEY,        "bg_mountains.jpg");
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
@@ -129,11 +127,43 @@ class PreloadScene extends Phaser.Scene {
 
     // sfx
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
-    this.load.audio("sfx_score", "flappy_borgy_wouf_chiot_0_2s.wav");
+    this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
 
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
+
+    // barre de chargement par-dessus
+    const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
+    const fgBar = this.add.rectangle(W*0.24, H*0.8, 2, 12, 0x17a689).setOrigin(0,0.5);
+    const pct   = this.add.text(W/2, H*0.8+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#fff"}).setOrigin(0.5);
+    this.load.on("progress", p => {
+      fgBar.width = (W*0.52)*p;
+      pct.setText(Math.round(p*100)+"%");
+    });
   }
-  create(){ this.scene.start("menu"); }
+  create(){
+    const W = this.scale.width, H = this.scale.height;
+
+    // on affiche la vidéo (en fond)
+    const vid = this.add.video(W/2, H/2, "loading_vid")
+      .setOrigin(0.5)
+      .setDepth(-10);
+
+    vid.setDisplaySize(W, H);
+    vid.setMute(true);
+    vid.play(true);
+
+    // fallback si le webview bloque l'autoplay
+    this.input.once("pointerdown", () => {
+      if (!vid.isPlaying()) {
+        vid.play(true);
+      }
+    });
+
+    // petit délai pour que la vidéo se voie puis on va au menu
+    this.time.delayedCall(350, () => {
+      this.scene.start("menu");
+    });
+  }
 }
 
 /* ================== MENU ================== */
@@ -482,19 +512,18 @@ class GameScene extends Phaser.Scene {
     this.bonuses.clear(true, true);
 
     const W = this.scale.width, H = this.scale.height;
-    this.add.rectangle(W/2, H/2, W*0.8, 320, 0x12323a, 0.92).setDepth(100);
-    this.add.text(W/2, H/2 - 100, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
+    this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
+    this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
       .setOrigin(0.5).setDepth(101);
     this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
 
-    const replay = this.add.text(W/2, H/2 + 60, "Rejouer", {
+    const replay = this.add.text(W/2, H/2 + 50, "Rejouer", {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on("pointerdown", ()=> this.scene.restart());
 
-    // bouton retour menu
     const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal", {
       fontFamily:"monospace", fontSize:40, color:"#fff",
       backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8}
