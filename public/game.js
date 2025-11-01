@@ -13,9 +13,9 @@ const GAME_W = 1024, GAME_H = 1536;
 const PROFILE = {
   gravity: 1400,
   jump: -380,
-  pipeSpeed: -220,     // px/s vers la gauche (augmentera)
-  gap: 270,            // ouverture par défaut
-  spawnDelay: 2000     // ms (réduit avec la difficulté)
+  pipeSpeed: -220,
+  gap: 270,
+  spawnDelay: 2000
 };
 
 const PAD = 2;
@@ -38,19 +38,25 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-/* ============ Musique de fond (unique) ============ */
+/* ============ Musique de fond (unique, 2 pistes possibles) ============ */
 function ensureBgm(scene) {
   const gm = scene.game;
 
   // (ré)initialise si besoin
   if (!gm._bgm || gm._bgm.isDestroyed) {
-    gm._bgm = scene.sound.add("bgm", {
+    // choisis 1 des 2 musiques chargées
+    const key = Math.random() < 0.5 ? "bgm" : "bgm_alt";
+    gm._bgm = scene.sound.add(key, {
       loop: true,
       volume: 0.35,
     });
+
+    // respecte le mute global si défini
+    if (gm._muted === true) {
+      gm._bgm.setMute(true);
+    }
   }
 
-  // iOS/Telegram WebView : audio verrouillé tant qu'il n'y a pas eu d'interaction
   const start = () => { if (!gm._bgm.isPlaying) gm._bgm.play(); };
 
   if (scene.sound.locked) {
@@ -60,7 +66,6 @@ function ensureBgm(scene) {
     start();
   }
 
-  // Reprend/met en pause si tu quittes/reviens
   scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
@@ -71,14 +76,14 @@ function ensureBgm(scene) {
 
 /* ======= Difficulté / anti-superposition ======= */
 const DIFF = {
-  stepMs: 15000,            // toutes les 15 s
-  speedDelta: -20,          // +20 px/s vers la gauche
-  delayDelta: -150,         // -150 ms au rythme
-  minSpeed: -380,           // borne
-  minDelay: 1100,           // borne -> évite les colonnes trop serrées
-  cooldownMs: 250           // anti "burst" (1 spawn min. toutes 250 ms)
+  stepMs: 15000,
+  speedDelta: -20,
+  delayDelta: -150,
+  minSpeed: -380,
+  minDelay: 1100,
+  cooldownMs: 250
 };
-const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6; // position d'apparition
+const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 
 /* ================== LEADERBOARD (client) ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
@@ -117,11 +122,15 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
+
+    // 2 pistes de fond
     this.load.audio("bgm", "bgm.mp3");
-    // 🔊 son de game over
+    this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
+
+    // sfx
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
-    // 🔊 son à chaque passage de tuyau
     this.load.audio("sfx_score", "flappy_borgy_wouf_chiot_0_2s.wav");
+
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
   }
   create(){ this.scene.start("menu"); }
@@ -135,10 +144,8 @@ class MenuScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
-    // lance / reprend la musique
     ensureBgm(this);
 
-    // bouton mute
     const muteBtn = this.add.text(W - 70, 30, "🔊", {
       fontFamily: "monospace",
       fontSize: 42,
@@ -148,18 +155,18 @@ class MenuScene extends Phaser.Scene {
       .setDepth(50)
       .setInteractive({ useHandCursor: true });
 
-    // flag global
     if (typeof this.game._muted === "undefined") {
       this.game._muted = false;
+    } else {
+      muteBtn.setText(this.game._muted ? "🔇" : "🔊");
+      if (this.game._bgm) this.game._bgm.setMute(this.game._muted);
     }
 
     muteBtn.on("pointerdown", () => {
       const s = this.game._bgm;
       const currentlyMuted = this.game._muted === true;
-
       if (s) s.setMute(!currentlyMuted);
       this.game._muted = !currentlyMuted;
-
       muteBtn.setText(this.game._muted ? "🔇" : "🔊");
     });
 
@@ -227,11 +234,9 @@ class GameScene extends Phaser.Scene {
     this.sensors = null;
     this.bonuses = null;
 
-    // Horloge de spawn
-    this.nextSpawnAt = Infinity;  // activé au 1er tap
+    this.nextSpawnAt = Infinity;
     this.lastSpawnMs = -1;
 
-    // Progression
     this.curSpeed = PROFILE.pipeSpeed;
     this.curDelay = PROFILE.spawnDelay;
 
@@ -242,25 +247,20 @@ class GameScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // S'assurer que la musique continue même après restart
     ensureBgm(this);
 
-    // Fond
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Groupes
     this.pipes   = this.physics.add.group();
     this.sensors = this.physics.add.group();
     this.bonuses = this.physics.add.group();
 
-    // Input
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on("pointerdown", () => this.onTap());
     this.input.keyboard.on("keydown-SPACE", () => this.onTap());
 
-    // UI
     this.scoreText = this.add.text(24, 18, "Score: 0", {
       fontFamily:"monospace", fontSize:46, color:"#fff", stroke:"#0a3a38", strokeThickness:8
     }).setDepth(20);
@@ -269,23 +269,20 @@ class GameScene extends Phaser.Scene {
       this.debugTxt = this.add.text(16, 64, "", { fontFamily: "monospace", fontSize: 16, color: "#bff" }).setDepth(20);
     }
 
-    // Joueur
     this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), "borgy")
       .setScale(PLAYER_SCALE)
       .setDepth(10)
       .setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
 
-    // Hitbox joueur
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
-    // 🔊 sons
+    // sfx
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
 
-    // Kill-bands
     if (ENABLE_KILL_BANDS){
       const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
       const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
@@ -297,13 +294,12 @@ class GameScene extends Phaser.Scene {
       this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
     }
 
-    // Collisions / overlaps
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false;
       sensor.destroy();
-      this.addScore(1); // joue le petit wouf
+      this.addScore(1);
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
       if (!bonus.active) return;
@@ -311,7 +307,6 @@ class GameScene extends Phaser.Scene {
       this.activateMultiplier();
     }, null, this);
 
-    // Progression toutes les 15s
     this.time.addEvent({
       delay: DIFF.stepMs,
       loop: true,
@@ -347,11 +342,9 @@ class GameScene extends Phaser.Scene {
   update(){
     if (this.isOver) return;
 
-    // Inclinaison joueur
     const vy = this.player.body.velocity.y;
     this.player.setAngle(vy < -40 ? -16 : (vy > 140 ? 20 : 0));
 
-    // Spawns
     if (this.started && this.time.now >= this.nextSpawnAt){
       if (this.lastSpawnMs < 0 || (this.time.now - this.lastSpawnMs) >= DIFF.cooldownMs){
         this.spawnPair(false);
@@ -360,14 +353,12 @@ class GameScene extends Phaser.Scene {
       this.nextSpawnAt = this.time.now + this.curDelay;
     }
 
-    // Garantie de vitesse
     if (this.started){
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
       this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
       this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
     }
 
-    // Nettoyage
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
@@ -433,7 +424,6 @@ class GameScene extends Phaser.Scene {
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
-    // Capteur de score
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
@@ -445,7 +435,6 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // Bonus
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(
         gapY + Phaser.Math.Between(-160,160),
@@ -469,7 +458,6 @@ class GameScene extends Phaser.Scene {
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
 
-    // 🔊 petit wouf à chaque point
     if (!this.game._muted && this.sfxScore) {
       this.sfxScore.play();
     }
@@ -480,7 +468,6 @@ class GameScene extends Phaser.Scene {
     this.isOver = true;
     this.started = false;
 
-    // 🔊 joue le son de game over (si pas mute)
     if (!this.game._muted && this.sfxGameOver) {
       const bgm = this.game._bgm;
       if (bgm) bgm.setVolume(0.15);
@@ -501,23 +488,23 @@ class GameScene extends Phaser.Scene {
     this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
 
-    // bouton rejouer
-    const replay = this.add.text(W/2, H/2 + 40, "Rejouer", {
+    const replay = this.add.text(W/2, H/2 + 60, "Rejouer", {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on("pointerdown", ()=> this.scene.restart());
 
-    // bouton menu principal
-    const back = this.add.text(W/2, H/2 + 120, "Menu principal", {
-      fontFamily:"monospace", fontSize:38, color:"#fff",
-      backgroundColor:"#0a869b", padding:{left:22,right:22,top:8,bottom:8}
+    // bouton retour menu
+    const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal", {
+      fontFamily:"monospace", fontSize:40, color:"#fff",
+      backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    back.on("pointerdown", () => {
+    menuBtn.on("pointerdown", () => {
+      const bgm = this.game._bgm;
+      if (bgm && !this.game._muted) bgm.setVolume(0.35);
       this.scene.start("menu");
     });
 
-    // envoi score + affiche leaderboard
     postScore(this.score).then(() =>
       fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
     );
