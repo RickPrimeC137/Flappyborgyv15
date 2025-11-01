@@ -1,7 +1,7 @@
 /* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
    Domaine du jeu : https://flappyborgyv15.onrender.com
    API : https://rickprimec137-flappyborgyv15.onrender.com
-   ⚠️ Mets /assets/intro.mp4 à côté de tes autres assets
+   ⚠️ Mets ta vidéo dans /assets/intro.mp4
 */
 
 /* ================== Telegram WebApp ================== */
@@ -34,6 +34,7 @@ const JOINT_OVERLAP = 1;
 const KILL_MARGIN   = 260;
 
 const ENABLE_KILL_BANDS = true;
+
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
@@ -70,7 +71,7 @@ function ensureBgm(scene) {
   });
 }
 
-/* ======= Difficulté ======= */
+/* ======= Difficulté / anti-superposition ======= */
 const DIFF = {
   stepMs: 15000,
   speedDelta: -20,
@@ -103,26 +104,51 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
-/* ================== PRELOAD (vidéo en DOM au-dessus) ================== */
+/* ================== PRELOAD (vidéo DOM + barre) ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
+
+  init(){
+    // on injecte la vidéo AVANT d’afficher la barre phaser
+    const root = document.getElementById("game-root") || document.body;
+    const vid = document.createElement("video");
+    vid.src = "assets/intro.mp4";
+    vid.autoplay = true;
+    vid.loop = true;
+    vid.muted = true;
+    vid.playsInline = true;
+    vid.style.position = "absolute";
+    vid.style.left = "50%";
+    vid.style.top = "9%";
+    vid.style.transform = "translateX(-50%)";
+    vid.style.width = "62%";
+    vid.style.maxWidth = "520px";
+    vid.style.borderRadius = "14px";
+    vid.style.zIndex = "9999";
+    vid.style.pointerEvents = "none";
+    root.appendChild(vid);
+    this._loadingVideoEl = vid;
+  }
+
   preload(){
     const W = this.scale.width, H = this.scale.height;
 
     this.load.setPath("assets");
 
-    // on charge quand même la vidéo (pour les navigateurs normaux),
-    // mais on affichera un <video> DOM, parce que Telegram n'affiche pas bien les vidéos phaser
-    this.load.video("loading_vid", "intro.mp4", "loadeddata", false, true);
-
+    // assets jeu
     this.load.image(BG_KEY,        "bg_mountains.jpg");
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
+
+    // 2 musiques
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
+
+    // sfx
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
+
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
 
     // barre de chargement
@@ -134,45 +160,14 @@ class PreloadScene extends Phaser.Scene {
       pct.setText(Math.round(p*100)+"%");
     });
   }
+
   create(){
-    const W = this.scale.width, H = this.scale.height;
-    const canvasParent = this.game.canvas.parentNode;
-    if (canvasParent && getComputedStyle(canvasParent).position === "static") {
-      canvasParent.style.position = "relative";
+    // on enlève la vidéo et on passe au menu
+    if (this._loadingVideoEl) {
+      this._loadingVideoEl.remove();
+      this._loadingVideoEl = null;
     }
-
-    // === OVERLAY VIDEO DOM ===
-    const vid = document.createElement("video");
-    vid.src = "assets/intro.mp4";
-    vid.muted = true;
-    vid.autoplay = true;
-    vid.playsInline = true;
-    vid.loop = true;
-    // centrée au-dessus, taille fixe, pas plein écran
-    vid.style.position = "absolute";
-    vid.style.left = "50%";
-    vid.style.top = "8%";
-    vid.style.transform = "translateX(-50%)";
-    vid.style.width = "68%";
-    vid.style.maxHeight = H * 0.35 + "px";
-    vid.style.borderRadius = "12px";
-    vid.style.boxShadow = "0 8px 22px rgba(0,0,0,0.35)";
-    vid.style.backgroundColor = "#000";
-    // au-dessus de la barre
-    vid.style.zIndex = "9999";
-
-    canvasParent?.appendChild(vid);
-
-    // Si le webview bloque l'autoplay, on débloque au 1er tap
-    this.input.once("pointerdown", () => {
-      if (vid.paused) vid.play().catch(()=>{});
-    });
-
-    // on laisse la vidéo visible un court instant pour qu'on la voie vraiment
-    this.time.delayedCall(1000, () => {
-      vid.remove();
-      this.scene.start("menu");
-    });
+    this.scene.start("menu");
   }
 }
 
@@ -266,15 +261,20 @@ class GameScene extends Phaser.Scene {
   init(){
     this.started = false;
     this.isOver  = false;
+
     this.score = 0;
     this.pairsSpawned = 0;
+
     this.pipes   = null;
     this.sensors = null;
     this.bonuses = null;
+
     this.nextSpawnAt = Infinity;
     this.lastSpawnMs = -1;
+
     this.curSpeed = PROFILE.pipeSpeed;
     this.curDelay = PROFILE.spawnDelay;
+
     this.DEBUG = false;
     this.debugTxt = null;
   }
@@ -314,6 +314,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
+    // sfx
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
 
@@ -402,6 +403,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ========= Génération d’une paire =========
   spawnPair(silentFirst){
     const W = this.scale.width, H = this.scale.height;
 
@@ -490,6 +492,7 @@ class GameScene extends Phaser.Scene {
   addScore(n){
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
+
     if (!this.game._muted && this.sfxScore) {
       this.sfxScore.play();
     }
@@ -577,8 +580,6 @@ window.addEventListener("load", () => {
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
     physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } },
-    // on ajoute dom juste au cas où
-    dom: { createContainer: true },
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
     fps: { target: 60, min: 30, forceSetTimeOut: true }
