@@ -104,12 +104,69 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
+/* ================== PETIT GESTIONNAIRE DE QUÊTES ================== */
+const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
+/* modèle:
+  {
+    quests: [
+      { id:"score50", title:"Atteins 50 points",   type:"score",   target:50,  progress:0, done:false, reward:"+50 xp" },
+      { id:"score150",title:"Atteins 150 points",  type:"score",   target:150, progress:0, done:false, reward:"+150 xp" },
+      { id:"bonus1",  title:"Ramasse 1 bonus",     type:"bonus",   target:1,   progress:0, done:false, reward:"Cosmétique ?" }
+    ]
+  }
+*/
+function loadQuests(){
+  try{
+    const raw = localStorage.getItem(QUEST_STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  }catch(e){}
+  const base = {
+    quests: [
+      { id:"score50",  title:"Atteins 50 points",  type:"score", target:50,  progress:0, done:false, reward:"+50 pts" },
+      { id:"score150", title:"Atteins 150 points", type:"score", target:150, progress:0, done:false, reward:"+150 pts" },
+      { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"Sticker 🎉" },
+    ]
+  };
+  saveQuests(base);
+  return base;
+}
+function saveQuests(data){
+  try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+}
+function updateQuestsFromEvent(evt, value){
+  // evt = "score" ou "bonus" ou "game"
+  const data = loadQuests();
+  let changed = false;
+  for (const q of data.quests){
+    if (q.done) continue;
+    if (q.type === "score" && evt === "score") {
+      const v = Math.max(q.progress, value);
+      if (v !== q.progress){
+        q.progress = v;
+        if (q.progress >= q.target) { q.done = true; }
+        changed = true;
+      }
+    }
+    if (q.type === "bonus" && evt === "bonus") {
+      q.progress += 1;
+      if (q.progress >= q.target) { q.done = true; }
+      changed = true;
+    }
+    if (q.type === "game" && evt === "game") {
+      q.progress += 1;
+      if (q.progress >= q.target) { q.done = true; }
+      changed = true;
+    }
+  }
+  if (changed) saveQuests(data);
+  return changed;
+}
+
 /* ================== PRELOAD (vidéo DOM + barre) ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
 
   init(){
-    // on injecte la vidéo AVANT d’afficher la barre phaser
     const root = document.getElementById("game-root") || document.body;
     const vid = document.createElement("video");
     vid.src = "assets/intro.mp4";
@@ -135,23 +192,19 @@ class PreloadScene extends Phaser.Scene {
 
     this.load.setPath("assets");
 
-    // assets jeu
     this.load.image(BG_KEY,        "bg_mountains.jpg");
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
-    // 2 musiques
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
 
-    // sfx
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
 
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
 
-    // barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
     const fgBar = this.add.rectangle(W*0.24, H*0.8, 2, 12, 0x17a689).setOrigin(0,0.5);
     const pct   = this.add.text(W/2, H*0.8+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#fff"}).setOrigin(0.5);
@@ -162,7 +215,6 @@ class PreloadScene extends Phaser.Scene {
   }
 
   create(){
-    // on enlève la vidéo et on passe au menu
     if (this._loadingVideoEl) {
       this._loadingVideoEl.remove();
       this._loadingVideoEl = null;
@@ -211,6 +263,9 @@ class MenuScene extends Phaser.Scene {
       const list = await fetchLeaderboard(10);
       this.showLeaderboard(list);
     });
+    // bouton quêtes
+    this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
+
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
   }
@@ -248,6 +303,49 @@ class MenuScene extends Phaser.Scene {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+    const destroyAll = () =>
+      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    close.on("pointerdown", destroyAll);
+  }
+  showQuests(){
+    const data = loadQuests();
+    const W = this.scale.width, H = this.scale.height;
+    const depth = 700;
+
+    const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
+    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", {
+      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
+    }).setOrigin(0.5).setDepth(depth+1);
+
+    const startY = H*0.33;
+    const lineH = 72;
+    data.quests.forEach((q, i) => {
+      const y = startY + i*lineH;
+      const pct = Math.min(1, q.progress / q.target);
+      this.add.text(W*0.14, y, q.title, {
+        fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff"
+      }).setOrigin(0,0.5).setDepth(depth+1);
+
+      // barre de progression
+      const barW = W*0.38;
+      const barX = W*0.54;
+      this.add.rectangle(barX, y, barW, 12, 0xffffff, 0.15).setOrigin(0,0.5).setDepth(depth+1);
+      this.add.rectangle(barX, y, barW*pct, 12, q.done ? 0x15b665 : 0x17a689, 1).setOrigin(0,0.5).setDepth(depth+1);
+
+      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, {
+        fontFamily:"monospace", fontSize:24, color:"#fff"
+      }).setOrigin(1,0.5).setDepth(depth+1);
+
+      this.add.text(W*0.14, y+28, `Récompense: ${q.reward}`, {
+        fontFamily:"monospace", fontSize:18, color:"#c3ede5"
+      }).setOrigin(0,0.5).setDepth(depth+1);
+    });
+
+    const close = this.add.text(W/2, H*0.78, "Fermer", {
+      fontFamily:"monospace", fontSize:40, color:"#fff",
+      backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10}
+    }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+
     const destroyAll = () =>
       [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
@@ -340,6 +438,7 @@ class GameScene extends Phaser.Scene {
       if (!bonus.active) return;
       bonus.destroy();
       this.activateMultiplier();
+      updateQuestsFromEvent("bonus", 1);
     }, null, this);
 
     this.time.addEvent({
@@ -368,6 +467,9 @@ class GameScene extends Phaser.Scene {
 
       this.nextSpawnAt = this.time.now + this.curDelay;
       this.lastSpawnMs = -1;
+
+      // comptabilise "une partie lancée"
+      updateQuestsFromEvent("game", 1);
 
       try { TG?.expand?.(); } catch {}
     }
@@ -492,6 +594,9 @@ class GameScene extends Phaser.Scene {
   addScore(n){
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
+
+    // quêtes score
+    updateQuestsFromEvent("score", this.score);
 
     if (!this.game._muted && this.sfxScore) {
       this.sfxScore.play();
