@@ -16,7 +16,7 @@ const PROFILE = {
   jump: -380,  
   pipeSpeed: -220,  
   gap: 270,  
-  spawnDelay: 2000  
+  spawnDelay: 2400  
 };  
 
 const PAD = 2;  
@@ -73,7 +73,7 @@ function ensureBgm(scene) {
 
 /* ======= Difficulté / anti-superposition ======= */  
 const DIFF = {  
-  stepMs: 15000,  
+  stepMs: 12500,  
   speedDelta: -20,  
   delayDelta: -150,  
   minSpeed: -380,  
