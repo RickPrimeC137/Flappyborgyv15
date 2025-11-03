@@ -25,8 +25,7 @@ const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.17;
 
 const BG_KEY       = "bg_mountains";
-const BG_HARD_KEY  = "bg_volcano";       // 🔥 fond du mode Hard
-
+const BG_HARD_KEY  = "bg_volcano"; // 🔥 image hard: assets/bg_volcano.jpg
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
@@ -41,39 +40,28 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-/* ============ Musique de fond (unique, 2 pistes possibles) ============ */
-/* 👉 alternance entre bgm et bgm_alt */
+/* ============ Musique de fond (2 pistes alternées) ============ */
 function ensureBgm(scene) {
   const gm = scene.game;
-
-  if (!gm._bgmKeys) {
-    gm._bgmKeys = ["bgm", "bgm_alt"];
-    gm._bgmIndex = 0;
-  }
+  if (!gm._bgmKeys) { gm._bgmKeys = ["bgm", "bgm_alt"]; gm._bgmIndex = 0; }
 
   if (!gm._bgm || gm._bgm.isDestroyed) {
     const key = gm._bgmKeys[gm._bgmIndex % gm._bgmKeys.length];
     gm._bgmIndex = (gm._bgmIndex + 1) % gm._bgmKeys.length;
-
     gm._bgm = scene.sound.add(key, { loop: true, volume: 0.35 });
     if (gm._muted === true) gm._bgm.setMute(true);
   }
 
   const start = () => { if (!gm._bgm.isPlaying) gm._bgm.play(); };
-
   if (scene.sound.locked) {
     scene.input.once("pointerdown", start);
     scene.input.keyboard?.once("keydown-SPACE", start);
-  } else {
-    start();
-  }
+  } else start();
 
   scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
-  scene.game.events.on(Phaser.Core.Events.FOCUS, () => {
-    if (!scene.sound.locked) gm._bgm?.resume();
-  });
+  scene.game.events.on(Phaser.Core.Events.FOCUS, () => { if (!scene.sound.locked) gm._bgm?.resume(); });
 }
 
 /* ======= Difficulté / anti-superposition ======= */
@@ -112,46 +100,25 @@ async function fetchLeaderboard(limit=10){
 /* ================== Quêtes (localStorage) ================== */
 const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 function loadQuests(){
-  try{
-    const raw = localStorage.getItem(QUEST_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
-  }catch(e){}
-  const base = {
-    quests: [
-      { id:"score50",  title:"Atteins 50 points",  type:"score", target:50,  progress:0, done:false, reward:"+50 pts" },
-      { id:"score150", title:"Atteins 150 points", type:"score", target:150, progress:0, done:false, reward:"+150 pts" },
-      { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"Sticker 🎉" },
-    ]
-  };
-  saveQuests(base);
-  return base;
+  try{ const raw = localStorage.getItem(QUEST_STORAGE_KEY); if (raw) return JSON.parse(raw); }catch(e){}
+  const base = { quests: [
+    { id:"score50",  title:"Atteins 50 points",  type:"score", target:50,  progress:0, done:false, reward:"+50 pts" },
+    { id:"score150", title:"Atteins 150 points", type:"score", target:150, progress:0, done:false, reward:"+150 pts" },
+    { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"Sticker 🎉" },
+  ]};
+  saveQuests(base); return base;
 }
-function saveQuests(data){
-  try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
-}
+function saveQuests(data){ try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){} }
 function updateQuestsFromEvent(evt, value){
-  const data = loadQuests();
-  let changed = false;
+  const data = loadQuests(); let changed = false;
   for (const q of data.quests){
     if (q.done) continue;
     if (q.type === "score" && evt === "score") {
       const v = Math.max(q.progress, value);
-      if (v !== q.progress){
-        q.progress = v;
-        if (q.progress >= q.target) { q.done = true; }
-        changed = true;
-      }
+      if (v !== q.progress){ q.progress = v; if (q.progress >= q.target) q.done = true; changed = true; }
     }
-    if (q.type === "bonus" && evt === "bonus") {
-      q.progress += 1;
-      if (q.progress >= q.target) { q.done = true; }
-      changed = true;
-    }
-    if (q.type === "game" && evt === "game") {
-      q.progress += 1;
-      if (q.progress >= q.target) { q.done = true; }
-      changed = true;
-    }
+    if (q.type === "bonus" && evt === "bonus") { q.progress += 1; if (q.progress >= q.target) q.done = true; changed = true; }
+    if (q.type === "game"  && evt === "game")  { q.progress += 1; if (q.progress >= q.target) q.done = true; changed = true; }
   }
   if (changed) saveQuests(data);
   return changed;
@@ -165,38 +132,28 @@ class PreloadScene extends Phaser.Scene {
     const root = document.getElementById("game-root") || document.body;
     const vid = document.createElement("video");
     vid.src = "assets/intro.mp4";
-    vid.autoplay = true;
-    vid.loop = true;
-    vid.muted = true;
-    vid.playsInline = true;
-    vid.style.position = "absolute";
-    vid.style.left = "50%";
-    vid.style.top = "9%";
-    vid.style.transform = "translateX(-50%)";
-    vid.style.width = "62%";
-    vid.style.maxWidth = "520px";
-    vid.style.borderRadius = "14px";
-    vid.style.zIndex = "9999";
-    vid.style.pointerEvents = "none";
-    root.appendChild(vid);
-    this._loadingVideoEl = vid;
+    vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
+    Object.assign(vid.style,{
+      position:"absolute",left:"50%",top:"9%",transform:"translateX(-50%)",
+      width:"62%",maxWidth:"520px",borderRadius:"14px",zIndex:"9999",pointerEvents:"none"
+    });
+    root.appendChild(vid); this._loadingVideoEl = vid;
   }
 
   preload(){
     const W = this.scale.width, H = this.scale.height;
-
     this.load.setPath("assets");
 
-    // fonds
-    this.load.image(BG_KEY,       "bg_mountains.jpg");
-    this.load.image(BG_HARD_KEY,  "bg_volcano.jpg"); // 🔥
+    // Fonds
+    this.load.image(BG_KEY,      "bg_mountains.jpg");
+    this.load.image(BG_HARD_KEY, "bg_volcano.jpg"); // 🔥
 
-    // sprites
+    // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
-    // audio
+    // Audio
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
@@ -204,14 +161,11 @@ class PreloadScene extends Phaser.Scene {
 
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
 
-    // barre de chargement
+    // Barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
     const fgBar = this.add.rectangle(W*0.24, H*0.8, 2, 12, 0x17a689).setOrigin(0,0.5);
     const pct   = this.add.text(W/2, H*0.8+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#fff"}).setOrigin(0.5);
-    this.load.on("progress", p => {
-      fgBar.width = (W*0.52)*p;
-      pct.setText(Math.round(p*100)+"%");
-    });
+    this.load.on("progress", p => { fgBar.width = (W*0.52)*p; pct.setText(Math.round(p*100)+"%"); });
   }
 
   create(){
@@ -225,95 +179,62 @@ class MenuScene extends Phaser.Scene {
   constructor(){ super("menu"); }
   create(){
     const W = this.scale.width, H = this.scale.height;
-
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
     ensureBgm(this);
 
-    const muteBtn = this.add.text(W - 70, 30, "🔊", {
-      fontFamily: "monospace",
-      fontSize: 42,
-      color: "#fff"
-    }).setOrigin(0.5).setDepth(50).setInteractive({ useHandCursor: true });
-
-    if (typeof this.game._muted === "undefined") {
-      this.game._muted = false;
-    } else {
-      muteBtn.setText(this.game._muted ? "🔇" : "🔊");
-      if (this.game._bgm) this.game._bgm.setMute(this.game._muted);
-    }
+    const muteBtn = this.add.text(W - 70, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
+      .setOrigin(0.5).setDepth(50).setInteractive({useHandCursor:true});
+    if (typeof this.game._muted === "undefined") this.game._muted = false;
+    else { muteBtn.setText(this.game._muted ? "🔇" : "🔊"); this.game._bgm?.setMute(this.game._muted); }
     muteBtn.on("pointerdown", () => {
-      const s = this.game._bgm;
-      const currentlyMuted = this.game._muted === true;
-      if (s) s.setMute(!currentlyMuted);
-      this.game._muted = !currentlyMuted;
-      muteBtn.setText(this.game._muted ? "🔇" : "🔊");
+      const s = this.game._bgm; const m = this.game._muted === true;
+      s?.setMute(!m); this.game._muted = !m; muteBtn.setText(this.game._muted ? "🔇" : "🔊");
     });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
-    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => {
-      const list = await fetchLeaderboard(10);
-      this.showLeaderboard(list);
-    });
+    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => { const list = await fetchLeaderboard(10); this.showLeaderboard(list); });
     this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
     this.makeBtn(W/2, H*0.51, "🗳️ Voter pour Borgy", () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
-      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(url);
-      else window.open(url, "_blank");
+      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(url); else window.open(url, "_blank");
     });
 
-    // ====== Bascule Mode Hard (persistée) ======
+    // Bascule Hard
     if (typeof this.game._hardMode === "undefined") {
       try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
       catch { this.game._hardMode = false; }
     }
-
-    const hardBtn = this.add.text(W/2, H*0.59,
+    const hardBtn = this.makeBtn(W/2, H*0.59,
       this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF",
-      {
-        fontFamily:"monospace",
-        fontSize:34,
-        color:"#fff",
-        backgroundColor: this.game._hardMode ? "#b91c1c" : "#12a38a",
-        padding:{left:18,right:18,top:10,bottom:10}
+      () => {
+        this.game._hardMode = !this.game._hardMode;
+        localStorage.setItem("flappy_borgy_hard", JSON.stringify(this.game._hardMode));
+        hardBtn.setText(this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF");
+        hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
       }
-    ).setOrigin(0.5).setInteractive({useHandCursor:true});
-
-    hardBtn.on("pointerover", ()=> hardBtn.setBackgroundColor(this.game._hardMode ? "#9f1717" : "#0f8e78"));
-    hardBtn.on("pointerout",  ()=> hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a"));
-    hardBtn.on("pointerdown", () => {
-      this.game._hardMode = !this.game._hardMode;
-      localStorage.setItem("flappy_borgy_hard", JSON.stringify(this.game._hardMode));
-      hardBtn.setText(this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF");
-      hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
-    });
+    );
+    hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
 
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
   }
-
   makeBtn(x,y,label,cb){
-    const t = this.add.text(x,y,label,{
-      fontFamily:"monospace", fontSize:34, color:"#fff",
-      backgroundColor:"#12a38a",
-      padding:{left:18,right:18,top:10,bottom:10}
-    }).setOrigin(0.5).setInteractive({useHandCursor:true});
+    const t = this.add.text(x,y,label,{ fontFamily:"monospace", fontSize:34, color:"#fff",
+      backgroundColor:"#12a38a", padding:{left:18,right:18,top:10,bottom:10} })
+      .setOrigin(0.5).setInteractive({useHandCursor:true});
     t.on("pointerover", ()=> t.setBackgroundColor("#0f8e78"));
     t.on("pointerout",  ()=> t.setBackgroundColor("#12a38a"));
     t.on("pointerdown", cb);
     return t;
   }
-
   showLeaderboard(list){
-    const W = this.scale.width, H = this.scale.height;
-    const depth = 500;
+    const W = this.scale.width, H = this.scale.height; const depth = 500;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
-
+    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
       const y = startY + i*lineH;
@@ -324,56 +245,36 @@ class MenuScene extends Phaser.Scene {
       this.add.text(W*0.72, y, String(row.best), {fontFamily:"monospace", fontSize:36, color:"#cffff1"})
         .setDepth(depth+1).setOrigin(1,0.5);
     });
-
-    const close = this.add.text(W/2, H*0.82, "Fermer", {
-      fontFamily:"monospace", fontSize:44, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
-    }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () =>
-      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    const close = this.add.text(W/2, H*0.82, "Fermer", { fontFamily:"monospace", fontSize:44, color:"#fff",
+      backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8} })
+      .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
+      .forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
-
   showQuests(){
-    const data = loadQuests();
-    const W = this.scale.width, H = this.scale.height;
-    const depth = 700;
-
+    const data = loadQuests(); const W = this.scale.width, H = this.scale.height; const depth = 700;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
-    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
-
-    const startY = H*0.33;
-    const lineH = 72;
+    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
+    const startY = H*0.33, lineH = 72;
     data.quests.forEach((q, i) => {
-      const y = startY + i*lineH;
-      const pct = Math.min(1, q.progress / q.target);
-      this.add.text(W*0.14, y, q.title, {
-        fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff"
-      }).setOrigin(0,0.5).setDepth(depth+1);
-
-      const barW = W*0.38;
-      const barX = W*0.54;
+      const y = startY + i*lineH; const pct = Math.min(1, q.progress / q.target);
+      this.add.text(W*0.14, y, q.title, { fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff" })
+        .setOrigin(0,0.5).setDepth(depth+1);
+      const barW=W*0.38, barX=W*0.54;
       this.add.rectangle(barX, y, barW, 12, 0xffffff, 0.15).setOrigin(0,0.5).setDepth(depth+1);
       this.add.rectangle(barX, y, barW*pct, 12, q.done ? 0x15b665 : 0x17a689, 1).setOrigin(0,0.5).setDepth(depth+1);
-
-      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, {
-        fontFamily:"monospace", fontSize:24, color:"#fff"
-      }).setOrigin(1,0.5).setDepth(depth+1);
-
-      this.add.text(W*0.14, y+28, `Récompense: ${q.reward}`, {
-        fontFamily:"monospace", fontSize:18, color:"#c3ede5"
-      }).setOrigin(0,0.5).setDepth(depth+1);
+      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, { fontFamily:"monospace", fontSize:24, color:"#fff" })
+        .setOrigin(1,0.5).setDepth(depth+1);
+      this.add.text(W*0.14, y+28, `Récompense: ${q.reward}`, { fontFamily:"monospace", fontSize:18, color:"#c3ede5" })
+        .setOrigin(0,0.5).setDepth(depth+1);
     });
-
-    const close = this.add.text(W/2, H*0.78, "Fermer", {
-      fontFamily:"monospace", fontSize:40, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10}
-    }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-
-    const destroyAll = () =>
-      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    const close = this.add.text(W/2, H*0.78, "Fermer", { fontFamily:"monospace", fontSize:40, color:"#fff",
+      backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10} })
+      .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
+      .forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
 }
@@ -383,45 +284,32 @@ class GameScene extends Phaser.Scene {
   constructor(){ super("game"); }
 
   init(){
-    this.started = false;
-    this.isOver  = false;
-
-    this.score = 0;
-    this.pairsSpawned = 0;
-
-    this.pipes   = null;
-    this.sensors = null;
-    this.bonuses = null;
-
-    this.nextSpawnAt = Infinity;
-    this.lastSpawnMs = -1;
-
-    this.curSpeed = PROFILE.pipeSpeed;
-    this.curDelay = PROFILE.spawnDelay;
-
-    this.DEBUG = false;
-    this.debugTxt = null;
+    this.started = false; this.isOver  = false;
+    this.score = 0; this.pairsSpawned = 0;
+    this.pipes = null; this.sensors = null; this.bonuses = null;
+    this.nextSpawnAt = Infinity; this.lastSpawnMs = -1;
+    this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
+    this.curGap   = PROFILE.gap;
+    this.DEBUG = false; this.debugTxt = null;
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
-
     ensureBgm(this);
 
-    // BG selon le mode
-    const bgKeyToUse = (this.game._hardMode === true) ? BG_HARD_KEY : BG_KEY;
-    const bg = this.add.image(W/2, H/2, bgKeyToUse).setDepth(-10);
+    // Choix du fond selon le mode (fallback si l'image manque)
+    const isHard = this.game._hardMode === true;
+    const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
+    const hasKey = this.textures.exists(keyWanted);
+    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Ajuste légèrement la difficulté en Hard (plus rapide, plus fréquent, gap plus petit)
-    this.gapOverride = (this.game._hardMode === true) ? (PROFILE.gap - 40) : PROFILE.gap;
-    if (this.game._hardMode === true) {
-      this.curSpeed = PROFILE.pipeSpeed - 60;
-      this.curDelay = PROFILE.spawnDelay - 500;
-    } else {
-      this.curSpeed = PROFILE.pipeSpeed;
-      this.curDelay = PROFILE.spawnDelay;
+    // Hard: paramètres plus durs
+    if (isHard) {
+      this.curSpeed = PROFILE.pipeSpeed - 60;      // plus rapide
+      this.curDelay = PROFILE.spawnDelay - 500;    // spawn plus fréquent
+      this.curGap   = Math.max(120, PROFILE.gap - 40);
     }
 
     this.pipes   = this.physics.add.group();
@@ -432,20 +320,16 @@ class GameScene extends Phaser.Scene {
     this.inputZone.on("pointerdown", () => this.onTap());
     this.input.keyboard.on("keydown-SPACE", () => this.onTap());
 
-    this.scoreText = this.add.text(24, 18, "Score: 0", {
-      fontFamily:"monospace", fontSize:46, color:"#fff", stroke:"#0a3a38", strokeThickness:8
-    }).setDepth(20);
+    this.scoreText = this.add.text(24, 18, "Score: 0",
+      { fontFamily:"monospace", fontSize:46, color:"#fff", stroke:"#0a3a38", strokeThickness:8 }).setDepth(20);
 
     if (this.DEBUG){
-      this.debugTxt = this.add.text(16, 64, "", { fontFamily: "monospace", fontSize: 16, color: "#bff" }).setDepth(20);
+      this.debugTxt = this.add.text(16, 64, "", { fontFamily:"monospace", fontSize: 16, color: "#bff" }).setDepth(20);
     }
 
     this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), "borgy")
-      .setScale(PLAYER_SCALE)
-      .setDepth(10)
-      .setCollideWorldBounds(true);
+      .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
-
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
@@ -468,44 +352,40 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
-      sensor.isScore = false;
-      sensor.destroy();
-      this.addScore(1);
+      sensor.isScore = false; sensor.destroy(); this.addScore(1);
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
-      if (!bonus.active) return;
-      bonus.destroy();
-      this.activateMultiplier();
-      updateQuestsFromEvent("bonus", 1);
+      if (!bonus.active) return; bonus.destroy(); this.activateMultiplier(); updateQuestsFromEvent("bonus", 1);
     }, null, this);
 
+    // Progression de difficulté
     this.time.addEvent({
-      delay: DIFF.stepMs,
-      loop: true,
-      callback: () => {
+      delay: DIFF.stepMs, loop: true, callback: () => {
         this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
         this.curDelay = Math.max(DIFF.minDelay, this.curDelay + DIFF.delayDelta);
         if (this.started) {
           this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
+          this._forceVelocities(); // s’assurer que tout bouge déjà à la nouvelle vitesse
         }
       }
     });
   }
 
-  onTap(){
-    if (this.isOver){
-      this.scene.restart();
-      return;
-    }
+  _forceVelocities(){
+    // applique la vitesse actuelle à tout ce qui est à l’écran
+    this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
+    this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
+    this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
+  }
 
+  onTap(){
+    if (this.isOver){ this.scene.restart(); return; }
     if (!this.started){
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
-
       this.nextSpawnAt = this.time.now + this.curDelay;
       this.lastSpawnMs = -1;
-
       updateQuestsFromEvent("game", 1);
       try { TG?.expand?.(); } catch {}
     }
@@ -526,11 +406,7 @@ class GameScene extends Phaser.Scene {
       this.nextSpawnAt = this.time.now + this.curDelay;
     }
 
-    if (this.started){
-      this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
-      this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
-      this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
-    }
+    if (this.started) this._forceVelocities();
 
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
@@ -551,15 +427,11 @@ class GameScene extends Phaser.Scene {
 
     const playable = Math.max(40, BOT_BAND - TOP_BAND);
     const MIN_GAP = 90;
-    const BASE_GAP = this.gapOverride ?? PROFILE.gap;
-    const GAP = Math.round(Phaser.Math.Clamp(BASE_GAP, MIN_GAP, playable - 40));
+    const GAP = Math.round(Phaser.Math.Clamp(this.curGap ?? PROFILE.gap, MIN_GAP, playable - 40));
 
     let minY = TOP_BAND + Math.floor(GAP/2);
     let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
-    if (maxY < minY) {
-      const c = Math.round((TOP_BAND + BOT_BAND)/2);
-      minY = maxY = c;
-    }
+    if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
     const x  = W + SPAWN_X_OFFSET;
@@ -567,15 +439,6 @@ class GameScene extends Phaser.Scene {
 
     const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
-
-    // teinte lave en Hard
-    if (this.game._hardMode === true) {
-      const lava = 0x6d1f12;
-      topImg.setTint(lava);
-      bottomImg.setTint(lava);
-    } else {
-      topImg.clearTint(); bottomImg.clearTint();
-    }
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
@@ -604,11 +467,20 @@ class GameScene extends Phaser.Scene {
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
     bottomImg.body.setVelocityX(vx);
 
+    // Hard : teinte “lave”
+    if (this.game._hardMode === true) {
+      topImg.setTint(0x6d1f12);
+      bottomImg.setTint(0x6d1f12);
+    } else {
+      topImg.clearTint(); bottomImg.clearTint();
+    }
+
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
+    sensor.setVisible(false); // invisibilité forcée
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false);
     sensor.body.setImmovable(true);
@@ -646,8 +518,7 @@ class GameScene extends Phaser.Scene {
 
   gameOver(){
     if (this.isOver) return;
-    this.isOver = true;
-    this.started = false;
+    this.isOver = true; this.started = false;
 
     if (!this.game._muted && this.sfxGameOver) {
       const bgm = this.game._bgm;
@@ -667,35 +538,24 @@ class GameScene extends Phaser.Scene {
     this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
 
-    const replay = this.add.text(W/2, H/2 + 50, "Rejouer", {
-      fontFamily:"monospace", fontSize:44, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10}
-    }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    const replay = this.add.text(W/2, H/2 + 50, "Rejouer",
+      { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
+      .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     replay.on("pointerdown", ()=> this.scene.restart());
 
-    const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal", {
-      fontFamily:"monospace", fontSize:40, color:"#fff",
-      backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8}
-    }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    menuBtn.on("pointerdown", () => {
-      const bgm = this.game._bgm;
-      if (bgm && !this.game._muted) bgm.setVolume(0.35);
-      this.scene.start("menu");
-    });
+    const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal",
+      { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
+      .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    menuBtn.on("pointerdown", () => { const bgm = this.game._bgm; if (bgm && !this.game._muted) bgm.setVolume(0.35); this.scene.start("menu"); });
 
-    postScore(this.score).then(() =>
-      fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
-    );
+    postScore(this.score).then(() => fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); }));
   }
 
   showLeaderboard(list){
-    const W = this.scale.width, H = this.scale.height;
-    const depth = 300;
+    const W = this.scale.width, H = this.scale.height; const depth = 300;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
-
+    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
       const y = startY + i*lineH;
@@ -706,13 +566,11 @@ class GameScene extends Phaser.Scene {
       this.add.text(W*0.72, y, String(row.best), {fontFamily:"monospace", fontSize:36, color:"#cffff1"})
         .setDepth(depth+1).setOrigin(1,0.5);
     });
-
-    const close = this.add.text(W/2, H*0.82, "Fermer", {
-      fontFamily:"monospace", fontSize:44, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
-    }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () =>
-      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    const close = this.add.text(W/2, H*0.82, "Fermer",
+      { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8} })
+      .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
+      .forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
 }
