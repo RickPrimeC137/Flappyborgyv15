@@ -25,7 +25,7 @@ const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.17;
 
 const BG_KEY       = "bg_mountains";
-const BG_HARD_KEY  = "bg_volcano"; // 🔥 image hard: assets/bg_volcano.jpg
+const BG_HARD_KEY  = "bg_volcano"; // 🔥 image hard: assets/bg_volcano.png
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
@@ -146,7 +146,7 @@ class PreloadScene extends Phaser.Scene {
 
     // Fonds
     this.load.image(BG_KEY,      "bg_mountains.jpg");
-    this.load.image(BG_HARD_KEY, "bg_volcano.jpg"); // 🔥
+    this.load.image(BG_HARD_KEY, "bg_volcano.png"); // 🔥 extension corrigée
 
     // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
@@ -365,14 +365,13 @@ class GameScene extends Phaser.Scene {
         this.curDelay = Math.max(DIFF.minDelay, this.curDelay + DIFF.delayDelta);
         if (this.started) {
           this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
-          this._forceVelocities(); // s’assurer que tout bouge déjà à la nouvelle vitesse
+          this._forceVelocities();
         }
       }
     });
   }
 
   _forceVelocities(){
-    // applique la vitesse actuelle à tout ce qui est à l’écran
     this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
     this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
@@ -384,8 +383,12 @@ class GameScene extends Phaser.Scene {
       this.started = true;
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
+
+      // ⏱️ premier spawn immédiat pour que ça bouge tout de suite
+      this.spawnPair(true);
+      this.lastSpawnMs = this.time.now;
       this.nextSpawnAt = this.time.now + this.curDelay;
-      this.lastSpawnMs = -1;
+
       updateQuestsFromEvent("game", 1);
       try { TG?.expand?.(); } catch {}
     }
@@ -480,7 +483,7 @@ class GameScene extends Phaser.Scene {
 
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
-    sensor.setVisible(false); // invisibilité forcée
+    sensor.setVisible(false);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false);
     sensor.body.setImmovable(true);
