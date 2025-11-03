@@ -25,7 +25,9 @@ const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.16;
 
 const BG_KEY = "bg_mountains";
-const BG_HARD_KEY = "bg_volcano";   // 🔥 nouveau fond pour le mode Hard (assets/bg_volcano.jpg)
+const BG_HARD_KEY = "bg_volcano";   // 🔥 fond pour le mode Hard (assets/bg_volcano.jpg)
+const LAVA_TINT = 0xFF3B1E;         // 🔥 teinte des tuyaux en Hard
+
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
@@ -184,6 +186,7 @@ class PreloadScene extends Phaser.Scene {
     vid.style.borderRadius = "14px";
     vid.style.zIndex = "9999";
     vid.style.pointerEvents = "none";
+    vid.setAttribute("data-preload-vid", "1"); // marqueur pour pouvoir la retirer
     root.appendChild(vid);
     this._loadingVideoEl = vid;
   }
@@ -235,7 +238,10 @@ class MenuScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // BG du menu : toujours le fond standard (on ne le change pas ici)
+    // Safety: si la vidéo de preload traîne, on la retire
+    document.querySelectorAll('#game-root video[data-preload-vid]').forEach(v => v.remove());
+
+    // BG du menu : fond standard
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
@@ -414,9 +420,13 @@ class GameScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
+    // Safety: si la vidéo de preload traîne, on la retire
+    document.querySelectorAll('#game-root video[data-preload-vid]').forEach(v => v.remove());
+
     ensureBgm(this);
 
-    // 🗻 Choix du fond selon le mode
+    // 🗻 Choix du fond selon le mode (fallback couleur si image rate)
+    this.cameras.main.setBackgroundColor("#9edff1");
     const bgKeyToUse = (this.game._hardMode === true) ? BG_HARD_KEY : BG_KEY;
     const bg = this.add.image(W/2, H/2, bgKeyToUse).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
@@ -551,7 +561,8 @@ class GameScene extends Phaser.Scene {
 
     const playable = Math.max(40, BOT_BAND - TOP_BAND);
     const MIN_GAP = 90;
-    const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
+    theGAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
+    const GAP = theGAP;
 
     let minY = TOP_BAND + Math.floor(GAP/2);
     let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
@@ -566,6 +577,12 @@ class GameScene extends Phaser.Scene {
 
     const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
+
+    // 🔥 Teinte “lave” en mode Hard
+    if (this.game._hardMode === true) {
+      topImg.setTint(LAVA_TINT);
+      bottomImg.setTint(LAVA_TINT);
+    }
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
