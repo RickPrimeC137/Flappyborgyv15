@@ -25,9 +25,7 @@ const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.16;
 
 const BG_KEY = "bg_mountains";
-const BG_HARD_KEY = "bg_volcano";   // 🔥 fond pour le mode Hard (assets/bg_volcano.jpg)
-const LAVA_TINT = 0xFF3B1E;         // 🔥 teinte des tuyaux en Hard
-
+const BG_HARD_KEY = "bg_volcano";   // 🔥 fond hard (assets/bg_volcano.jpg)
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
@@ -42,19 +40,14 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-/* ============ Musique de fond (unique, 2 pistes possibles) ============ */
+/* ============ Musique ============ */
 function ensureBgm(scene) {
   const gm = scene.game;
 
   if (!gm._bgm || gm._bgm.isDestroyed) {
     const key = Math.random() < 0.5 ? "bgm" : "bgm_alt";
-    gm._bgm = scene.sound.add(key, {
-      loop: true,
-      volume: 0.35,
-    });
-    if (gm._muted === true) {
-      gm._bgm.setMute(true);
-    }
+    gm._bgm = scene.sound.add(key, { loop: true, volume: 0.35 });
+    if (gm._muted === true) gm._bgm.setMute(true);
   }
 
   const start = () => { if (!gm._bgm.isPlaying) gm._bgm.play(); };
@@ -62,19 +55,15 @@ function ensureBgm(scene) {
   if (scene.sound.locked) {
     scene.input.once("pointerdown", start);
     scene.input.keyboard?.once("keydown-SPACE", start);
-  } else {
-    start();
-  }
+  } else start();
 
   scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
-  scene.game.events.on(Phaser.Core.Events.FOCUS, () => {
-    if (!scene.sound.locked) gm._bgm?.resume();
-  });
+  scene.game.events.on(Phaser.Core.Events.FOCUS, () => { if (!scene.sound.locked) gm._bgm?.resume(); });
 }
 
-/* ======= Difficulté / anti-superposition ======= */
+/* ======= Difficulté ======= */
 const DIFF = {
   stepMs: 12500,
   speedDelta: -20,
@@ -107,7 +96,7 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
-/* ================== PETIT GESTIONNAIRE DE QUÊTES ================== */
+/* ================== QUÊTES (localStorage) ================== */
 const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 function loadQuests(){
   try{
@@ -121,12 +110,9 @@ function loadQuests(){
       { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"Sticker 🎉" },
     ]
   };
-  saveQuests(base);
-  return base;
+  saveQuests(base); return base;
 }
-function saveQuests(data){
-  try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
-}
+function saveQuests(data){ try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){} }
 function updateQuestsFromEvent(evt, value){
   const data = loadQuests();
   let changed = false;
@@ -134,28 +120,16 @@ function updateQuestsFromEvent(evt, value){
     if (q.done) continue;
     if (q.type === "score" && evt === "score") {
       const v = Math.max(q.progress, value);
-      if (v !== q.progress){
-        q.progress = v;
-        if (q.progress >= q.target) { q.done = true; }
-        changed = true;
-      }
+      if (v !== q.progress){ q.progress = v; if (q.progress >= q.target) q.done = true; changed = true; }
     }
-    if (q.type === "bonus" && evt === "bonus") {
-      q.progress += 1;
-      if (q.progress >= q.target) { q.done = true; }
-      changed = true;
-    }
-    if (q.type === "game" && evt === "game") {
-      q.progress += 1;
-      if (q.progress >= q.target) { q.done = true; }
-      changed = true;
-    }
+    if (q.type === "bonus" && evt === "bonus") { q.progress += 1; if (q.progress >= q.target) q.done = true; changed = true; }
+    if (q.type === "game"  && evt === "game" ) { q.progress += 1; if (q.progress >= q.target) q.done = true; changed = true; }
   }
   if (changed) saveQuests(data);
   return changed;
 }
 
-/* ================== PRELOAD (vidéo DOM + barre) ================== */
+/* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
 
@@ -163,61 +137,49 @@ class PreloadScene extends Phaser.Scene {
     const root = document.getElementById("game-root") || document.body;
     const vid = document.createElement("video");
     vid.src = "assets/intro.mp4";
-    vid.autoplay = true;
-    vid.loop = true;
-    vid.muted = true;
-    vid.playsInline = true;
-    vid.style.position = "absolute";
-    vid.style.left = "50%";
-    vid.style.top = "9%";
-    vid.style.transform = "translateX(-50%)";
-    vid.style.width = "62%";
-    vid.style.maxWidth = "520px";
-    vid.style.borderRadius = "14px";
-    vid.style.zIndex = "9999";
-    vid.style.pointerEvents = "none";
-    vid.setAttribute("data-preload-vid", "1");
+    vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
+    Object.assign(vid.style, {
+      position:"absolute", left:"50%", top:"9%", transform:"translateX(-50%)",
+      width:"62%", maxWidth:"520px", borderRadius:"14px", zIndex:"9999", pointerEvents:"none"
+    });
     root.appendChild(vid);
     this._loadingVideoEl = vid;
   }
 
   preload(){
     const W = this.scale.width, H = this.scale.height;
-
     this.load.setPath("assets");
 
     // fonds
     this.load.image(BG_KEY,        "bg_mountains.jpg");
-    this.load.image(BG_HARD_KEY,   "bg_volcano.jpg"); // 🔥 fond Hard
+    this.load.image(BG_HARD_KEY,   "bg_volcano.jpg"); // optionnel
 
     // sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
+    // bonus + icône vent (optionnelle)
+    if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
+    this.load.image("wind_icon", "wind_icon.png"); // ok si 404
+
     // audio
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
-
-    if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
+    this.load.audio("sfx_wind",     "sfx_wind.wav"); // optionnel
+    this.load.audio("sfx_gate",     "sfx_gate.wav"); // optionnel
 
     // barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
     const fgBar = this.add.rectangle(W*0.24, H*0.8, 2, 12, 0x17a689).setOrigin(0,0.5);
     const pct   = this.add.text(W/2, H*0.8+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#fff"}).setOrigin(0.5);
-    this.load.on("progress", p => {
-      fgBar.width = (W*0.52)*p;
-      pct.setText(Math.round(p*100)+"%");
-    });
+    this.load.on("progress", p => { fgBar.width = (W*0.52)*p; pct.setText(Math.round(p*100)+"%"); });
   }
 
   create(){
-    if (this._loadingVideoEl) {
-      this._loadingVideoEl.remove();
-      this._loadingVideoEl = null;
-    }
+    if (this._loadingVideoEl) { this._loadingVideoEl.remove(); this._loadingVideoEl = null; }
     this.scene.start("menu");
   }
 }
@@ -227,63 +189,41 @@ class MenuScene extends Phaser.Scene {
   constructor(){ super("menu"); }
   create(){
     const W = this.scale.width, H = this.scale.height;
-
-    // Safety: si la vidéo de preload traîne, on la retire
-    document.querySelectorAll('#game-root video[data-preload-vid]').forEach(v => v.remove());
-
-    // BG du menu : fond standard
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
     ensureBgm(this);
 
     const muteBtn = this.add.text(W - 70, 30, "🔊", {
-      fontFamily: "monospace",
-      fontSize: 42,
-      color: "#fff"
-    })
-      .setOrigin(0.5)
-      .setDepth(50)
-      .setInteractive({ useHandCursor: true });
+      fontFamily: "monospace", fontSize: 42, color: "#fff"
+    }).setOrigin(0.5).setDepth(50).setInteractive({ useHandCursor: true });
 
-    if (typeof this.game._muted === "undefined") {
-      this.game._muted = false;
-    } else {
+    if (typeof this.game._muted === "undefined") this.game._muted = false;
+    else {
       muteBtn.setText(this.game._muted ? "🔇" : "🔊");
       if (this.game._bgm) this.game._bgm.setMute(this.game._muted);
     }
-
     muteBtn.on("pointerdown", () => {
-      const s = this.game._bgm;
-      const currentlyMuted = this.game._muted === true;
-      if (s) s.setMute(!currentlyMuted);
-      this.game._muted = !currentlyMuted;
+      const s = this.game._bgm; const m = this.game._muted === true;
+      if (s) s.setMute(!m); this.game._muted = !m;
       muteBtn.setText(this.game._muted ? "🔇" : "🔊");
     });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
-    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => {
-      const list = await fetchLeaderboard(10);
-      this.showLeaderboard(list);
-    });
+    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => { const list = await fetchLeaderboard(10); this.showLeaderboard(list); });
     this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
 
-    // 🗳️ Bouton “Voter pour Borgy”
+    // Voter
     this.makeBtn(W/2, H*0.51, "🗳️ Voter pour Borgy", () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
-      if (window.Telegram?.WebApp?.openLink) {
-        window.Telegram.WebApp.openLink(url);
-      } else {
-        window.open(url, "_blank");
-      }
+      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(url); else window.open(url, "_blank");
     });
 
-    // 🔀 Bouton de bascule Mode Hard
+    // Hard toggle
     if (typeof this.game._hardMode === "undefined") {
-      try {
-        this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false");
-      } catch { this.game._hardMode = false; }
+      try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
+      catch { this.game._hardMode = false; }
     }
     const hardBtn = this.makeBtn(W/2, H*0.59,
       this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF",
@@ -291,7 +231,7 @@ class MenuScene extends Phaser.Scene {
         this.game._hardMode = !this.game._hardMode;
         localStorage.setItem("flappy_borgy_hard", JSON.stringify(this.game._hardMode));
         hardBtn.setText(this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF");
-        hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a"); // rouge = Hard
+        hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
       }
     );
     hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
@@ -302,8 +242,7 @@ class MenuScene extends Phaser.Scene {
   makeBtn(x,y,label,cb){
     const t = this.add.text(x,y,label,{
       fontFamily:"monospace", fontSize:34, color:"#fff",
-      backgroundColor:"#12a38a",
-      padding:{left:18,right:18,top:10,bottom:10}
+      backgroundColor:"#12a38a", padding:{left:18,right:18,top:10,bottom:10}
     }).setOrigin(0.5).setInteractive({useHandCursor:true});
     t.on("pointerover", ()=> t.setBackgroundColor("#0f8e78"));
     t.on("pointerout",  ()=> t.setBackgroundColor("#12a38a"));
@@ -314,9 +253,8 @@ class MenuScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     const depth = 500;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
+    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
 
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
@@ -330,54 +268,39 @@ class MenuScene extends Phaser.Scene {
     });
 
     const close = this.add.text(W/2, H*0.82, "Fermer", {
-      fontFamily:"monospace", fontSize:44, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
+      fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187",
+      padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () =>
-      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
   showQuests(){
     const data = loadQuests();
     const W = this.scale.width, H = this.scale.height;
     const depth = 700;
-
     const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
-    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", {
-      fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
+    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+      .setOrigin(0.5).setDepth(depth+1);
 
-    const startY = H*0.33;
-    const lineH = 72;
+    const startY = H*0.33, lineH = 72;
     data.quests.forEach((q, i) => {
-      const y = startY + i*lineH;
-      const pct = Math.min(1, q.progress / q.target);
-      this.add.text(W*0.14, y, q.title, {
-        fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff"
-      }).setOrigin(0,0.5).setDepth(depth+1);
-
-      // barre de progression
-      const barW = W*0.38;
-      const barX = W*0.54;
+      const y = startY + i*lineH, pct = Math.min(1, q.progress / q.target);
+      this.add.text(W*0.14, y, q.title, { fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff" })
+        .setOrigin(0,0.5).setDepth(depth+1);
+      const barW = W*0.38, barX = W*0.54;
       this.add.rectangle(barX, y, barW, 12, 0xffffff, 0.15).setOrigin(0,0.5).setDepth(depth+1);
       this.add.rectangle(barX, y, barW*pct, 12, q.done ? 0x15b665 : 0x17a689, 1).setOrigin(0,0.5).setDepth(depth+1);
-
-      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, {
-        fontFamily:"monospace", fontSize:24, color:"#fff"
-      }).setOrigin(1,0.5).setDepth(depth+1);
-
-      this.add.text(W*0.14, y+28, `Récompense: ${q.reward}`, {
-        fontFamily:"monospace", fontSize:18, color:"#c3ede5"
-      }).setOrigin(0,0.5).setDepth(depth+1);
+      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, { fontFamily:"monospace", fontSize:24, color:"#fff" })
+        .setOrigin(1,0.5).setDepth(depth+1);
+      this.add.text(W*0.14, y+28, `Récompense: ${q.reward}`, { fontFamily:"monospace", fontSize:18, color:"#c3ede5" })
+        .setOrigin(0,0.5).setDepth(depth+1);
     });
 
     const close = this.add.text(W/2, H*0.78, "Fermer", {
-      fontFamily:"monospace", fontSize:40, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10}
+      fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0db187",
+      padding:{left:26,right:26,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-
-    const destroyAll = () =>
-      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
 }
@@ -403,6 +326,14 @@ class GameScene extends Phaser.Scene {
     this.curSpeed = PROFILE.pipeSpeed;
     this.curDelay = PROFILE.spawnDelay;
 
+    this.prevGapY = null;    // pour lisser la suite des paires
+
+    // --- Hard mode runtime ---
+    this.pairsMeta = [];     // {top,bottom, baseGapY, gap, type, amp, omega, t0}
+    this.windIcon  = null;
+    this.windTimer = null;
+    this.windPower = 0;
+
     this.DEBUG = false;
     this.debugTxt = null;
   }
@@ -410,16 +341,10 @@ class GameScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // Safety: si la vidéo de preload traîne, on la retire
-    document.querySelectorAll('#game-root video[data-preload-vid]').forEach(v => v.remove());
-
     ensureBgm(this);
 
-    // 🗻 Choix du fond selon le mode (fallback si la texture n’existe pas)
-    const keyExists = this.textures.exists((this.game._hardMode === true) ? BG_HARD_KEY : BG_KEY);
+    // Fond selon le mode
     const bgKeyToUse = (this.game._hardMode === true && this.textures.exists(BG_HARD_KEY)) ? BG_HARD_KEY : BG_KEY;
-
-    this.cameras.main.setBackgroundColor("#9edff1");
     const bg = this.add.image(W/2, H/2, bgKeyToUse).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
@@ -453,7 +378,10 @@ class GameScene extends Phaser.Scene {
     // sfx
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
+    this.sfxWind     = this.sound.get("sfx_wind") || this.sound.add("sfx_wind", { volume: 0.6 });
+    this.sfxGate     = this.sound.get("sfx_gate") || this.sound.add("sfx_gate", { volume: 0.6 });
 
+    // bandes de kill
     if (ENABLE_KILL_BANDS){
       const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
       const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
@@ -468,15 +396,10 @@ class GameScene extends Phaser.Scene {
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
-      sensor.isScore = false;
-      sensor.destroy();
-      this.addScore(1);
+      sensor.isScore = false; sensor.destroy(); this.addScore(1);
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
-      if (!bonus.active) return;
-      bonus.destroy();
-      this.activateMultiplier();
-      updateQuestsFromEvent("bonus", 1);
+      if (!bonus.active) return; bonus.destroy(); this.activateMultiplier(); updateQuestsFromEvent("bonus", 1);
     }, null, this);
 
     this.time.addEvent({
@@ -485,18 +408,36 @@ class GameScene extends Phaser.Scene {
       callback: () => {
         this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
         this.curDelay = Math.max(DIFF.minDelay, this.curDelay + DIFF.delayDelta);
-        if (this.started) {
-          this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
-        }
+        if (this.started) this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
       }
     });
+
+    // UI vent (Hard)
+    if (this.game._hardMode && this.textures.exists("wind_icon")){
+      this.windIcon = this.add.image(W-46, 44, "wind_icon").setScale(0.8).setAlpha(0).setDepth(40);
+    }
+  }
+
+  /* --------- Hard mode helpers ---------- */
+  startWindGust(){
+    if (!this.game._hardMode) return;
+    const dir = Math.random() < 0.5 ? -1 : 1; // -1 vers le haut, 1 vers le bas
+    this.windPower = dir * 900;               // puissance
+    if (this.windIcon) this.tweens.add({ targets:this.windIcon, alpha:1, duration:200 });
+    if (this.sfxWind?.key) { try{ this.sfxWind.play(); }catch{} }
+    this.time.delayedCall(1600, () => {
+      this.windPower = 0;
+      if (this.windIcon) this.tweens.add({ targets:this.windIcon, alpha:0, duration:200 });
+    });
+  }
+  scheduleNextWind(){
+    if (!this.game._hardMode) return;
+    const delay = Phaser.Math.Between(4200, 7200);
+    this.windTimer = this.time.delayedCall(delay, () => { this.startWindGust(); this.scheduleNextWind(); });
   }
 
   onTap(){
-    if (this.isOver){
-      this.scene.restart();
-      return;
-    }
+    if (this.isOver){ this.scene.restart(); return; }
 
     if (!this.started){
       this.started = true;
@@ -506,8 +447,8 @@ class GameScene extends Phaser.Scene {
       this.nextSpawnAt = this.time.now + this.curDelay;
       this.lastSpawnMs = -1;
 
-      // comptabilise "une partie lancée"
       updateQuestsFromEvent("game", 1);
+      if (this.game._hardMode) this.scheduleNextWind();
 
       try { TG?.expand?.(); } catch {}
     }
@@ -520,6 +461,7 @@ class GameScene extends Phaser.Scene {
     const vy = this.player.body.velocity.y;
     this.player.setAngle(vy < -40 ? -16 : (vy > 140 ? 20 : 0));
 
+    // Spawns
     if (this.started && this.time.now >= this.nextSpawnAt){
       if (this.lastSpawnMs < 0 || (this.time.now - this.lastSpawnMs) >= DIFF.cooldownMs){
         this.spawnPair(false);
@@ -528,18 +470,60 @@ class GameScene extends Phaser.Scene {
       this.nextSpawnAt = this.time.now + this.curDelay;
     }
 
+    // Move world
     if (this.started){
       this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
       this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
       this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
     }
 
+    // Clean offscreen
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
+    // Hard mode: animate gate pairs + wind
+    if (this.game._hardMode && this.pairsMeta.length){
+      const H = this.scale.height;
+      const SAFE_TOP  = Math.round(H * PLAYFIELD_TOP_PCT) + 10;
+      const SAFE_BOT  = Math.min(Math.round(H*PLAYFIELD_BOT_PCT), Math.round(H*PIPE_RIM_MAX_PCT)) - 10;
+
+      for (const pm of this.pairsMeta){
+        if (pm.type !== "gate") continue;
+        const t = (this.time.now - pm.t0) * pm.omega;  // rad/s
+        const offset = pm.amp * Math.sin(t);          // [-amp..+amp]
+        const gapY = Phaser.Math.Clamp(pm.baseGapY + offset, SAFE_TOP + pm.gap*0.5, SAFE_BOT - pm.gap*0.5);
+
+        // Recompute rims & scale so the pipes restent collés aux bords
+        const halfG = pm.gap * 0.5;
+        const yTopRim    = Math.round(gapY - halfG + (PAD - JOINT_OVERLAP));
+        const yBottomRim = Math.round(gapY + halfG - (PAD - JOINT_OVERLAP));
+        const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));
+        const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));
+
+        const scaleXt = PIPE_W_DISPLAY / pm.top.width;
+        const scaleXb = PIPE_W_DISPLAY / pm.bottom.width;
+
+        pm.top.setScale(scaleXt, topH / pm.top.height);
+        pm.bottom.setScale(scaleXb, bottomH / pm.bottom.height);
+        pm.top.y = yTopRim; pm.bottom.y = yBottomRim;
+
+        // update bodies to new visuals
+        const displayWt = pm.top.width * scaleXt;
+        pm.top.body.setSize(displayWt * PIPE_BODY_W, pm.top.displayHeight, true);
+        pm.top.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, pm.top.displayHeight - pm.top.body.height);
+
+        const displayWb = pm.bottom.width * scaleXb;
+        pm.bottom.body.setSize(displayWb * PIPE_BODY_W, pm.bottom.displayHeight, true);
+        pm.bottom.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
+      }
+    }
+
+    // Wind force (vertical acceleration)
+    if (this.player?.body) this.player.body.setAccelerationY(this.windPower);
+
     if (this.DEBUG && this.debugTxt){
-      this.debugTxt.setText(`speed:${this.curSpeed}  delay:${this.curDelay}  next:${Math.max(0, Math.ceil(this.nextSpawnAt - this.time.now))}ms`);
+      this.debugTxt.setText(`speed:${this.curSpeed}  delay:${this.curDelay}  wind:${this.windPower}`);
     }
   }
 
@@ -551,17 +535,28 @@ class GameScene extends Phaser.Scene {
     const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
     const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
 
-    const playable = Math.max(40, BOT_BAND - TOP_BAND);
-    const MIN_GAP = 90;
-    const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40)); // ✅ plus de variable fantôme
+    const SAFE_TOP  = TOP_BAND + 10;
+    const SAFE_BOT  = Math.min(BOT_BAND, RIM_LIMIT) - 10;
 
-    let minY = TOP_BAND + Math.floor(GAP/2);
-    let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
-    if (maxY < minY) {
-      const c = Math.round((TOP_BAND + BOT_BAND)/2);
-      minY = maxY = c;
+    const playable = Math.max(40, SAFE_BOT - SAFE_TOP);
+    const MIN_GAP = 90;
+    const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
+
+    const halfG = Math.floor(GAP/2);
+    let minY = SAFE_TOP + halfG;
+    let maxY = SAFE_BOT - halfG;
+    if (maxY < minY) { minY = maxY = Math.round((SAFE_TOP + SAFE_BOT)/2); }
+
+    // Smooth chaining
+    const MAX_STEP = 220;
+    let gapY;
+    if (this.prevGapY == null) gapY = Phaser.Math.Between(minY, maxY);
+    else {
+      const lo = Phaser.Math.Clamp(this.prevGapY - MAX_STEP, minY, maxY);
+      const hi = Phaser.Math.Clamp(this.prevGapY + MAX_STEP, minY, maxY);
+      gapY = Phaser.Math.Between(lo, hi);
     }
-    const gapY = Phaser.Math.Between(minY, maxY);
+    this.prevGapY = gapY;
 
     const x  = W + SPAWN_X_OFFSET;
     const vx = this.started ? this.curSpeed : 0;
@@ -569,17 +564,17 @@ class GameScene extends Phaser.Scene {
     const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
 
-    // 🔥 Teinte “lave” en mode Hard
+    // Lave en hard
     if (this.game._hardMode === true) {
-      topImg.setTint(LAVA_TINT);
-      bottomImg.setTint(LAVA_TINT);
+      const LAVA_TINT = 0xCC3A1A;
+      topImg.setTint(LAVA_TINT); bottomImg.setTint(LAVA_TINT);
     }
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
 
-    const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
-    const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
+    const yTopRim    = Math.round(gapY - halfG + (PAD - JOINT_OVERLAP));
+    const yBottomRim = Math.round(gapY + halfG - (PAD - JOINT_OVERLAP));
 
     const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));
     const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));
@@ -602,25 +597,35 @@ class GameScene extends Phaser.Scene {
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
     bottomImg.body.setVelocityX(vx);
 
-    this.pipes.add(topImg);
-    this.pipes.add(bottomImg);
+    this.pipes.add(topImg); this.pipes.add(bottomImg);
 
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
     this.physics.add.existing(sensor, false);
-    sensor.body.setAllowGravity(false);
-    sensor.body.setImmovable(true);
-    sensor.body.setVelocityX(vx);
-    sensor.isScore = !silentFirst;
-    this.sensors.add(sensor);
+    sensor.body.setAllowGravity(false); sensor.body.setImmovable(true); sensor.body.setVelocityX(vx);
+    sensor.isScore = !silentFirst; this.sensors.add(sensor);
 
     this.pairsSpawned++;
 
+    // ---- Hard mode: transformer cette paire en "porte" animée 1 fois sur 2
+    if (this.game._hardMode === true && this.pairsSpawned % 2 === 0){
+      const meta = {
+        top: topImg, bottom: bottomImg,
+        baseGapY: gapY, gap: GAP,
+        type: "gate",
+        amp: 70,                 // amplitude du mouvement (px)
+        omega: (Math.PI*2) / 2200, // période ~2.2s
+        t0: this.time.now
+      };
+      this.pairsMeta.push(meta);
+      if (this.sfxGate?.key) { try{ this.sfxGate.play(); }catch{} }
+    }
+
+    // bonus
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
       const by = Phaser.Math.Clamp(
         gapY + Phaser.Math.Between(-160,160),
-        H*PLAYFIELD_TOP_PCT+40,
-        H*PLAYFIELD_BOT_PCT-40
+        SAFE_TOP+40, SAFE_BOT-40
       );
       const bonus = this.physics.add.image(x + 520, by, "bonus_sb")
         .setDepth(7).setScale(0.55).setImmovable(true);
@@ -638,31 +643,26 @@ class GameScene extends Phaser.Scene {
   addScore(n){
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
-
     updateQuestsFromEvent("score", this.score);
-
-    if (!this.game._muted && this.sfxScore) {
-      this.sfxScore.play();
-    }
+    if (!this.game._muted && this.sfxScore) { this.sfxScore.play(); }
   }
 
   gameOver(){
     if (this.isOver) return;
-    this.isOver = true;
-    this.started = false;
+    this.isOver = true; this.started = false;
+    this.windPower = 0; if (this.windTimer) this.windTimer.remove(false);
 
     if (!this.game._muted && this.sfxGameOver) {
       const bgm = this.game._bgm;
       if (bgm) bgm.setVolume(0.15);
-      this.sfxGameOver.once("complete", () => {
-        if (bgm && !this.game._muted) bgm.setVolume(0.35);
-      });
+      this.sfxGameOver.once("complete", () => { if (bgm && !this.game._muted) bgm.setVolume(0.35); });
       this.sfxGameOver.play();
     }
 
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
+    this.pairsMeta.length = 0;
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
@@ -682,14 +682,11 @@ class GameScene extends Phaser.Scene {
       backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     menuBtn.on("pointerdown", () => {
-      const bgm = this.game._bgm;
-      if (bgm && !this.game._muted) bgm.setVolume(0.35);
+      const bgm = this.game._bgm; if (bgm && !this.game._muted) bgm.setVolume(0.35);
       this.scene.start("menu");
     });
 
-    postScore(this.score).then(() =>
-      fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); })
-    );
+    postScore(this.score).then(() => fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); }));
   }
 
   showLeaderboard(list){
@@ -715,8 +712,7 @@ class GameScene extends Phaser.Scene {
       fontFamily:"monospace", fontSize:44, color:"#fff",
       backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () =>
-      [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
+    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
 }
