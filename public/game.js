@@ -16,13 +16,13 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,
   gap: 270,
-  spawnDelay: 2400
+  spawnDelay: 2350
 };
 
 const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
-const PLAYER_SCALE   = 0.17;
+const PLAYER_SCALE   = 0.16;
 
 const BG_KEY = "bg_mountains";
 const PLAYFIELD_TOP_PCT = 0.15;
@@ -82,7 +82,7 @@ function ensureBgm(scene) {
 
 /* ======= Difficulté / anti-superposition ======= */
 const DIFF = {
-  stepMs: 12500,
+  stepMs: 12000,
   speedDelta: -20,
   delayDelta: -150,
   minSpeed: -380,
