@@ -1,7 +1,7 @@
-/* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)  
-   Domaine du jeu : https://flappyborgyv15.onrender.com  
-   API : https://rickprimec137-flappyborgyv15.onrender.com  
-   ⚠️ Mets ta vidéo dans /assets/intro.mp4  
+/* FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
+   Domaine du jeu : https://flappyborgyv15.onrender.com
+   API : https://rickprimec137-flappyborgyv15.onrender.com
+   ⚠️ Mets ta vidéo dans /assets/intro.mp4
 */
 
 /* ================== Telegram WebApp ================== */
@@ -24,7 +24,9 @@ const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.17;
 
-const BG_KEY = "bg_mountains";
+const BG_KEY       = "bg_mountains";
+const BG_HARD_KEY  = "bg_volcano";       // 🔥 fond du mode Hard
+
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
@@ -40,11 +42,10 @@ const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
 /* ============ Musique de fond (unique, 2 pistes possibles) ============ */
-/* 👉 modif ici : on ALTERNERA entre bgm et bgm_alt, pas de random */
+/* 👉 alternance entre bgm et bgm_alt */
 function ensureBgm(scene) {
   const gm = scene.game;
 
-  // init la liste une seule fois
   if (!gm._bgmKeys) {
     gm._bgmKeys = ["bgm", "bgm_alt"];
     gm._bgmIndex = 0;
@@ -54,13 +55,8 @@ function ensureBgm(scene) {
     const key = gm._bgmKeys[gm._bgmIndex % gm._bgmKeys.length];
     gm._bgmIndex = (gm._bgmIndex + 1) % gm._bgmKeys.length;
 
-    gm._bgm = scene.sound.add(key, {
-      loop: true,
-      volume: 0.35,
-    });
-    if (gm._muted === true) {
-      gm._bgm.setMute(true);
-    }
+    gm._bgm = scene.sound.add(key, { loop: true, volume: 0.35 });
+    if (gm._muted === true) gm._bgm.setMute(true);
   }
 
   const start = () => { if (!gm._bgm.isPlaying) gm._bgm.play(); };
@@ -113,7 +109,7 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
-/* ================== PETIT GESTIONNAIRE DE QUÊTES ================== */
+/* ================== Quêtes (localStorage) ================== */
 const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 function loadQuests(){
   try{
@@ -191,19 +187,24 @@ class PreloadScene extends Phaser.Scene {
 
     this.load.setPath("assets");
 
-    this.load.image(BG_KEY,        "bg_mountains.jpg");
+    // fonds
+    this.load.image(BG_KEY,       "bg_mountains.jpg");
+    this.load.image(BG_HARD_KEY,  "bg_volcano.jpg"); // 🔥
+
+    // sprites
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
+    // audio
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
-
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
 
     if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
 
+    // barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
     const fgBar = this.add.rectangle(W*0.24, H*0.8, 2, 12, 0x17a689).setOrigin(0,0.5);
     const pct   = this.add.text(W/2, H*0.8+26, "0%", {fontFamily:"monospace", fontSize:18, color:"#fff"}).setOrigin(0.5);
@@ -214,10 +215,7 @@ class PreloadScene extends Phaser.Scene {
   }
 
   create(){
-    if (this._loadingVideoEl) {
-      this._loadingVideoEl.remove();
-      this._loadingVideoEl = null;
-    }
+    if (this._loadingVideoEl) { this._loadingVideoEl.remove(); this._loadingVideoEl = null; }
     this.scene.start("menu");
   }
 }
@@ -227,6 +225,7 @@ class MenuScene extends Phaser.Scene {
   constructor(){ super("menu"); }
   create(){
     const W = this.scale.width, H = this.scale.height;
+
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
@@ -236,10 +235,7 @@ class MenuScene extends Phaser.Scene {
       fontFamily: "monospace",
       fontSize: 42,
       color: "#fff"
-    })
-      .setOrigin(0.5)
-      .setDepth(50)
-      .setInteractive({ useHandCursor: true });
+    }).setOrigin(0.5).setDepth(50).setInteractive({ useHandCursor: true });
 
     if (typeof this.game._muted === "undefined") {
       this.game._muted = false;
@@ -247,7 +243,6 @@ class MenuScene extends Phaser.Scene {
       muteBtn.setText(this.game._muted ? "🔇" : "🔊");
       if (this.game._bgm) this.game._bgm.setMute(this.game._muted);
     }
-
     muteBtn.on("pointerdown", () => {
       const s = this.game._bgm;
       const currentlyMuted = this.game._muted === true;
@@ -265,16 +260,40 @@ class MenuScene extends Phaser.Scene {
     this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
     this.makeBtn(W/2, H*0.51, "🗳️ Voter pour Borgy", () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
-      if (window.Telegram?.WebApp?.openLink) {
-        window.Telegram.WebApp.openLink(url);
-      } else {
-        window.open(url, "_blank");
+      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(url);
+      else window.open(url, "_blank");
+    });
+
+    // ====== Bascule Mode Hard (persistée) ======
+    if (typeof this.game._hardMode === "undefined") {
+      try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
+      catch { this.game._hardMode = false; }
+    }
+
+    const hardBtn = this.add.text(W/2, H*0.59,
+      this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF",
+      {
+        fontFamily:"monospace",
+        fontSize:34,
+        color:"#fff",
+        backgroundColor: this.game._hardMode ? "#b91c1c" : "#12a38a",
+        padding:{left:18,right:18,top:10,bottom:10}
       }
+    ).setOrigin(0.5).setInteractive({useHandCursor:true});
+
+    hardBtn.on("pointerover", ()=> hardBtn.setBackgroundColor(this.game._hardMode ? "#9f1717" : "#0f8e78"));
+    hardBtn.on("pointerout",  ()=> hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a"));
+    hardBtn.on("pointerdown", () => {
+      this.game._hardMode = !this.game._hardMode;
+      localStorage.setItem("flappy_borgy_hard", JSON.stringify(this.game._hardMode));
+      hardBtn.setText(this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF");
+      hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
     });
 
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
   }
+
   makeBtn(x,y,label,cb){
     const t = this.add.text(x,y,label,{
       fontFamily:"monospace", fontSize:34, color:"#fff",
@@ -286,6 +305,7 @@ class MenuScene extends Phaser.Scene {
     t.on("pointerdown", cb);
     return t;
   }
+
   showLeaderboard(list){
     const W = this.scale.width, H = this.scale.height;
     const depth = 500;
@@ -313,6 +333,7 @@ class MenuScene extends Phaser.Scene {
       [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)].forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
+
   showQuests(){
     const data = loadQuests();
     const W = this.scale.width, H = this.scale.height;
@@ -387,9 +408,21 @@ class GameScene extends Phaser.Scene {
 
     ensureBgm(this);
 
-    const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-10);
+    // BG selon le mode
+    const bgKeyToUse = (this.game._hardMode === true) ? BG_HARD_KEY : BG_KEY;
+    const bg = this.add.image(W/2, H/2, bgKeyToUse).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
+
+    // Ajuste légèrement la difficulté en Hard (plus rapide, plus fréquent, gap plus petit)
+    this.gapOverride = (this.game._hardMode === true) ? (PROFILE.gap - 40) : PROFILE.gap;
+    if (this.game._hardMode === true) {
+      this.curSpeed = PROFILE.pipeSpeed - 60;
+      this.curDelay = PROFILE.spawnDelay - 500;
+    } else {
+      this.curSpeed = PROFILE.pipeSpeed;
+      this.curDelay = PROFILE.spawnDelay;
+    }
 
     this.pipes   = this.physics.add.group();
     this.sensors = this.physics.add.group();
@@ -417,6 +450,7 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
+    // sfx
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
 
@@ -473,7 +507,6 @@ class GameScene extends Phaser.Scene {
       this.lastSpawnMs = -1;
 
       updateQuestsFromEvent("game", 1);
-
       try { TG?.expand?.(); } catch {}
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
@@ -518,7 +551,8 @@ class GameScene extends Phaser.Scene {
 
     const playable = Math.max(40, BOT_BAND - TOP_BAND);
     const MIN_GAP = 90;
-    const GAP = Math.round(Phaser.Math.Clamp(PROFILE.gap, MIN_GAP, playable - 40));
+    const BASE_GAP = this.gapOverride ?? PROFILE.gap;
+    const GAP = Math.round(Phaser.Math.Clamp(BASE_GAP, MIN_GAP, playable - 40));
 
     let minY = TOP_BAND + Math.floor(GAP/2);
     let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
@@ -533,6 +567,15 @@ class GameScene extends Phaser.Scene {
 
     const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
+
+    // teinte lave en Hard
+    if (this.game._hardMode === true) {
+      const lava = 0x6d1f12;
+      topImg.setTint(lava);
+      bottomImg.setTint(lava);
+    } else {
+      topImg.clearTint(); bottomImg.clearTint();
+    }
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
@@ -597,12 +640,8 @@ class GameScene extends Phaser.Scene {
   addScore(n){
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
-
     updateQuestsFromEvent("score", this.score);
-
-    if (!this.game._muted && this.sfxScore) {
-      this.sfxScore.play();
-    }
+    if (!this.game._muted && this.sfxScore) this.sfxScore.play();
   }
 
   gameOver(){
@@ -613,9 +652,7 @@ class GameScene extends Phaser.Scene {
     if (!this.game._muted && this.sfxGameOver) {
       const bgm = this.game._bgm;
       if (bgm) bgm.setVolume(0.15);
-      this.sfxGameOver.once("complete", () => {
-        if (bgm && !this.game._muted) bgm.setVolume(0.35);
-      });
+      this.sfxGameOver.once("complete", () => { if (bgm && !this.game._muted) bgm.setVolume(0.35); });
       this.sfxGameOver.play();
     }
 
