@@ -20,12 +20,12 @@ const PROFILE = {
 };
 
 const PAD = 2;
-const PIPE_BODY_W    = 0.92;  // largeur physique du corps du tuyau (92% du visuel)
-const PIPE_W_DISPLAY = 180;   // largeur visuelle cible
+const PIPE_BODY_W    = 0.92;
+const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.17;
 
 const BG_KEY       = "bg_mountains";
-const BG_HARD_KEY  = "bg_volcano"; // 🔥 image hard: assets/bg_volcano.png
+const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.82;
@@ -40,32 +40,26 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
+/* ===== Anim “portes” (Hard) ===== */
+const HARD_DOOR_AMPLITUDE_PX = 70;      // déplacement max de CHAQUE bord
+const HARD_DOOR_HALF_PERIOD  = 900;     // ms pour “fermer” puis yoyo pour “ouvrir”
+
 /* ============ Musique ============ */
-/* Alternance bgm/bgm_alt en menu/normal.
-   👉 En mode Hard, on NE joue la piste hard qu’au tout premier tap (onTap) */
 function ensureBgm(scene, opts = {}) {
   const gm = scene.game;
-
-  // Liste des pistes "normales"
   if (!gm._bgmKeys) { gm._bgmKeys = ["bgm", "bgm_alt"]; gm._bgmIndex = 0; }
 
-  // Choix de la clé voulue : forcée (ex: "bgm_hard") ou alternance
-  let wantedKey = null;
-  if (opts.forceKey) {
-    wantedKey = opts.forceKey;
-  } else {
-    wantedKey = gm._bgmKeys[gm._bgmIndex % gm._bgmKeys.length];
-    gm._bgmIndex = (gm._bgmIndex + 1) % gm._bgmKeys.length;
-  }
+  let wantedKey = opts.forceKey
+    ? opts.forceKey
+    : gm._bgmKeys[gm._bgmIndex % gm._bgmKeys.length];
 
-  // Si ce n'est pas la bonne piste, on remplace proprement
+  if (!opts.forceKey) gm._bgmIndex = (gm._bgmIndex + 1) % gm._bgmKeys.length;
+
   if (gm._bgm && gm._bgm.key !== wantedKey) {
     try { gm._bgm.stop(); } catch {}
     try { gm._bgm.destroy(); } catch {}
     gm._bgm = null;
   }
-
-  // (Ré)instancie si nécessaire
   if (!gm._bgm || gm._bgm.destroyed === true) {
     gm._bgm = scene.sound.add(wantedKey, { loop: true, volume: 0.35 });
     if (gm._muted === true) gm._bgm.setMute(true);
@@ -77,14 +71,13 @@ function ensureBgm(scene, opts = {}) {
     scene.input.keyboard?.once("keydown-SPACE", start);
   } else start();
 
-  // Nettoyage des handlers focus/blur pour éviter les doublons
   scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
   scene.game.events.on(Phaser.Core.Events.FOCUS, () => { if (!scene.sound.locked) gm._bgm?.resume(); });
 }
 
-/* ======= Difficulté / anti-superposition ======= */
+/* ======= Difficulté ======= */
 const DIFF = {
   stepMs: 12500,
   speedDelta: -20,
@@ -95,7 +88,7 @@ const DIFF = {
 };
 const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 
-/* ================== LEADERBOARD (client) ================== */
+/* ================== LEADERBOARD ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 function tgInitData(){ try { return TG?.initData || null; } catch { return null; } }
 async function postScore(score){
@@ -117,7 +110,7 @@ async function fetchLeaderboard(limit=10){
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
 
-/* ================== Quêtes (localStorage) ================== */
+/* ================== Quêtes ================== */
 const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 function loadQuests(){
   try{ const raw = localStorage.getItem(QUEST_STORAGE_KEY); if (raw) return JSON.parse(raw); }catch(e){}
@@ -144,7 +137,7 @@ function updateQuestsFromEvent(evt, value){
   return changed;
 }
 
-/* ================== PRELOAD (vidéo DOM + barre) ================== */
+/* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
 
@@ -166,7 +159,7 @@ class PreloadScene extends Phaser.Scene {
 
     // Fonds
     this.load.image(BG_KEY,      "bg_mountains.jpg");
-    this.load.image(BG_HARD_KEY, "bg_volcano.png"); // 🔥 extension .png
+    this.load.image(BG_HARD_KEY, "bg_volcano.png");
 
     // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
@@ -176,7 +169,7 @@ class PreloadScene extends Phaser.Scene {
     // Audio normal
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
-    // Audio HARD (ta piste)
+    // Audio HARD (au 1er tap)
     this.load.audio("bgm_hard", "turbulence-246380.mp3");
 
     // SFX
@@ -206,8 +199,7 @@ class MenuScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
-    // En menu: musique "normale" (pas la hard)
-    ensureBgm(this);
+    ensureBgm(this); // musique normale en menu
 
     const muteBtn = this.add.text(W - 70, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
       .setOrigin(0.5).setDepth(50).setInteractive({useHandCursor:true});
@@ -321,7 +313,6 @@ class GameScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    // Choix du fond selon le mode (fallback si l'image manque)
     const isHard = this.game._hardMode === true;
     const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
     const hasKey = this.textures.exists(keyWanted);
@@ -329,9 +320,6 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // ⚠️ Ici on ne force PAS la musique hard : on la basculera au premier tap
-
-    // Hard: paramètres plus durs (vitesse, délai, gap)
     if (isHard) {
       this.curSpeed = PROFILE.pipeSpeed - 60;
       this.curDelay = PROFILE.spawnDelay - 500;
@@ -360,16 +348,15 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
-    // sfx
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
 
     if (ENABLE_KILL_BANDS){
       const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
       const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
-      this.killTop = this.add.rectangle(W/2, topBand/2, W, topBand, 0x00ff00, 0).setDepth(0);
+      this.killTop = this.add.rectangle(W/2, topBand/2, W, topBand, 0, 0).setDepth(0);
       this.physics.add.existing(this.killTop, true);
-      this.killBottom = this.add.rectangle(W/2, (H + botBand)/2, W, H - botBand, 0xff0000, 0).setDepth(0);
+      this.killBottom = this.add.rectangle(W/2, (H + botBand)/2, W, H - botBand, 0, 0).setDepth(0);
       this.physics.add.existing(this.killBottom, true);
       this.physics.add.overlap(this.player, this.killTop,    () => this.gameOver(), null, this);
       this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
@@ -384,7 +371,6 @@ class GameScene extends Phaser.Scene {
       if (!bonus.active) return; bonus.destroy(); this.activateMultiplier(); updateQuestsFromEvent("bonus", 1);
     }, null, this);
 
-    // Progression de difficulté au fil du temps
     this.time.addEvent({
       delay: DIFF.stepMs, loop: true, callback: () => {
         this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
@@ -403,7 +389,6 @@ class GameScene extends Phaser.Scene {
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
   }
 
-  // 🔊 Bascule immédiate sur la musique Hard au premier tap si Hard ON
   _maybeSwitchToHardMusic(){
     if (this.game._hardMode === true) {
       ensureBgm(this, { forceKey: "bgm_hard" });
@@ -417,12 +402,11 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // ⏱️ premier spawn immédiat (pas de point)
+      // premier spawn immédiat (pas de point)
       this.spawnPair(true);
       this.lastSpawnMs = this.time.now;
       this.nextSpawnAt = this.time.now + this.curDelay;
 
-      // 🎵 bascule musique hard maintenant (après interaction utilisateur)
       this._maybeSwitchToHardMusic();
 
       updateQuestsFromEvent("game", 1);
@@ -456,6 +440,22 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ===== util: met à jour l’échelle/physique d’un tuyau selon la position de sa "lèvre" =====
+  _resizePipeToRim(img, isTop, rimY, scaleX){
+    const H = this.scale.height;
+    const targetH = isTop
+      ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
+      : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
+
+    img.setScale(scaleX, targetH / img.height);
+    img.y = rimY;
+
+    const displayW = img.width * scaleX;
+    img.setImmovable(true).body.setAllowGravity(false);
+    img.body.setSize(displayW * PIPE_BODY_W, img.displayHeight, true);
+    img.body.setOffset((displayW - displayW*PIPE_BODY_W)/2, isTop ? img.displayHeight - img.body.height : 0);
+  }
+
   // ========= Génération d’une paire =========
   spawnPair(silentFirst){
     const W = this.scale.width, H = this.scale.height;
@@ -482,37 +482,18 @@ class GameScene extends Phaser.Scene {
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
 
-    const yTopRim    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
-    const yBottomRim = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
+    let yTopRim0    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
+    let yBottomRim0 = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
-    const topH    = Math.max(20, Math.ceil(yTopRim + PIPE_OVERSCAN));
-    const bottomH = Math.max(20, Math.ceil((H - yBottomRim) + PIPE_OVERSCAN));
+    this._resizePipeToRim(topImg, true,  yTopRim0,    scaleXt);
+    this._resizePipeToRim(bottomImg, false, yBottomRim0, scaleXb);
 
-    topImg.setScale(scaleXt, topH / topImg.height);
-    bottomImg.setScale(scaleXb, bottomH / bottomImg.height);
-
-    topImg.y    = yTopRim;
-    bottomImg.y = yBottomRim;
-
-    const displayWt = topImg.width * scaleXt;
-    topImg.setImmovable(true).body.setAllowGravity(false);
-    topImg.body.setSize(displayWt * PIPE_BODY_W, topImg.displayHeight, true);
-    topImg.body.setOffset((displayWt - displayWt*PIPE_BODY_W)/2, topImg.displayHeight - topImg.body.height);
     topImg.body.setVelocityX(vx);
-
-    const displayWb = bottomImg.width * scaleXb;
-    bottomImg.setImmovable(true).body.setAllowGravity(false);
-    bottomImg.body.setSize(displayWb * PIPE_BODY_W, bottomImg.displayHeight, true);
-    bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
     bottomImg.body.setVelocityX(vx);
 
-    // Hard : teinte “lave” pour différencier visuellement
-    if (this.game._hardMode === true) {
-      topImg.setTint(0x6d1f12);
-      bottomImg.setTint(0x6d1f12);
-    } else {
-      topImg.clearTint(); bottomImg.clearTint();
-    }
+    // Hard : teinte “lave”
+    if (this.game._hardMode === true) { topImg.setTint(0x6d1f12); bottomImg.setTint(0x6d1f12); }
+    else { topImg.clearTint(); bottomImg.clearTint(); }
 
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
@@ -530,16 +511,52 @@ class GameScene extends Phaser.Scene {
     this.pairsSpawned++;
 
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(
-        gapY + Phaser.Math.Between(-160,160),
-        H*PLAYFIELD_TOP_PCT+40,
-        H*PLAYFIELD_BOT_PCT-40
-      );
+      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
+        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
       const bonus = this.physics.add.image(x + 520, by, "bonus_sb")
         .setDepth(7).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
       bonus.body.setVelocityX(this.curSpeed);
       this.bonuses.add(bonus);
+    }
+
+    /* ====== Animation porte (Hard uniquement) ====== */
+    if (this.game._hardMode === true) {
+      // amplitude sûre pour ne jamais passer sous MIN_GAP
+      const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
+      const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
+
+      if (amp > 0) {
+        const driver = { delta: 0 }; // delta >0 ferme, <0 ouvre
+        const tween = this.tweens.add({
+          targets: driver,
+          delta: amp,
+          duration: HARD_DOOR_HALF_PERIOD,
+          yoyo: true,
+          repeat: -1,
+          ease: 'Sine.inOut',
+          onUpdate: () => {
+            const d = driver.delta;
+            const newTop    = yTopRim0    + d;
+            const newBottom = yBottomRim0 - d;
+            // bornes de sécurité (empêche de sortir de la zone)
+            const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
+            const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
+
+            this._resizePipeToRim(topImg, true,  topClamped,    scaleXt);
+            this._resizePipeToRim(bottomImg, false, bottomClamped, scaleXb);
+
+            // conserver la vitesse horizontale actuelle
+            topImg.body.setVelocityX(this.curSpeed);
+            bottomImg.body.setVelocityX(this.curSpeed);
+          }
+        });
+
+        // Nettoyage du tween si les sprites disparaissent
+        const stopTween = () => { try { tween.stop(); tween.remove(); } catch {} };
+        topImg.once('destroy', stopTween);
+        bottomImg.once('destroy', stopTween);
+      }
     }
   }
 
