@@ -20,8 +20,8 @@ const PROFILE = {
 };
 
 const PAD = 2;
-const PIPE_BODY_W    = 0.92;
-const PIPE_W_DISPLAY = 180;
+const PIPE_BODY_W    = 0.92;  // largeur physique du corps du tuyau (92% du visuel)
+const PIPE_W_DISPLAY = 180;   // largeur visuelle cible
 const PLAYER_SCALE   = 0.17;
 
 const BG_KEY       = "bg_mountains";
@@ -40,20 +40,34 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
-/* --- Hard: portes qui se referment --- */
-const HARD_DOOR_ENABLED = true;     // actif uniquement en mode Hard
-const HARD_DOOR_MIN_GAP = 140;      // écart minimum atteint après fermeture
-const HARD_DOOR_RATE    = 120;      // vitesse de fermeture (px/s)
-
-/* ============ Musique de fond (2 pistes alternées) ============ */
-function ensureBgm(scene) {
+/* ============ Musique ============ */
+/* Alternance bgm/bgm_alt en menu/normal.
+   👉 En mode Hard, on NE joue la piste hard qu’au tout premier tap (onTap) */
+function ensureBgm(scene, opts = {}) {
   const gm = scene.game;
+
+  // Liste des pistes "normales"
   if (!gm._bgmKeys) { gm._bgmKeys = ["bgm", "bgm_alt"]; gm._bgmIndex = 0; }
 
-  if (!gm._bgm || gm._bgm.isDestroyed) {
-    const key = gm._bgmKeys[gm._bgmIndex % gm._bgmKeys.length];
+  // Choix de la clé voulue : forcée (ex: "bgm_hard") ou alternance
+  let wantedKey = null;
+  if (opts.forceKey) {
+    wantedKey = opts.forceKey;
+  } else {
+    wantedKey = gm._bgmKeys[gm._bgmIndex % gm._bgmKeys.length];
     gm._bgmIndex = (gm._bgmIndex + 1) % gm._bgmKeys.length;
-    gm._bgm = scene.sound.add(key, { loop: true, volume: 0.35 });
+  }
+
+  // Si ce n'est pas la bonne piste, on remplace proprement
+  if (gm._bgm && gm._bgm.key !== wantedKey) {
+    try { gm._bgm.stop(); } catch {}
+    try { gm._bgm.destroy(); } catch {}
+    gm._bgm = null;
+  }
+
+  // (Ré)instancie si nécessaire
+  if (!gm._bgm || gm._bgm.destroyed === true) {
+    gm._bgm = scene.sound.add(wantedKey, { loop: true, volume: 0.35 });
     if (gm._muted === true) gm._bgm.setMute(true);
   }
 
@@ -63,6 +77,7 @@ function ensureBgm(scene) {
     scene.input.keyboard?.once("keydown-SPACE", start);
   } else start();
 
+  // Nettoyage des handlers focus/blur pour éviter les doublons
   scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
@@ -158,9 +173,13 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
-    // Audio
+    // Audio normal
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
+    // Audio HARD (ta piste)
+    this.load.audio("bgm_hard", "turbulence-246380.mp3");
+
+    // SFX
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
 
@@ -187,6 +206,7 @@ class MenuScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
+    // En menu: musique "normale" (pas la hard)
     ensureBgm(this);
 
     const muteBtn = this.add.text(W - 70, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
@@ -296,13 +316,10 @@ class GameScene extends Phaser.Scene {
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
     this.DEBUG = false; this.debugTxt = null;
-
-    this.closingPairs = []; // paires top/bottom qui se referment (Hard)
   }
 
   create(){
     const W = this.scale.width, H = this.scale.height;
-    ensureBgm(this);
 
     // Choix du fond selon le mode (fallback si l'image manque)
     const isHard = this.game._hardMode === true;
@@ -312,10 +329,12 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Hard: paramètres plus durs
+    // ⚠️ Ici on ne force PAS la musique hard : on la basculera au premier tap
+
+    // Hard: paramètres plus durs (vitesse, délai, gap)
     if (isHard) {
-      this.curSpeed = PROFILE.pipeSpeed - 60;      // plus rapide
-      this.curDelay = PROFILE.spawnDelay - 500;    // spawn plus fréquent
+      this.curSpeed = PROFILE.pipeSpeed - 60;
+      this.curDelay = PROFILE.spawnDelay - 500;
       this.curGap   = Math.max(120, PROFILE.gap - 40);
     }
 
@@ -365,7 +384,7 @@ class GameScene extends Phaser.Scene {
       if (!bonus.active) return; bonus.destroy(); this.activateMultiplier(); updateQuestsFromEvent("bonus", 1);
     }, null, this);
 
-    // Progression de difficulté
+    // Progression de difficulté au fil du temps
     this.time.addEvent({
       delay: DIFF.stepMs, loop: true, callback: () => {
         this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
@@ -384,6 +403,13 @@ class GameScene extends Phaser.Scene {
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
   }
 
+  // 🔊 Bascule immédiate sur la musique Hard au premier tap si Hard ON
+  _maybeSwitchToHardMusic(){
+    if (this.game._hardMode === true) {
+      ensureBgm(this, { forceKey: "bgm_hard" });
+    }
+  }
+
   onTap(){
     if (this.isOver){ this.scene.restart(); return; }
     if (!this.started){
@@ -391,10 +417,13 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // ⏱️ premier spawn immédiat pour que ça bouge tout de suite
+      // ⏱️ premier spawn immédiat (pas de point)
       this.spawnPair(true);
       this.lastSpawnMs = this.time.now;
       this.nextSpawnAt = this.time.now + this.curDelay;
+
+      // 🎵 bascule musique hard maintenant (après interaction utilisateur)
+      this._maybeSwitchToHardMusic();
 
       updateQuestsFromEvent("game", 1);
       try { TG?.expand?.(); } catch {}
@@ -417,9 +446,6 @@ class GameScene extends Phaser.Scene {
     }
 
     if (this.started) this._forceVelocities();
-
-    // Fermeture progressive des portes (Hard)
-    if (this.game._hardMode === true && HARD_DOOR_ENABLED) this._updateDoors();
 
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
@@ -480,7 +506,7 @@ class GameScene extends Phaser.Scene {
     bottomImg.body.setOffset((displayWb - displayWb*PIPE_BODY_W)/2, 0);
     bottomImg.body.setVelocityX(vx);
 
-    // Hard : teinte “lave”
+    // Hard : teinte “lave” pour différencier visuellement
     if (this.game._hardMode === true) {
       topImg.setTint(0x6d1f12);
       bottomImg.setTint(0x6d1f12);
@@ -501,16 +527,6 @@ class GameScene extends Phaser.Scene {
     sensor.isScore = !silentFirst;
     this.sensors.add(sensor);
 
-    // Enregistrer la paire comme « porte » si Hard
-    if (this.game._hardMode === true && HARD_DOOR_ENABLED) {
-      this.closingPairs.push({
-        top: topImg,
-        bottom: bottomImg,
-        minGap: HARD_DOOR_MIN_GAP,
-        rate: HARD_DOOR_RATE
-      });
-    }
-
     this.pairsSpawned++;
 
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
@@ -525,25 +541,6 @@ class GameScene extends Phaser.Scene {
       bonus.body.setVelocityX(this.curSpeed);
       this.bonuses.add(bonus);
     }
-  }
-
-  // --- Animation des "portes" (Hard)
-  _updateDoors() {
-    const dt = this.game.loop.delta / 1000; // secondes
-    const keep = [];
-    for (const ctrl of this.closingPairs) {
-      const top = ctrl.top, bottom = ctrl.bottom;
-      if (!top?.active || !bottom?.active) continue;
-
-      const currentGap = bottom.y - top.y;
-      if (currentGap > ctrl.minGap) {
-        const step = Math.min(ctrl.rate * dt, currentGap - ctrl.minGap);
-        top.y    += step / 2;
-        bottom.y -= step / 2;
-      }
-      if (top.active && bottom.active) keep.push(ctrl);
-    }
-    this.closingPairs = keep;
   }
 
   activateMultiplier(){
@@ -572,7 +569,6 @@ class GameScene extends Phaser.Scene {
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
-    this.closingPairs = [];
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
@@ -589,7 +585,11 @@ class GameScene extends Phaser.Scene {
     const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal",
       { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    menuBtn.on("pointerdown", () => { const bgm = this.game._bgm; if (bgm && !this.game._muted) bgm.setVolume(0.35); this.scene.start("menu"); });
+    menuBtn.on("pointerdown", () => {
+      const bgm = this.game._bgm;
+      if (bgm && !this.game._muted) bgm.setVolume(0.35);
+      this.scene.start("menu");
+    });
 
     postScore(this.score).then(() => fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); }));
   }
