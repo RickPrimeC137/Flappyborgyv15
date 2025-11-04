@@ -91,25 +91,32 @@ const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 /* ================== LEADERBOARD ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 function tgInitData(){ try { return TG?.initData || null; } catch { return null; } }
-async function postScore(score){
+
+// ---- PATCH : support leaderboard "hard" ----
+async function postScore(score, isHard = false){
   const initData = tgInitData();
   if (!initData) return;
   try{
     await fetch(`${API_BASE}/api/score`, {
       method: "POST",
       headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({ score, initData })
+      body: JSON.stringify({
+        score,
+        initData,
+        board: isHard ? "hard" : "normal"   // <- on envoie le type de board
+      })
     });
   }catch(e){ console.warn("score post error", e); }
 }
-async function fetchLeaderboard(limit=10){
+
+async function fetchLeaderboard(limit=10, isHard = false){
   try{
-    const r = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}`);
+    const board = isHard ? "hard" : "normal";
+    const r = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}&board=${board}`);
     const j = await r.json();
     return j.ok ? j.list : [];
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
-
 /* ================== Quêtes ================== */
 const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 function loadQuests(){
@@ -588,27 +595,40 @@ class GameScene extends Phaser.Scene {
     this.bonuses.clear(true, true);
 
     const W = this.scale.width, H = this.scale.height;
-    this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
-    this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
-      .setOrigin(0.5).setDepth(101);
-    this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
-      .setOrigin(0.5).setDepth(101);
+    // On garde les refs pour pouvoir les remove si on clique "menu principal"
+    const ui = [];
+
+    ui.push(this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100));
+    ui.push(this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
+      .setOrigin(0.5).setDepth(101));
+    ui.push(this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
+      .setOrigin(0.5).setDepth(101));
 
     const replay = this.add.text(W/2, H/2 + 50, "Rejouer",
       { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    ui.push(replay);
     replay.on("pointerdown", ()=> this.scene.restart());
 
     const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal",
       { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    ui.push(menuBtn);
     menuBtn.on("pointerdown", () => {
       const bgm = this.game._bgm;
       if (bgm && !this.game._muted) bgm.setVolume(0.35);
+      // détruire l'UI du game over si le leaderboard est arrivé après
+      ui.forEach(o => { try { o.destroy(); } catch {} });
       this.scene.start("menu");
     });
 
-    postScore(this.score).then(() => fetchLeaderboard(10).then(list => { if (list?.length) this.showLeaderboard(list); }));
+    // ---- PATCH : leaderboard selon le mode ----
+    const isHard = this.game._hardMode === true;
+    postScore(this.score, isHard).then(() =>
+      fetchLeaderboard(10, isHard).then(list => {
+        if (list?.length) this.showLeaderboard(list);
+      })
+    );
   }
 
   showLeaderboard(list){
