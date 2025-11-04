@@ -40,6 +40,11 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 30;
 const BONUS_DURATION = 10000;
 
+/* --- Hard: portes qui se referment --- */
+const HARD_DOOR_ENABLED = true;     // actif uniquement en mode Hard
+const HARD_DOOR_MIN_GAP = 140;      // écart minimum atteint après fermeture
+const HARD_DOOR_RATE    = 120;      // vitesse de fermeture (px/s)
+
 /* ============ Musique de fond (2 pistes alternées) ============ */
 function ensureBgm(scene) {
   const gm = scene.game;
@@ -146,7 +151,7 @@ class PreloadScene extends Phaser.Scene {
 
     // Fonds
     this.load.image(BG_KEY,      "bg_mountains.jpg");
-    this.load.image(BG_HARD_KEY, "bg_volcano.png"); // 🔥 extension corrigée
+    this.load.image(BG_HARD_KEY, "bg_volcano.png"); // 🔥 extension .png
 
     // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
@@ -291,6 +296,8 @@ class GameScene extends Phaser.Scene {
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
     this.DEBUG = false; this.debugTxt = null;
+
+    this.closingPairs = []; // paires top/bottom qui se referment (Hard)
   }
 
   create(){
@@ -411,6 +418,9 @@ class GameScene extends Phaser.Scene {
 
     if (this.started) this._forceVelocities();
 
+    // Fermeture progressive des portes (Hard)
+    if (this.game._hardMode === true && HARD_DOOR_ENABLED) this._updateDoors();
+
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
@@ -491,6 +501,16 @@ class GameScene extends Phaser.Scene {
     sensor.isScore = !silentFirst;
     this.sensors.add(sensor);
 
+    // Enregistrer la paire comme « porte » si Hard
+    if (this.game._hardMode === true && HARD_DOOR_ENABLED) {
+      this.closingPairs.push({
+        top: topImg,
+        bottom: bottomImg,
+        minGap: HARD_DOOR_MIN_GAP,
+        rate: HARD_DOOR_RATE
+      });
+    }
+
     this.pairsSpawned++;
 
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
@@ -505,6 +525,25 @@ class GameScene extends Phaser.Scene {
       bonus.body.setVelocityX(this.curSpeed);
       this.bonuses.add(bonus);
     }
+  }
+
+  // --- Animation des "portes" (Hard)
+  _updateDoors() {
+    const dt = this.game.loop.delta / 1000; // secondes
+    const keep = [];
+    for (const ctrl of this.closingPairs) {
+      const top = ctrl.top, bottom = ctrl.bottom;
+      if (!top?.active || !bottom?.active) continue;
+
+      const currentGap = bottom.y - top.y;
+      if (currentGap > ctrl.minGap) {
+        const step = Math.min(ctrl.rate * dt, currentGap - ctrl.minGap);
+        top.y    += step / 2;
+        bottom.y -= step / 2;
+      }
+      if (top.active && bottom.active) keep.push(ctrl);
+    }
+    this.closingPairs = keep;
   }
 
   activateMultiplier(){
@@ -533,6 +572,7 @@ class GameScene extends Phaser.Scene {
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
+    this.closingPairs = [];
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
