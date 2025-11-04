@@ -92,31 +92,26 @@ const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
 function tgInitData(){ try { return TG?.initData || null; } catch { return null; } }
 
-// ---- PATCH : support leaderboard "hard" ----
-async function postScore(score, isHard = false){
+// Ajout du paramètre isHard => envoie mode: "hard" ou "normal"
+async function postScore(score, isHard=false){
   const initData = tgInitData();
   if (!initData) return;
   try{
     await fetch(`${API_BASE}/api/score`, {
       method: "POST",
       headers: { "Content-Type":"application/json" },
-      body: JSON.stringify({
-        score,
-        initData,
-        board: isHard ? "hard" : "normal"   // <- on envoie le type de board
-      })
+      body: JSON.stringify({ score, initData, mode: isHard ? "hard" : "normal" })
     });
   }catch(e){ console.warn("score post error", e); }
 }
-
-async function fetchLeaderboard(limit=10, isHard = false){
+async function fetchLeaderboard(limit=10, isHard=false){
   try{
-    const board = isHard ? "hard" : "normal";
-    const r = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}&board=${board}`);
+    const r = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}${isHard ? "&mode=hard" : ""}`);
     const j = await r.json();
     return j.ok ? j.list : [];
   }catch(e){ console.warn("lb fetch error", e); return []; }
 }
+
 /* ================== Quêtes ================== */
 const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 function loadQuests(){
@@ -218,8 +213,15 @@ class MenuScene extends Phaser.Scene {
     });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
+
+    // Leaderboard : si Hard activé, affiche le board Hard
+    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => {
+      const isHard = this.game._hardMode === true;
+      const list = await fetchLeaderboard(10, isHard);
+      this.showLeaderboard(list, isHard);
+    });
+
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
-    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => { const list = await fetchLeaderboard(10); this.showLeaderboard(list); });
     this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
     this.makeBtn(W/2, H*0.51, "🗳️ Voter pour Borgy", () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
@@ -254,10 +256,11 @@ class MenuScene extends Phaser.Scene {
     t.on("pointerdown", cb);
     return t;
   }
-  showLeaderboard(list){
+  showLeaderboard(list, isHard = false){
     const W = this.scale.width, H = this.scale.height; const depth = 500;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+    const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
+    const title = this.add.text(W/2, H*0.22, titleText, { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
       .setOrigin(0.5).setDepth(depth+1);
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
@@ -583,6 +586,10 @@ class GameScene extends Phaser.Scene {
     if (this.isOver) return;
     this.isOver = true; this.started = false;
 
+    // 🔧 Empêche la zone d'input du jeu d'intercepter les clics sur les boutons d'overlay
+    try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
+    try { this.input.keyboard.removeAllListeners(); } catch {}
+
     if (!this.game._muted && this.sfxGameOver) {
       const bgm = this.game._bgm;
       if (bgm) bgm.setVolume(0.15);
@@ -595,46 +602,37 @@ class GameScene extends Phaser.Scene {
     this.bonuses.clear(true, true);
 
     const W = this.scale.width, H = this.scale.height;
-    // On garde les refs pour pouvoir les remove si on clique "menu principal"
-    const ui = [];
-
-    ui.push(this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100));
-    ui.push(this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
-      .setOrigin(0.5).setDepth(101));
-    ui.push(this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
-      .setOrigin(0.5).setDepth(101));
+    this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
+    this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
+      .setOrigin(0.5).setDepth(101);
+    this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
+      .setOrigin(0.5).setDepth(101);
 
     const replay = this.add.text(W/2, H/2 + 50, "Rejouer",
       { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    ui.push(replay);
     replay.on("pointerdown", ()=> this.scene.restart());
 
     const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal",
       { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    ui.push(menuBtn);
     menuBtn.on("pointerdown", () => {
       const bgm = this.game._bgm;
       if (bgm && !this.game._muted) bgm.setVolume(0.35);
-      // détruire l'UI du game over si le leaderboard est arrivé après
-      ui.forEach(o => { try { o.destroy(); } catch {} });
       this.scene.start("menu");
     });
 
-    // ---- PATCH : leaderboard selon le mode ----
     const isHard = this.game._hardMode === true;
     postScore(this.score, isHard).then(() =>
-      fetchLeaderboard(10, isHard).then(list => {
-        if (list?.length) this.showLeaderboard(list);
-      })
+      fetchLeaderboard(10, isHard).then(list => { if (list?.length) this.showLeaderboard(list, isHard); })
     );
   }
 
-  showLeaderboard(list){
+  showLeaderboard(list, isHard = false){
     const W = this.scale.width, H = this.scale.height; const depth = 300;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
-    const title = this.add.text(W/2, H*0.22, "Leaderboard", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+    const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
+    const title = this.add.text(W/2, H*0.22, titleText, { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
       .setOrigin(0.5).setDepth(depth+1);
     const colX = W*0.23, startY = H*0.30, lineH = 56;
     list.slice(0,10).forEach((row, i) => {
@@ -667,3 +665,4 @@ window.addEventListener("load", () => {
     fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
+ 
