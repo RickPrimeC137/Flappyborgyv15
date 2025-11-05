@@ -25,24 +25,27 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 const app = express();
 app.set("trust proxy", 1);
 
-// Autorise localhost + tes sous-domaines Render
-const ALLOWED_ORIGINS_RE = [
-  /^https?:\/\/localhost(?::\d+)?$/i,
-  /^https:\/\/flappyborgy.*\.onrender\.com$/i,                          // front
-  /^https:\/\/rickprimec137-flappyborgyv15\.onrender\.com$/i,           // api
-];
+// Autorise localhost + tes frontends Render
+const ALLOWED_ORIGINS = new Set([
+  "https://flappyborgyv15-1.onrender.com", // front (actuel)
+  "https://flappyborgyv15.onrender.com",   // autre front (si utilisé)
+  "http://localhost:3000",
+  "http://localhost:5173",
+]);
 
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/Postman etc.
-    const ok = ALLOWED_ORIGINS_RE.some(re => re.test(origin));
-    return cb(ok ? null : new Error("CORS"), ok);
-  },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-  credentials: false,
-}));
-
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // curl/Postman
+      const ok = ALLOWED_ORIGINS.has(origin);
+      return cb(ok ? null : new Error("CORS"), ok);
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    allowedHeaders: ["Content-Type"],
+    optionsSuccessStatus: 204,
+    credentials: false,
+  })
+);
 app.options("*", cors());
 app.use(express.json({ limit: "512kb" }));
 
@@ -60,14 +63,9 @@ function verifyInitData(initDataRaw, botToken) {
     .sort()
     .join("\n");
 
-  const secretKey = crypto.createHmac("sha256", "WebAppData")
-    .update(botToken)
-    .digest();
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
 
-  const hmac = crypto.createHmac("sha256", secretKey)
-    .update(dataCheck)
-    .digest("hex");
-
+  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheck).digest("hex");
   if (hmac !== hash) return null;
 
   try {
@@ -84,16 +82,15 @@ function sanitizeName(s) {
 }
 
 function normMode(m) {
-  return (typeof m === "string" && m.toLowerCase() === "hard") ? "hard" : "normal";
+  return typeof m === "string" && m.toLowerCase() === "hard" ? "hard" : "normal";
 }
 
 /* ---------- Routes API ---------- */
-
 // Health & root
 app.get("/", (_req, res) => res.json({ ok: true, service: "flappyborgy-leaderboard" }));
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-// POST /api/score  { score:number, initData:string, mode?: "hard"|"normal" }
+// POST /api/score { score:number, initData:string, mode?: "hard"|"normal" }
 app.post("/api/score", async (req, res) => {
   try {
     const { score, initData, mode: modeRaw } = req.body || {};
@@ -114,7 +111,10 @@ app.post("/api/score", async (req, res) => {
       "Player";
     const val = Math.floor(score);
 
-    // lecture de la ligne (PK composite)
+    // Log debug (utile pour confirmer le mode)
+    console.log("[/api/score]", { uid, mode, val });
+
+    // Lecture par PK composite (user_id, mode)
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
@@ -128,12 +128,12 @@ app.post("/api/score", async (req, res) => {
     }
 
     if (!row) {
-      // insert
+      // INSERT (crée la ligne pour ce mode)
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode, // enum 'normal'|'hard'
+        mode, // enum 'normal' | 'hard'
         // updated_at = default now()
       });
       if (insErr) {
@@ -141,7 +141,7 @@ app.post("/api/score", async (req, res) => {
         return res.status(500).json({ ok: false, error: "db insert" });
       }
     } else if (val > row.best) {
-      // update best si mieux
+      // UPDATE si meilleur score
       const { error: updErr } = await supabase
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
@@ -152,7 +152,7 @@ app.post("/api/score", async (req, res) => {
         return res.status(500).json({ ok: false, error: "db update" });
       }
     } else {
-      // pas de meilleur score → rafraîchir nom/updated_at (optionnel)
+      // Pas de meilleur score → rafraîchir nom / updated_at (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
