@@ -665,4 +665,3 @@ window.addEventListener("load", () => {
     fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
- 
