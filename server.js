@@ -26,15 +26,15 @@ const app = express();
 app.set("trust proxy", 1);
 
 const ALLOWED_ORIGINS = [
-  "https://flappyborgyv15-1.onrender.com", // front
-  "https://flappyborgyv15.onrender.com",   // si encore utilisé
+  "https://flappyborgyv15-1.onrender.com",
+  "https://flappyborgyv15.onrender.com",
   "http://localhost:3000",
   "http://localhost:5173",
 ];
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // autorise curl/Postman
+    if (!origin) return cb(null, true);
     cb(null, ALLOWED_ORIGINS.includes(origin));
   },
   methods: ["GET", "POST", "OPTIONS"],
@@ -46,9 +46,8 @@ app.use(cors({
 app.options("*", cors());
 app.use(express.json({ limit: "512kb" }));
 
-/* ---------- Utils ---------- */
-const VALID_MODES = new Set(["normal", "hard"]);
-
+/* ---------- Helpers ---------- */
+// Vérification officielle Telegram WebApp
 function verifyInitData(initDataRaw, botToken) {
   if (!initDataRaw) return null;
 
@@ -73,7 +72,7 @@ function verifyInitData(initDataRaw, botToken) {
 
   try {
     const obj = Object.fromEntries(new URLSearchParams(initDataRaw).entries());
-    return JSON.parse(obj.user || "{}"); // "user" est du JSON dans initData
+    return JSON.parse(obj.user || "{}");
   } catch {
     return null;
   }
@@ -84,13 +83,16 @@ function sanitizeName(s) {
   return String(s).replace(/[\u0000-\u001F\u007F]/g, "").slice(0, 32);
 }
 
+function sanitizeMode(m) {
+  return m === "hard" ? "hard" : "normal";
+}
+
 /* ---------- Routes API ---------- */
 
 // POST /api/score  { score:number, initData:string, mode?: "normal"|"hard" }
 app.post("/api/score", async (req, res) => {
   try {
-    const { score, initData, mode } = req.body || {};
-
+    const { score, initData, mode: rawMode } = req.body || {};
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
       return res.status(400).json({ ok: false, error: "score invalide" });
     }
@@ -101,19 +103,19 @@ app.post("/api/score", async (req, res) => {
     }
 
     const uid = String(user.id);
+    const mode = sanitizeMode(rawMode);
     const name =
       (user.username && "@" + user.username) ||
       sanitizeName([user.first_name, user.last_name].filter(Boolean).join(" ")) ||
       "Player";
     const val = Math.floor(score);
-    const gameMode = VALID_MODES.has(mode) ? mode : "normal"; // compat descendante
 
-    // Sélectionne la ligne pour ce user + mode
+    // Cherche la ligne du mode demandé
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
       .eq("user_id", uid)
-      .eq("mode", gameMode)
+      .eq("mode", mode)
       .maybeSingle();
 
     if (selErr) {
@@ -122,12 +124,11 @@ app.post("/api/score", async (req, res) => {
     }
 
     if (!row) {
-      // première entrée pour ce mode
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode: gameMode,
+        mode,                       // <— IMPORTANT
         // updated_at = default now()
       });
       if (insErr) {
@@ -139,21 +140,19 @@ app.post("/api/score", async (req, res) => {
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
         .eq("user_id", uid)
-        .eq("mode", gameMode);
+        .eq("mode", mode);         // <— IMPORTANT
       if (updErr) {
         console.error("update error", updErr);
         return res.status(500).json({ ok: false, error: "db update" });
       }
     } else {
-      // met à jour le nom / updated_at même si pas de meilleur score (optionnel)
+      // Met à jour le nom / updated_at pour ce mode
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
         .eq("user_id", uid)
-        .eq("mode", gameMode);
-      if (updNameErr) {
-        console.error("update name error", updNameErr);
-      }
+        .eq("mode", mode);         // <— IMPORTANT
+      if (updNameErr) console.warn("update name warn", updNameErr);
     }
 
     return res.json({ ok: true });
@@ -163,16 +162,16 @@ app.post("/api/score", async (req, res) => {
   }
 });
 
-// GET /api/leaderboard?limit=10&mode=hard
+// GET /api/leaderboard?limit=10&mode=hard|normal
 app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
-    const gameMode = VALID_MODES.has(req.query.mode) ? req.query.mode : "normal";
+    const mode = sanitizeMode(req.query.mode);
 
     const { data, error } = await supabase
       .from("scores")
-      .select("name,best")
-      .eq("mode", gameMode)
+      .select("user_id,name,best,updated_at,mode")
+      .eq("mode", mode)                       // <— IMPORTANT
       .order("best", { ascending: false })
       .order("updated_at", { ascending: true })
       .limit(limit);
@@ -189,7 +188,7 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
-// GET /api/me?initData=...&mode=hard   (mode par défaut: normal)
+// GET /api/me?initData=...&mode=hard|normal
 app.get("/api/me", async (req, res) => {
   try {
     const user = verifyInitData(req.query.initData, BOT_TOKEN);
@@ -197,13 +196,13 @@ app.get("/api/me", async (req, res) => {
       return res.status(401).json({ ok: false, error: "initData invalide" });
     }
     const uid = String(user.id);
-    const gameMode = VALID_MODES.has(req.query.mode) ? req.query.mode : "normal";
+    const mode = sanitizeMode(req.query.mode);
 
     const { data, error } = await supabase
       .from("scores")
       .select("user_id,name,best,updated_at,mode")
       .eq("user_id", uid)
-      .eq("mode", gameMode)
+      .eq("mode", mode)                         // <— IMPORTANT
       .maybeSingle();
 
     if (error) {
