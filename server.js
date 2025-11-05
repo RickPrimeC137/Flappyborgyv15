@@ -8,8 +8,8 @@ import { createClient } from "@supabase/supabase-js";
 
 /* ---------- ENV ---------- */
 const PORT = process.env.PORT || 8080;
-const BOT_TOKEN = process.env.BOT_TOKEN;                         // token BotFather (OBLIGATOIRE)
-const SUPABASE_URL = process.env.SUPABASE_URL;                   // https://xxxx.supabase.co
+const BOT_TOKEN = process.env.BOT_TOKEN;                      // token BotFather (OBLIGATOIRE)
+const SUPABASE_URL = process.env.SUPABASE_URL;                // https://xxxx.supabase.co
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE; // clé service_role (secrète)
 
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN manquant");
@@ -26,15 +26,15 @@ const app = express();
 app.set("trust proxy", 1);
 
 const ALLOWED_ORIGINS = [
-  "https://flappyborgyv15-1.onrender.com",  // front
-  "https://flappyborgyv15.onrender.com",    // ancien front (si encore utilisé)
+  "https://flappyborgyv15-1.onrender.com",
+  "https://flappyborgyv15.onrender.com",
   "http://localhost:3000",
   "http://localhost:5173",
 ];
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // autorise curl/Postman
+    if (!origin) return cb(null, true);
     cb(null, ALLOWED_ORIGINS.includes(origin));
   },
   methods: ["GET", "POST", "OPTIONS"],
@@ -48,8 +48,6 @@ app.use(express.json({ limit: "512kb" }));
 
 /* ---------- Helpers ---------- */
 // Vérification officielle Telegram WebApp
-// secret_key = HMAC_SHA256(bot_token, key="WebAppData")
-// hachage = HMAC_SHA256(data_check_string, secret_key)
 function verifyInitData(initDataRaw, botToken) {
   if (!initDataRaw) return null;
 
@@ -74,7 +72,7 @@ function verifyInitData(initDataRaw, botToken) {
 
   try {
     const obj = Object.fromEntries(new URLSearchParams(initDataRaw).entries());
-    return JSON.parse(obj.user || "{}"); // "user" est du JSON encodé en string
+    return JSON.parse(obj.user || "{}");
   } catch {
     return null;
   }
@@ -85,39 +83,38 @@ function sanitizeName(s) {
   return String(s).replace(/[\u0000-\u001F\u007F]/g, "").slice(0, 32);
 }
 
-// "hard" | "normal" (défaut: normal)
-function parseMode(raw) {
-  return raw === "hard" ? "hard" : "normal";
+// Normalise le mode (accepte mode:"hard"|"normal" ou isHard:true|false)
+function parseMode(rawMode, isHardFlag) {
+  const s = (rawMode ?? (isHardFlag ? "hard" : "")).toString().toLowerCase();
+  return s === "hard" ? "hard" : "normal";
 }
 
 /* ---------- Routes API ---------- */
 
-/**
- * POST /api/score
- * Body: { score:number, initData:string, mode?: "hard"|"normal" }
- * Enregistre le score pour (user_id, mode). Ne baisse jamais le "best".
- */
+// POST /api/score  { score:number, initData:string, mode?: "hard"|"normal", isHard?: boolean }
 app.post("/api/score", async (req, res) => {
   try {
-    const { score, initData, mode } = req.body || {};
+    const { score, initData, mode, isHard } = req.body || {};
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
       return res.status(400).json({ ok: false, error: "score invalide" });
     }
-
     const user = verifyInitData(initData, BOT_TOKEN);
     if (!user || !user.id) {
       return res.status(401).json({ ok: false, error: "initData invalide" });
     }
 
+    const gameMode = parseMode(mode, isHard); // "hard" ou "normal"
     const uid = String(user.id);
-    const gameMode = parseMode(mode);
     const name =
       (user.username && "@" + user.username) ||
       sanitizeName([user.first_name, user.last_name].filter(Boolean).join(" ")) ||
       "Player";
     const val = Math.floor(score);
 
-    // Récupère l'actuel pour ce (user_id, mode)
+    // Log utile (pas de données sensibles)
+    console.log("[score]", { uid, mode: gameMode, score: val });
+
+    // Sélection de la ligne spécifique à (user_id, mode)
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
@@ -131,20 +128,20 @@ app.post("/api/score", async (req, res) => {
     }
 
     if (!row) {
-      // Première insertion sur ce mode
+      // INSERT avec la colonne mode
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode: gameMode,                 // <-- clé
-        // updated_at = default now()
+        mode: gameMode,
+        // updated_at: default now()
       });
       if (insErr) {
         console.error("insert error", insErr);
         return res.status(500).json({ ok: false, error: "db insert" });
       }
     } else if (val > row.best) {
-      // Nouveau record perso sur ce mode
+      // UPDATE scoped sur (user_id, mode)
       const { error: updErr } = await supabase
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
@@ -155,7 +152,7 @@ app.post("/api/score", async (req, res) => {
         return res.status(500).json({ ok: false, error: "db update" });
       }
     } else {
-      // Pas de record mais on rafraîchit le nom / updated_at (optionnel)
+      // Met à jour le nom / updated_at même si pas de meilleur score (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
@@ -163,7 +160,6 @@ app.post("/api/score", async (req, res) => {
         .eq("mode", gameMode);
       if (updNameErr) {
         console.error("update name error", updNameErr);
-        // on n'échoue pas pour autant
       }
     }
 
@@ -174,19 +170,17 @@ app.post("/api/score", async (req, res) => {
   }
 });
 
-/**
- * GET /api/leaderboard?limit=10&mode=hard|normal
- * Retourne le classement filtré par mode (défaut: normal)
- */
+// GET /api/leaderboard?limit=10&mode=hard
+// (accepte aussi ?isHard=true si jamais)
 app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
-    const gameMode = parseMode(req.query.mode);
+    const gameMode = parseMode(req.query.mode, req.query.isHard === "true");
 
     const { data, error } = await supabase
       .from("scores")
       .select("user_id,name,best,updated_at,mode")
-      .eq("mode", gameMode)                               // <-- filtre par mode
+      .eq("mode", gameMode)
       .order("best", { ascending: false })
       .order("updated_at", { ascending: true })
       .limit(limit);
@@ -203,18 +197,15 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
-/**
- * GET /api/me?initData=...&mode=hard|normal
- * Retourne le score de l’utilisateur pour un mode (défaut: normal)
- */
+// GET /api/me?initData=...&mode=hard (mode facultatif, sinon "normal")
 app.get("/api/me", async (req, res) => {
   try {
     const user = verifyInitData(req.query.initData, BOT_TOKEN);
     if (!user || !user.id) {
       return res.status(401).json({ ok: false, error: "initData invalide" });
     }
+    const gameMode = parseMode(req.query.mode, req.query.isHard === "true");
     const uid = String(user.id);
-    const gameMode = parseMode(req.query.mode);
 
     const { data, error } = await supabase
       .from("scores")
