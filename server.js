@@ -8,8 +8,8 @@ import { createClient } from "@supabase/supabase-js";
 
 /* ---------- ENV ---------- */
 const PORT = process.env.PORT || 8080;
-const BOT_TOKEN = process.env.BOT_TOKEN;                      // token BotFather (OBLIGATOIRE)
-const SUPABASE_URL = process.env.SUPABASE_URL;                // https://xxxx.supabase.co
+const BOT_TOKEN = process.env.BOT_TOKEN;                         // token BotFather (OBLIGATOIRE)
+const SUPABASE_URL = process.env.SUPABASE_URL;                   // https://xxxx.supabase.co
 const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE; // clé service_role (secrète)
 
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN manquant");
@@ -25,22 +25,22 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 const app = express();
 app.set("trust proxy", 1);
 
-const ALLOWED_ORIGINS = [
-  "https://flappyborgyv15-1.onrender.com",
-  "https://flappyborgyv15.onrender.com",
-  "http://localhost:3000",
-  "http://localhost:5173",
+// Autorise localhost + tes sous-domaines Render
+const ALLOWED_ORIGINS_RE = [
+  /^https?:\/\/localhost(?::\d+)?$/i,
+  /^https:\/\/flappyborgy.*\.onrender\.com$/i,                          // front
+  /^https:\/\/rickprimec137-flappyborgyv15\.onrender\.com$/i,           // api
 ];
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true);
-    cb(null, ALLOWED_ORIGINS.includes(origin));
+    if (!origin) return cb(null, true); // curl/Postman etc.
+    const ok = ALLOWED_ORIGINS_RE.some(re => re.test(origin));
+    return cb(ok ? null : new Error("CORS"), ok);
   },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"],
   credentials: false,
-  optionsSuccessStatus: 204,
 }));
 
 app.options("*", cors());
@@ -72,7 +72,7 @@ function verifyInitData(initDataRaw, botToken) {
 
   try {
     const obj = Object.fromEntries(new URLSearchParams(initDataRaw).entries());
-    return JSON.parse(obj.user || "{}");
+    return JSON.parse(obj.user || "{}"); // "user" est du JSON dans initData
   } catch {
     return null;
   }
@@ -83,27 +83,30 @@ function sanitizeName(s) {
   return String(s).replace(/[\u0000-\u001F\u007F]/g, "").slice(0, 32);
 }
 
-// Normalise le mode (accepte mode:"hard"|"normal" ou isHard:true|false)
-function parseMode(rawMode, isHardFlag) {
-  const s = (rawMode ?? (isHardFlag ? "hard" : "")).toString().toLowerCase();
-  return s === "hard" ? "hard" : "normal";
+function normMode(m) {
+  return (typeof m === "string" && m.toLowerCase() === "hard") ? "hard" : "normal";
 }
 
 /* ---------- Routes API ---------- */
 
-// POST /api/score  { score:number, initData:string, mode?: "hard"|"normal", isHard?: boolean }
+// Health & root
+app.get("/", (_req, res) => res.json({ ok: true, service: "flappyborgy-leaderboard" }));
+app.get("/api/health", (_req, res) => res.json({ ok: true }));
+
+// POST /api/score  { score:number, initData:string, mode?: "hard"|"normal" }
 app.post("/api/score", async (req, res) => {
   try {
-    const { score, initData, mode, isHard } = req.body || {};
+    const { score, initData, mode: modeRaw } = req.body || {};
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
       return res.status(400).json({ ok: false, error: "score invalide" });
     }
+    const mode = normMode(modeRaw);
+
     const user = verifyInitData(initData, BOT_TOKEN);
     if (!user || !user.id) {
       return res.status(401).json({ ok: false, error: "initData invalide" });
     }
 
-    const gameMode = parseMode(mode, isHard); // "hard" ou "normal"
     const uid = String(user.id);
     const name =
       (user.username && "@" + user.username) ||
@@ -111,15 +114,12 @@ app.post("/api/score", async (req, res) => {
       "Player";
     const val = Math.floor(score);
 
-    // Log utile (pas de données sensibles)
-    console.log("[score]", { uid, mode: gameMode, score: val });
-
-    // Sélection de la ligne spécifique à (user_id, mode)
+    // lecture de la ligne (PK composite)
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
       .eq("user_id", uid)
-      .eq("mode", gameMode)
+      .eq("mode", mode)
       .maybeSingle();
 
     if (selErr) {
@@ -128,36 +128,36 @@ app.post("/api/score", async (req, res) => {
     }
 
     if (!row) {
-      // INSERT avec la colonne mode
+      // insert
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode: gameMode,
-        // updated_at: default now()
+        mode, // enum 'normal'|'hard'
+        // updated_at = default now()
       });
       if (insErr) {
         console.error("insert error", insErr);
         return res.status(500).json({ ok: false, error: "db insert" });
       }
     } else if (val > row.best) {
-      // UPDATE scoped sur (user_id, mode)
+      // update best si mieux
       const { error: updErr } = await supabase
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
         .eq("user_id", uid)
-        .eq("mode", gameMode);
+        .eq("mode", mode);
       if (updErr) {
         console.error("update error", updErr);
         return res.status(500).json({ ok: false, error: "db update" });
       }
     } else {
-      // Met à jour le nom / updated_at même si pas de meilleur score (optionnel)
+      // pas de meilleur score → rafraîchir nom/updated_at (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
         .eq("user_id", uid)
-        .eq("mode", gameMode);
+        .eq("mode", mode);
       if (updNameErr) {
         console.error("update name error", updNameErr);
       }
@@ -170,17 +170,16 @@ app.post("/api/score", async (req, res) => {
   }
 });
 
-// GET /api/leaderboard?limit=10&mode=hard
-// (accepte aussi ?isHard=true si jamais)
+// GET /api/leaderboard?limit=10&mode=hard|normal
 app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
-    const gameMode = parseMode(req.query.mode, req.query.isHard === "true");
+    const mode = normMode(req.query.mode); // défaut: normal
 
     const { data, error } = await supabase
       .from("scores")
       .select("user_id,name,best,updated_at,mode")
-      .eq("mode", gameMode)
+      .eq("mode", mode)
       .order("best", { ascending: false })
       .order("updated_at", { ascending: true })
       .limit(limit);
@@ -197,21 +196,21 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
-// GET /api/me?initData=...&mode=hard (mode facultatif, sinon "normal")
+// GET /api/me?initData=...&mode=hard|normal
 app.get("/api/me", async (req, res) => {
   try {
     const user = verifyInitData(req.query.initData, BOT_TOKEN);
     if (!user || !user.id) {
       return res.status(401).json({ ok: false, error: "initData invalide" });
     }
-    const gameMode = parseMode(req.query.mode, req.query.isHard === "true");
     const uid = String(user.id);
+    const mode = normMode(req.query.mode);
 
     const { data, error } = await supabase
       .from("scores")
       .select("user_id,name,best,updated_at,mode")
       .eq("user_id", uid)
-      .eq("mode", gameMode)
+      .eq("mode", mode)
       .maybeSingle();
 
     if (error) {
@@ -225,9 +224,6 @@ app.get("/api/me", async (req, res) => {
     res.status(500).json({ ok: false, error: "server" });
   }
 });
-
-// Santé
-app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 /* ---------- Start ---------- */
 app.listen(PORT, () => {
