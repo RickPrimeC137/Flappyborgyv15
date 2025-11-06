@@ -104,12 +104,17 @@ async function postScore(score, isHard=false){
     });
   }catch(e){ console.warn("score post error", e); }
 }
-async function fetchLeaderboard(limit=10, isHard=false){
-  try{
-    const r = await fetch(`${API_BASE}/api/leaderboard?limit=${limit}${isHard ? "&mode=hard" : ""}`);
-    const j = await r.json();
-    return j.ok ? j.list : [];
-  }catch(e){ console.warn("lb fetch error", e); return []; }
+async function fetchLeaderboard(limit = 10, isHard = false) {
+  try {
+    const url = `${API_BASE}/api/leaderboard?limit=${limit}${isHard ? "&mode=hard" : ""}&_=${Date.now()}`;
+    const r = await fetch(url, { cache: "no-store" }); // évite 304 sans body
+    if (!r.ok) { console.warn("lb status", r.status); return []; }
+    const j = await r.json().catch(() => null); // si jamais
+    return j?.ok ? j.list : [];
+  } catch (e) {
+    console.warn("lb fetch error", e);
+    return [];
+  }
 }
 
 /* ================== Quêtes ================== */
