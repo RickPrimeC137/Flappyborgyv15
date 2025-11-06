@@ -25,28 +25,15 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 const app = express();
 app.set("trust proxy", 1);
 
-// Autorise localhost + tes frontends Render
-const ALLOWED_ORIGINS = new Set([
-  "https://flappyborgyv15-1.onrender.com", // front (actuel)
-  "https://flappyborgyv15.onrender.com",   // autre front (si utilisé)
-  "http://localhost:3000",
-  "http://localhost:5173",
-]);
-
-app.use(
-  cors({
-    origin: (origin, cb) => {
-      if (!origin) return cb(null, true); // curl/Postman
-      const ok = ALLOWED_ORIGINS.has(origin);
-      return cb(ok ? null : new Error("CORS"), ok);
-    },
-    methods: ["GET", "POST", "OPTIONS"],
-    allowedHeaders: ["Content-Type"],
-    optionsSuccessStatus: 204,
-    credentials: false,
-  })
-);
+// CORS permissif (réfléchit l’origin) le temps de valider
+app.use(cors({
+  origin: true,                          // renvoie Access-Control-Allow-Origin: <origin>
+  methods: ["GET", "POST", "OPTIONS"],
+  allowedHeaders: ["Content-Type"],
+  credentials: false,
+}));
 app.options("*", cors());
+
 app.use(express.json({ limit: "512kb" }));
 
 /* ---------- Helpers ---------- */
@@ -63,9 +50,14 @@ function verifyInitData(initDataRaw, botToken) {
     .sort()
     .join("\n");
 
-  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+  const secretKey = crypto.createHmac("sha256", "WebAppData")
+    .update(botToken)
+    .digest();
 
-  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheck).digest("hex");
+  const hmac = crypto.createHmac("sha256", secretKey)
+    .update(dataCheck)
+    .digest("hex");
+
   if (hmac !== hash) return null;
 
   try {
@@ -82,22 +74,30 @@ function sanitizeName(s) {
 }
 
 function normMode(m) {
-  return typeof m === "string" && m.toLowerCase() === "hard" ? "hard" : "normal";
+  return (typeof m === "string" && m.toLowerCase() === "hard") ? "hard" : "normal";
 }
 
 /* ---------- Routes API ---------- */
+
 // Health & root
 app.get("/", (_req, res) => res.json({ ok: true, service: "flappyborgy-leaderboard" }));
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
-// POST /api/score { score:number, initData:string, mode?: "hard"|"normal" }
+// POST /api/score  { score:number, initData:string, mode?: "hard"|"normal" }
 app.post("/api/score", async (req, res) => {
   try {
     const { score, initData, mode: modeRaw } = req.body || {};
+    const mode = normMode(modeRaw);
+
+    console.log("POST /api/score", {
+      origin: req.headers.origin,
+      mode,
+      score,
+    });
+
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
       return res.status(400).json({ ok: false, error: "score invalide" });
     }
-    const mode = normMode(modeRaw);
 
     const user = verifyInitData(initData, BOT_TOKEN);
     if (!user || !user.id) {
@@ -111,10 +111,7 @@ app.post("/api/score", async (req, res) => {
       "Player";
     const val = Math.floor(score);
 
-    // Log debug (utile pour confirmer le mode)
-    console.log("[/api/score]", { uid, mode, val });
-
-    // Lecture par PK composite (user_id, mode)
+    // lecture de la ligne (PK composite)
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
@@ -128,20 +125,17 @@ app.post("/api/score", async (req, res) => {
     }
 
     if (!row) {
-      // INSERT (crée la ligne pour ce mode)
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode, // enum 'normal' | 'hard'
-        // updated_at = default now()
+        mode,
       });
       if (insErr) {
         console.error("insert error", insErr);
         return res.status(500).json({ ok: false, error: "db insert" });
       }
     } else if (val > row.best) {
-      // UPDATE si meilleur score
       const { error: updErr } = await supabase
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
@@ -152,7 +146,6 @@ app.post("/api/score", async (req, res) => {
         return res.status(500).json({ ok: false, error: "db update" });
       }
     } else {
-      // Pas de meilleur score → rafraîchir nom / updated_at (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
@@ -175,6 +168,12 @@ app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
     const mode = normMode(req.query.mode); // défaut: normal
+
+    console.log("GET /api/leaderboard", {
+      origin: req.headers.origin,
+      mode,
+      limit,
+    });
 
     const { data, error } = await supabase
       .from("scores")
@@ -205,6 +204,8 @@ app.get("/api/me", async (req, res) => {
     }
     const uid = String(user.id);
     const mode = normMode(req.query.mode);
+
+    console.log("GET /api/me", { origin: req.headers.origin, mode, uid });
 
     const { data, error } = await supabase
       .from("scores")
