@@ -25,15 +25,36 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 const app = express();
 app.set("trust proxy", 1);
 
-// CORS permissif (réfléchit l’origin) le temps de valider
+/* Désactive les ETag pour éviter les 304 côté API */
+app.set("etag", false);
+
+/* No-cache sur toutes les routes API (évite les réponses 304 sans corps JSON) */
+app.use("/api", (req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+  res.set("Pragma", "no-cache");
+  res.set("Expires", "0");
+  next();
+});
+
+// Autorise localhost + tes sous-domaines Render
+const ALLOWED_ORIGINS_RE = [
+  /^https?:\/\/localhost(?::\d+)?$/i,
+  /^https:\/\/flappyborgy.*\.onrender\.com$/i,                          // front (toutes variantes flappyborgy…)
+  /^https:\/\/rickprimec137-flappyborgyv15\.onrender\.com$/i,           // API elle-même (utile pour tests directs)
+];
+
 app.use(cors({
-  origin: true,                          // renvoie Access-Control-Allow-Origin: <origin>
+  origin: (origin, cb) => {
+    if (!origin) return cb(null, true); // curl/Postman etc.
+    const ok = ALLOWED_ORIGINS_RE.some(re => re.test(origin));
+    return cb(ok ? null : new Error("CORS"), ok);
+  },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"],
   credentials: false,
 }));
-app.options("*", cors());
 
+app.options("*", cors());
 app.use(express.json({ limit: "512kb" }));
 
 /* ---------- Helpers ---------- */
@@ -87,17 +108,10 @@ app.get("/api/health", (_req, res) => res.json({ ok: true }));
 app.post("/api/score", async (req, res) => {
   try {
     const { score, initData, mode: modeRaw } = req.body || {};
-    const mode = normMode(modeRaw);
-
-    console.log("POST /api/score", {
-      origin: req.headers.origin,
-      mode,
-      score,
-    });
-
     if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
       return res.status(400).json({ ok: false, error: "score invalide" });
     }
+    const mode = normMode(modeRaw);
 
     const user = verifyInitData(initData, BOT_TOKEN);
     if (!user || !user.id) {
@@ -125,17 +139,20 @@ app.post("/api/score", async (req, res) => {
     }
 
     if (!row) {
+      // insert
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode,
+        mode, // enum 'normal'|'hard'
+        // updated_at = default now()
       });
       if (insErr) {
         console.error("insert error", insErr);
         return res.status(500).json({ ok: false, error: "db insert" });
       }
     } else if (val > row.best) {
+      // update best si mieux
       const { error: updErr } = await supabase
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
@@ -146,6 +163,7 @@ app.post("/api/score", async (req, res) => {
         return res.status(500).json({ ok: false, error: "db update" });
       }
     } else {
+      // pas de meilleur score → rafraîchir nom/updated_at (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
@@ -168,12 +186,6 @@ app.get("/api/leaderboard", async (req, res) => {
   try {
     const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
     const mode = normMode(req.query.mode); // défaut: normal
-
-    console.log("GET /api/leaderboard", {
-      origin: req.headers.origin,
-      mode,
-      limit,
-    });
 
     const { data, error } = await supabase
       .from("scores")
@@ -204,8 +216,6 @@ app.get("/api/me", async (req, res) => {
     }
     const uid = String(user.id);
     const mode = normMode(req.query.mode);
-
-    console.log("GET /api/me", { origin: req.headers.origin, mode, uid });
 
     const { data, error } = await supabase
       .from("scores")
