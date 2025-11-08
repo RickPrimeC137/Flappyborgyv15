@@ -8,53 +8,51 @@ import { createClient } from "@supabase/supabase-js";
 
 /* ---------- ENV ---------- */
 const PORT = process.env.PORT || 8080;
-const BOT_TOKEN = process.env.BOT_TOKEN;                         // token BotFather (OBLIGATOIRE)
+const BOT_TOKEN = process.env.BOT_TOKEN;                         // token BotFather
 const SUPABASE_URL = process.env.SUPABASE_URL;                   // https://xxxx.supabase.co
-const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE; // clé service_role (secrète)
+const SUPABASE_SERVICE_ROLE = process.env.SUPABASE_SERVICE_ROLE; // clé service_role
 
 if (!BOT_TOKEN) throw new Error("BOT_TOKEN manquant");
 if (!SUPABASE_URL) throw new Error("SUPABASE_URL manquant");
 if (!SUPABASE_SERVICE_ROLE) throw new Error("SUPABASE_SERVICE_ROLE manquant");
 
-/* ---------- Supabase (côté serveur) ---------- */
+/* ---------- Supabase (serveur) ---------- */
 const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
   auth: { persistSession: false, autoRefreshToken: false },
 });
 
-/* ---------- App & CORS ---------- */
+/* ---------- App, Anti-cache & CORS ---------- */
 const app = express();
 app.set("trust proxy", 1);
 
-/* Désactive les ETag pour éviter les 304 côté API */
+// Anti-cache (évite les 304 sur /api/*)
 app.set("etag", false);
-
-/* No-cache sur toutes les routes API (évite les réponses 304 sans corps JSON) */
-app.use("/api", (req, res, next) => {
-  res.set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+app.use((req, res, next) => {
+  res.set("Cache-Control", "no-store, no-cache, must-revalidate");
   res.set("Pragma", "no-cache");
   res.set("Expires", "0");
   next();
 });
 
-// Autorise localhost + tes sous-domaines Render
+// Autorise localhost + tes sous-domaines Render (front & api)
 const ALLOWED_ORIGINS_RE = [
   /^https?:\/\/localhost(?::\d+)?$/i,
-  /^https:\/\/flappyborgy.*\.onrender\.com$/i,                          // front (toutes variantes flappyborgy…)
-  /^https:\/\/rickprimec137-flappyborgyv15\.onrender\.com$/i,           // API elle-même (utile pour tests directs)
+  /^https:\/\/flappyborgy.*\.onrender\.com$/i,                 // front
+  /^https:\/\/rickprimec137-flappyborgyv15\.onrender\.com$/i,  // api
 ];
 
 app.use(cors({
   origin: (origin, cb) => {
-    if (!origin) return cb(null, true); // curl/Postman etc.
+    if (!origin) return cb(null, true);               // curl/Postman
     const ok = ALLOWED_ORIGINS_RE.some(re => re.test(origin));
-    return cb(ok ? null : new Error("CORS"), ok);
+    return cb(ok ? null : new Error("CORS not allowed"), ok);
   },
   methods: ["GET", "POST", "OPTIONS"],
   allowedHeaders: ["Content-Type"],
   credentials: false,
 }));
-
 app.options("*", cors());
+
 app.use(express.json({ limit: "512kb" }));
 
 /* ---------- Helpers ---------- */
@@ -98,7 +96,7 @@ function normMode(m) {
   return (typeof m === "string" && m.toLowerCase() === "hard") ? "hard" : "normal";
 }
 
-/* ---------- Routes API ---------- */
+/* ---------- Routes ---------- */
 
 // Health & root
 app.get("/", (_req, res) => res.json({ ok: true, service: "flappyborgy-leaderboard" }));
@@ -125,7 +123,7 @@ app.post("/api/score", async (req, res) => {
       "Player";
     const val = Math.floor(score);
 
-    // lecture de la ligne (PK composite)
+    // Lecture (PK composite user_id + mode)
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
@@ -134,44 +132,43 @@ app.post("/api/score", async (req, res) => {
       .maybeSingle();
 
     if (selErr) {
-      console.error("select error", selErr);
+      console.error("[DB] select error", selErr);
       return res.status(500).json({ ok: false, error: "db select" });
     }
 
     if (!row) {
-      // insert
       const { error: insErr } = await supabase.from("scores").insert({
         user_id: uid,
         name,
         best: val,
-        mode, // enum 'normal'|'hard'
+        mode, // enum public.game_mode ('normal'|'hard')
         // updated_at = default now()
       });
       if (insErr) {
-        console.error("insert error", insErr);
+        console.error("[DB] insert error", insErr);
         return res.status(500).json({ ok: false, error: "db insert" });
       }
+      console.log(`[SCORE][NEW] uid=${uid} mode=${mode} best=${val}`);
     } else if (val > row.best) {
-      // update best si mieux
       const { error: updErr } = await supabase
         .from("scores")
         .update({ best: val, name, updated_at: new Date().toISOString() })
         .eq("user_id", uid)
         .eq("mode", mode);
       if (updErr) {
-        console.error("update error", updErr);
+        console.error("[DB] update error", updErr);
         return res.status(500).json({ ok: false, error: "db update" });
       }
+      console.log(`[SCORE][UPD] uid=${uid} mode=${mode} best=${val}`);
     } else {
-      // pas de meilleur score → rafraîchir nom/updated_at (optionnel)
+      // rafraîchir name/updated_at (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
         .update({ name, updated_at: new Date().toISOString() })
         .eq("user_id", uid)
         .eq("mode", mode);
-      if (updNameErr) {
-        console.error("update name error", updNameErr);
-      }
+      if (updNameErr) console.warn("[DB] update name warn", updNameErr);
+      console.log(`[SCORE][KEEP] uid=${uid} mode=${mode} best stays`);
     }
 
     return res.json({ ok: true });
@@ -196,7 +193,7 @@ app.get("/api/leaderboard", async (req, res) => {
       .limit(limit);
 
     if (error) {
-      console.error("leaderboard error", error);
+      console.error("[DB] leaderboard error", error);
       return res.status(500).json({ ok: false, error: "db" });
     }
 
@@ -225,7 +222,7 @@ app.get("/api/me", async (req, res) => {
       .maybeSingle();
 
     if (error) {
-      console.error("me error", error);
+      console.error("[DB] me error", error);
       return res.status(500).json({ ok: false, error: "db" });
     }
 
