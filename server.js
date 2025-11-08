@@ -25,7 +25,7 @@ const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE, {
 const app = express();
 app.set("trust proxy", 1);
 
-// Anti-cache (évite les 304 sur /api/*)
+// Anti-cache (évite les 304 / réponses vides sur certains fetch)
 app.set("etag", false);
 app.use((req, res, next) => {
   res.set("Cache-Control", "no-store, no-cache, must-revalidate");
@@ -41,16 +41,18 @@ const ALLOWED_ORIGINS_RE = [
   /^https:\/\/rickprimec137-flappyborgyv15\.onrender\.com$/i,  // api
 ];
 
-app.use(cors({
-  origin: (origin, cb) => {
-    if (!origin) return cb(null, true);               // curl/Postman
-    const ok = ALLOWED_ORIGINS_RE.some(re => re.test(origin));
-    return cb(ok ? null : new Error("CORS not allowed"), ok);
-  },
-  methods: ["GET", "POST", "OPTIONS"],
-  allowedHeaders: ["Content-Type"],
-  credentials: false,
-}));
+app.use(
+  cors({
+    origin: (origin, cb) => {
+      if (!origin) return cb(null, true); // curl/Postman
+      const ok = ALLOWED_ORIGINS_RE.some((re) => re.test(origin));
+      return cb(ok ? null : new Error("CORS not allowed"), ok);
+    },
+    methods: ["GET", "POST", "OPTIONS"],
+    // ⚠️ Ne pas fixer allowedHeaders: laisser cors gérer automatiquement
+    credentials: false,
+  })
+);
 app.options("*", cors());
 
 app.use(express.json({ limit: "512kb" }));
@@ -69,14 +71,8 @@ function verifyInitData(initDataRaw, botToken) {
     .sort()
     .join("\n");
 
-  const secretKey = crypto.createHmac("sha256", "WebAppData")
-    .update(botToken)
-    .digest();
-
-  const hmac = crypto.createHmac("sha256", secretKey)
-    .update(dataCheck)
-    .digest("hex");
-
+  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
+  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheck).digest("hex");
   if (hmac !== hash) return null;
 
   try {
@@ -93,7 +89,7 @@ function sanitizeName(s) {
 }
 
 function normMode(m) {
-  return (typeof m === "string" && m.toLowerCase() === "hard") ? "hard" : "normal";
+  return typeof m === "string" && m.toLowerCase() === "hard" ? "hard" : "normal";
 }
 
 /* ---------- Routes ---------- */
