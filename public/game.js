@@ -16,13 +16,13 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,
   gap: 270,
-  spawnDelay: 2400
+  spawnDelay: 2450
 };
 
 const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
-const PLAYER_SCALE   = 0.17;
+const PLAYER_SCALE   = 0.15;
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
@@ -37,8 +37,8 @@ const KILL_MARGIN   = 260;
 const ENABLE_KILL_BANDS = true;
 
 const ENABLE_BONUS = true;
-const BONUS_EVERY = 30;
-const BONUS_DURATION = 10000;
+const BONUS_EVERY = 20;
+const BONUS_DURATION = 15000;
 
 /* ===== Anim “portes” (Hard) ===== */
 const HARD_DOOR_AMPLITUDE_PX = 70;      // déplacement max de CHAQUE bord
@@ -79,7 +79,7 @@ function ensureBgm(scene, opts = {}) {
 
 /* ======= Difficulté ======= */
 const DIFF = {
-  stepMs: 12500,
+  stepMs: 13000,
   speedDelta: -20,
   delayDelta: -150,
   minSpeed: -380,
@@ -154,7 +154,7 @@ class PreloadScene extends Phaser.Scene {
     vid.src = "assets/intro.mp4";
     vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
     Object.assign(vid.style,{
-      position:"absolute",left:"50%",top:"9%",transform:"translateX(-50%)",
+      position:"absolute",left:"50%",top:"15%",transform:"translateX(-50%)",
       width:"62%",maxWidth:"520px",borderRadius:"14px",zIndex:"9999",pointerEvents:"none"
     });
     root.appendChild(vid); this._loadingVideoEl = vid;
