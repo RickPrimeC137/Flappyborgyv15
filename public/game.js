@@ -16,7 +16,7 @@ const PROFILE = {
   jump: -380,
   pipeSpeed: -220,
   gap: 270,
-  spawnDelay: 2600
+  spawnDelay: 2500
 };
 
 const PAD = 2;
