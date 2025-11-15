@@ -81,11 +81,11 @@ function ensureBgm(scene, opts = {}) {
 
 /* ======= Difficulté ======= */
 const DIFF = {
-  stepMs: 13000,
+  stepMs: 14000,
   speedDelta: -20,
   delayDelta: -150,
   minSpeed: -380,
-  minDelay: 1100,
+  minDelay: 1250,
   cooldownMs: 250
 };
 const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
@@ -725,7 +725,7 @@ class GameScene extends Phaser.Scene {
   spawnBorgyCoin(x, y, vx){
     const coin = this.physics.add.image(x, y, "borgy_coin")
       .setDepth(8)
-      .setScale(0.05)
+      .setScale(0.10)
       .setImmovable(true);
     coin.body.setAllowGravity(false);
     coin.body.setVelocityX(vx);
