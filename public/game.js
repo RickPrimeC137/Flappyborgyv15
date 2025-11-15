@@ -228,17 +228,35 @@ class MenuScene extends Phaser.Scene {
 
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
     this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
+
+    // Bouton "Voter pour Borgy"
     this.makeBtn(W/2, H*0.51, "🗳️ Voter pour Borgy", () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
-      if (window.Telegram?.WebApp?.openLink) window.Telegram.WebApp.openLink(url); else window.open(url, "_blank");
+      if (window.Telegram?.WebApp?.openLink) {
+        window.Telegram.WebApp.openLink(url);
+      } else {
+        window.open(url, "_blank");
+      }
     });
 
-    // Bascule Hard
+    // 🔥 NOUVEAU bouton "Buy Borgy"
+    this.makeBtn(W/2, H*0.57, "Buy Borgy", () => {
+      const url = "https://borgysol.com/";
+      if (window.Telegram?.WebApp?.openLink) {
+        window.Telegram.WebApp.openLink(url);
+      } else {
+        window.open(url, "_blank");
+      }
+    });
+
+    // Bascule Hard juste en dessous
     if (typeof this.game._hardMode === "undefined") {
       try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
       catch { this.game._hardMode = false; }
     }
-    const hardBtn = this.makeBtn(W/2, H*0.59,
+    const hardBtn = this.makeBtn(
+      W/2,
+      H*0.63,
       this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF",
       () => {
         this.game._hardMode = !this.game._hardMode;
