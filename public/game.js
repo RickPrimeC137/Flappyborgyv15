@@ -120,25 +120,115 @@ async function fetchLeaderboard(limit = 10, isHard = false) {
 }
 
 /* ================== Quêtes & Coins ================== */
-const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
+const QUEST_STORAGE_KEY    = "flappy_borgy_quests_v1";
+const BEST_SCORE_KEY       = "flappy_borgy_best_score_v1";
+
+function todayStr(){
+  try {
+    return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
+  } catch {
+    return "";
+  }
+}
+
+function loadBestScore(){
+  try{
+    const raw = localStorage.getItem(BEST_SCORE_KEY);
+    const n = parseInt(raw, 10);
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  }catch(e){ return 0; }
+}
+function saveBestScore(n){
+  try{ localStorage.setItem(BEST_SCORE_KEY, String(Math.max(0, n|0))); }catch(e){}
+}
+
+/**
+ * Génère les quêtes du jour en fonction du meilleur score local
+ * + une quête spéciale Hard si le best score est élevé.
+ */
+function generateDailyQuests(){
+  const today = todayStr();
+  const best = loadBestScore();
+
+  const base = best > 0 ? best : 80;
+
+  const easy   = Math.max(10, Math.round(base * 0.30));
+  const medium = Math.max(easy + 10, Math.round(base * 0.60));
+  const hard   = Math.max(medium + 20, Math.round(base * 0.90));
+
+  const quests = [
+    {
+      id: "daily_score_easy",
+      title: `Atteins ${easy} points`,
+      type: "score",
+      target: easy,
+      progress: 0,
+      done: false,
+      reward: "+25 BorgyCoins",
+      coins: 25              // base reward (sera x2 en Hard)
+    },
+    {
+      id: "daily_score_mid",
+      title: `Atteins ${medium} points`,
+      type: "score",
+      target: medium,
+      progress: 0,
+      done: false,
+      reward: "+50 BorgyCoins",
+      coins: 50
+    },
+    {
+      id: "daily_games",
+      title: "Joue 5 parties aujourd'hui",
+      type: "game",
+      target: 5,
+      progress: 0,
+      done: false,
+      reward: "+30 BorgyCoins",
+      coins: 30
+    }
+  ];
+
+  // Si le joueur est chaud (best >= 200), on ajoute une quête Hard-only
+  if (best >= 200){
+    quests.push({
+      id: "daily_hard_score",
+      title: `Atteins ${hard} points en mode Hard`,
+      type: "score",
+      target: hard,
+      requireHard: true,
+      progress: 0,
+      done: false,
+      reward: "+80 BorgyCoins (Hard)",
+      coins: 80
+    });
+  }
+
+  return { date: today, quests };
+}
 
 function loadQuests(){
+  const today = todayStr();
   try{
     const raw = localStorage.getItem(QUEST_STORAGE_KEY);
-    if (raw) return JSON.parse(raw);
+    if (raw){
+      const data = JSON.parse(raw);
+      if (data && data.date === today && Array.isArray(data.quests)) {
+        return data;
+      }
+    }
   }catch(e){}
-  const base = { quests: [
-    { id:"score50",  title:"Atteins 50 points",  type:"score", target:50,  progress:0, done:false, reward:"+50 BorgyCoins",  coins:50 },
-    { id:"score150", title:"Atteins 150 points", type:"score", target:150, progress:0, done:false, reward:"+150 BorgyCoins", coins:150 },
-    { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"+25 BorgyCoins",  coins:25 },
-  ]};
-  saveQuests(base);
-  return base;
+
+  const fresh = generateDailyQuests();
+  saveQuests(fresh);
+  return fresh;
 }
+
 function saveQuests(data){
   try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
 }
 
+// (on garde le même BORGY_COINS_KEY défini plus haut)
 function loadBorgyCoins(){
   try{
     const raw = localStorage.getItem(BORGY_COINS_KEY);
@@ -150,48 +240,65 @@ function saveBorgyCoins(n){
   try{ localStorage.setItem(BORGY_COINS_KEY, String(Math.max(0, n|0))); }catch(e){}
 }
 
-function applyQuestCoins(data){
-  let total = loadBorgyCoins();
-  let changed = false;
-  for(const q of data.quests){
-    if (q.done && !q._rewardGiven && typeof q.coins === "number"){
-      total += q.coins;
-      q._rewardGiven = true;
-      changed = true;
-    }
-  }
-  if (changed){
-    saveQuests(data);
-    saveBorgyCoins(total);
-  }
-  return total;
-}
-
-function updateQuestsFromEvent(evt, value){
+/**
+ * Met à jour les quêtes en fonction d'un évènement de jeu
+ * evt : "score" | "bonus" | "game"
+ * isHardMode : true si la partie est en mode Hard (=> récompenses doublées)
+ */
+function updateQuestsFromEvent(evt, value, isHardMode = false){
   const data = loadQuests();
   let changed = false;
+  let coinsToAdd = 0;
+
   for (const q of data.quests){
     if (q.done) continue;
+
+    const requireHard = q.requireHard === true;
+
     if (q.type === "score" && evt === "score") {
+      if (requireHard && !isHardMode) continue;
       const v = Math.max(q.progress, value);
       if (v !== q.progress){
         q.progress = v;
-        if (q.progress >= q.target) q.done = true;
+        if (q.progress >= q.target){
+          q.done = true;
+          const baseReward = typeof q.coins === "number" ? q.coins : 0;
+          coinsToAdd += baseReward * (isHardMode ? 2 : 1);
+        }
         changed = true;
       }
     }
+
     if (q.type === "bonus" && evt === "bonus") {
+      if (requireHard && !isHardMode) continue;
       q.progress += 1;
-      if (q.progress >= q.target) q.done = true;
+      if (q.progress >= q.target){
+        q.done = true;
+        const baseReward = typeof q.coins === "number" ? q.coins : 0;
+        coinsToAdd += baseReward * (isHardMode ? 2 : 1);
+      }
       changed = true;
     }
+
     if (q.type === "game"  && evt === "game")  {
+      if (requireHard && !isHardMode) continue;
       q.progress += 1;
-      if (q.progress >= q.target) q.done = true;
+      if (q.progress >= q.target){
+        q.done = true;
+        const baseReward = typeof q.coins === "number" ? q.coins : 0;
+        coinsToAdd += baseReward * (isHardMode ? 2 : 1);
+      }
       changed = true;
     }
   }
-  if (changed) saveQuests(data);
+
+  if (changed){
+    saveQuests(data);
+    if (coinsToAdd > 0){
+      const cur = loadBorgyCoins();
+      saveBorgyCoins(cur + coinsToAdd);
+    }
+  }
   return changed;
 }
 
@@ -270,24 +377,31 @@ class MenuScene extends Phaser.Scene {
       s?.setMute(!m); this.game._muted = !m; muteBtn.setText(this.game._muted ? "🔇" : "🔊");
     });
 
-    this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
+    // Titre centré
+    this.add.text(W/2, H*0.13, "FlappyBorgy", {
+      fontFamily:"Georgia,serif",
+      fontSize:64,
+      color:"#0b4a44"
+    }).setOrigin(0.5);
 
-    // Boutons
-    this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
+    // Compteur de Borgy Coins sous le titre
+    const totalCoins = loadBorgyCoins();
+    this.add.text(W/2, H*0.19, `Borgy Coins : ${totalCoins}`, {
+      fontFamily:"monospace",
+      fontSize:30,
+      color:"#0b4a44"
+    }).setOrigin(0.5);
 
-    this.makeBtn(W/2, H*0.35, "Leaderboard", async () => {
+    // Boutons bien alignés / centrés
+    this.makeBtn(W/2, H*0.30, "Jouer",       () => this.scene.start("game"));
+    this.makeBtn(W/2, H*0.38, "Leaderboard", async () => {
       const isHard = this.game._hardMode === true;
       const list = await fetchLeaderboard(10, isHard);
       this.showLeaderboard(list, isHard);
     });
-
-    this.makeBtn(W/2, H*0.43, "Quêtes 🔥",   () => this.showQuests());
-
-    // Shop Borgy Coins
-    this.makeBtn(W/2, H*0.49, "Borgy Coins Shop", () => this.showShop());
-
-    // Bouton "Voter pour Borgy"
-    this.makeBtn(W/2, H*0.55, "🗳️ Voter pour Borgy", () => {
+    this.makeBtn(W/2, H*0.46, "Quêtes 🔥",   () => this.showQuests());
+    this.makeBtn(W/2, H*0.54, "Borgy Coins Shop", () => this.showShop());
+    this.makeBtn(W/2, H*0.62, "🗳️ Voter pour Borgy", () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
       if (window.Telegram?.WebApp?.openLink) {
         window.Telegram.WebApp.openLink(url);
@@ -295,9 +409,7 @@ class MenuScene extends Phaser.Scene {
         window.open(url, "_blank");
       }
     });
-
-    // Bouton "Buy Borgy"
-    this.makeBtn(W/2, H*0.61, "Buy Borgy", () => {
+    this.makeBtn(W/2, H*0.70, "Buy Borgy", () => {
       const url = "https://borgysol.com/";
       if (window.Telegram?.WebApp?.openLink) {
         window.Telegram.WebApp.openLink(url);
@@ -313,7 +425,7 @@ class MenuScene extends Phaser.Scene {
     }
     const hardBtn = this.makeBtn(
       W/2,
-      H*0.67,
+      H*0.78,
       this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF",
       () => {
         this.game._hardMode = !this.game._hardMode;
@@ -329,9 +441,15 @@ class MenuScene extends Phaser.Scene {
   }
 
   makeBtn(x,y,label,cb){
-    const t = this.add.text(x,y,label,{ fontFamily:"monospace", fontSize:34, color:"#fff",
-      backgroundColor:"#12a38a", padding:{left:18,right:18,top:10,bottom:10} })
-      .setOrigin(0.5).setInteractive({useHandCursor:true});
+    const t = this.add.text(x,y,label,{
+      fontFamily:"monospace",
+      fontSize:34,
+      color:"#fff",
+      backgroundColor:"#12a38a",
+      padding:{left:18,right:18,top:10,bottom:10}
+    })
+      .setOrigin(0.5)
+      .setInteractive({useHandCursor:true});
     t.on("pointerover", ()=> t.setBackgroundColor("#0f8e78"));
     t.on("pointerout",  ()=> t.setBackgroundColor("#12a38a"));
     t.on("pointerdown", cb);
@@ -499,14 +617,18 @@ class GameScene extends Phaser.Scene {
       sensor.isScore = false; sensor.destroy(); this.addScore(1);
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
-      if (!bonus.active) return; bonus.destroy(); this.activateMultiplier(); updateQuestsFromEvent("bonus", 1);
+      if (!bonus.active) return;
+      bonus.destroy();
+      this.activateMultiplier();
+      updateQuestsFromEvent("bonus", 1, this.game._hardMode === true);
     }, null, this);
-    this.physics.add.overlap(this.player, this.borgyCoins, (_p, coin) => {
-      if (!coin.active) return;
-      const cx = coin.x, cy = coin.y;
-      coin.destroy();
-      this.onCollectBorgyCoin(cx, cy);
-    }, null, this);
+    this.physics.add.overlap(
+      this.player,
+      this.borgyCoins,
+      this.handleBorgyCoinOverlap,
+      null,
+      this
+    );
 
     this.time.addEvent({
       delay: DIFF.stepMs, loop: true, callback: () => {
@@ -524,7 +646,7 @@ class GameScene extends Phaser.Scene {
     this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
     this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
-    this.borgyCoins.children.iterate(c => { if (c?.body) c.body.setVelocityX(this.curSpeed); });
+    this.borgyCoins.children.iterate(c => { if (c?.body) c.body.setVelocityX(this.curSpeed * 0.8); });
   }
 
   _maybeSwitchToHardMusic(){
@@ -547,7 +669,7 @@ class GameScene extends Phaser.Scene {
 
       this._maybeSwitchToHardMusic();
 
-      updateQuestsFromEvent("game", 1);
+      updateQuestsFromEvent("game", 1, this.game._hardMode === true);
       try { TG?.expand?.(); } catch {}
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
@@ -674,10 +796,10 @@ class GameScene extends Phaser.Scene {
       this.bonuses.add(bonus);
     }
 
-    // BORGY COINS : tous les 5–10 tuyaux, au centre du gap de cette paire
+    // BORGY COINS : tous les 5–10 tuyaux, toujours dans le gap
     if (this.started && this.pairsSpawned >= this.nextCoinAt){
-      const coinX = x;     // même X que les tuyaux
-      const coinY = gapY;  // centre du gap
+      const coinX = x + 520;
+      const coinY = gapY;
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
       this.nextCoinAt += Phaser.Math.Between(5, 10);
     }
@@ -722,6 +844,15 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ====== gestion du contact Borgy / pièce ======
+  handleBorgyCoinOverlap(player, coin){
+    if (!coin || !coin.active) return;
+    const cx = coin.x;
+    const cy = coin.y;
+    coin.disableBody(true, true);      // désactive tout de suite la hitbox
+    this.onCollectBorgyCoin(cx, cy);
+  }
+
   spawnBorgyCoin(x, y, vx){
     const coin = this.physics.add.image(x, y, "borgy_coin")
       .setDepth(8)
@@ -729,18 +860,25 @@ class GameScene extends Phaser.Scene {
       .setImmovable(true);
     coin.body.setAllowGravity(false);
 
-    // même vitesse horizontale que les tuyaux pour rester au centre du gap
-    coin.body.setVelocityX(vx);
+    // un peu plus lent que les tuyaux
+    coin.body.setVelocityX(vx * 0.8);
 
-    // hitbox un peu plus large
-    coin.body.setSize(coin.displayWidth*1.2, coin.displayHeight*1.2, true);
+    // hitbox bien large et centrée
+    const bw = coin.displayWidth * 1.8;
+    const bh = coin.displayHeight * 1.8;
+    coin.body.setSize(bw, bh);
+    coin.body.setOffset(
+      (coin.displayWidth  - bw) / 2,
+      (coin.displayHeight - bh) / 2
+    );
+
     this.borgyCoins.add(coin);
 
-    // Flip gauche/droite (illusion de rotation 3D) plus LENT
+    // Flip gauche/droite plus lent (illusion de rotation 3D)
     this.tweens.add({
       targets: coin,
-      scaleX: 0.02,          // se “rétrécit” -> vue de profil
-      duration: 350,         // plus grand => rotation moins rapide
+      scaleX: 0.02,
+      duration: 600,
       yoyo: true,
       repeat: -1,
       ease: "Sine.inOut"
@@ -799,13 +937,19 @@ class GameScene extends Phaser.Scene {
 
     this.score += value;
     this.scoreText.setText("Score: " + this.score);
-    updateQuestsFromEvent("score", this.score);
+    updateQuestsFromEvent("score", this.score, isHard);
     if (!this.game._muted && this.sfxScore) this.sfxScore.play();
   }
 
   gameOver(){
     if (this.isOver) return;
     this.isOver = true; this.started = false;
+
+    // Met à jour le meilleur score local (sert pour les quêtes du jour)
+    const prevBest = loadBestScore();
+    if (this.score > prevBest){
+      saveBestScore(this.score);
+    }
 
     // 🔧 Empêche la zone d'input du jeu d'intercepter les clics sur les boutons d'overlay
     try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
