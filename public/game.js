@@ -38,7 +38,7 @@ const ENABLE_KILL_BANDS = true;
 
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 20;
-const BONUS_DURATION = 15000;
+const BONUS_DURATION = 15000; // 15s
 
 /* ===== Anim “portes” (Hard) ===== */
 const HARD_DOOR_AMPLITUDE_PX = 70;      // déplacement max de CHAQUE bord
@@ -270,6 +270,7 @@ class MenuScene extends Phaser.Scene {
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
   }
+
   makeBtn(x,y,label,cb){
     const t = this.add.text(x,y,label,{ fontFamily:"monospace", fontSize:34, color:"#fff",
       backgroundColor:"#12a38a", padding:{left:18,right:18,top:10,bottom:10} })
@@ -279,6 +280,7 @@ class MenuScene extends Phaser.Scene {
     t.on("pointerdown", cb);
     return t;
   }
+
   showLeaderboard(list, isHard = false){
     const W = this.scale.width, H = this.scale.height; const depth = 500;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
@@ -302,6 +304,7 @@ class MenuScene extends Phaser.Scene {
       .forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
+
   showQuests(){
     const data = loadQuests(); const W = this.scale.width, H = this.scale.height; const depth = 700;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
@@ -341,6 +344,14 @@ class GameScene extends Phaser.Scene {
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
     this.DEBUG = false; this.debugTxt = null;
+
+    // 🔥 état du bonus & logo qui suit Borgy
+    this.multiplierActive = false;
+    this.bonusFollower = null;
+    this.bonusFollowerPulse = null;
+    this.bonusFollowerFlash = null;
+    this.bonusTimer = null;
+    this.bonusFlashTimer = null;
   }
 
   create(){
@@ -380,6 +391,33 @@ class GameScene extends Phaser.Scene {
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
+
+    // 🔥 logo SwissBorg qui suit Borgy pendant le bonus
+    this.bonusFollower = this.add.image(this.player.x + 40, this.player.y - 20, "bonus_sb")
+      .setScale(0.55)
+      .setDepth(11)
+      .setVisible(false);
+
+    // tween "pulse" normal
+    this.bonusFollowerPulse = this.tweens.add({
+      targets: this.bonusFollower,
+      scale: this.bonusFollower.scale * 1.12,
+      alpha: 0.9,
+      duration: 260,
+      yoyo: true,
+      repeat: -1,
+      paused: true
+    });
+
+    // tween "flash" pour les 3 dernières secondes
+    this.bonusFollowerFlash = this.tweens.add({
+      targets: this.bonusFollower,
+      alpha: { from: 1, to: 0.2 },
+      duration: 120,
+      yoyo: true,
+      repeat: -1,
+      paused: true
+    });
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
@@ -468,6 +506,12 @@ class GameScene extends Phaser.Scene {
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
+    // 🔥 fait suivre le logo SwissBorg à Borgy quand le bonus est actif
+    if (this.multiplierActive && this.bonusFollower && this.bonusFollower.visible) {
+      this.bonusFollower.x = this.player.x + 40;
+      this.bonusFollower.y = this.player.y - 20;
+    }
+
     if (this.DEBUG && this.debugTxt){
       this.debugTxt.setText(`speed:${this.curSpeed}  delay:${this.curDelay}  next:${Math.max(0, Math.ceil(this.nextSpawnAt - this.time.now))}ms`);
     }
@@ -543,13 +587,30 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
+    // 🔥 Bonus SwissBorg : hitbox agrandie + même image utilisée pour le logo qui suit Borgy
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-160,160),
-        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
+      const by = Phaser.Math.Clamp(
+        gapY + Phaser.Math.Between(-160,160),
+        H*PLAYFIELD_TOP_PCT+40,
+        H*PLAYFIELD_BOT_PCT-40
+      );
+
       const bonus = this.physics.add.image(x + 520, by, "bonus_sb")
-        .setDepth(7).setScale(0.55).setImmovable(true);
+        .setDepth(7)
+        .setScale(0.55)
+        .setImmovable(true);
+
       bonus.body.setAllowGravity(false);
       bonus.body.setVelocityX(this.curSpeed);
+
+      // Hitbox plus large que le visuel pour être plus permissif
+      const HITBOX_FACTOR = 1.6;
+      bonus.body.setSize(
+        bonus.displayWidth * HITBOX_FACTOR,
+        bonus.displayHeight * HITBOX_FACTOR,
+        true
+      );
+
       this.bonuses.add(bonus);
     }
 
@@ -593,9 +654,43 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ===== Bonus SwissBorg : multiplicateur + logo qui suit Borgy =====
   activateMultiplier(){
+    // reset d'un bonus précédent
+    if (this.bonusTimer) this.bonusTimer.remove(false);
+    if (this.bonusFlashTimer) this.bonusFlashTimer.remove(false);
+
     this.multiplierActive = true;
-    this.time.delayedCall(BONUS_DURATION, () => { this.multiplierActive = false; });
+
+    if (this.bonusFollower) {
+      this.bonusFollower.setVisible(true);
+      this.bonusFollower.alpha = 1;
+      this.bonusFollower.x = this.player.x + 40;
+      this.bonusFollower.y = this.player.y - 20;
+    }
+
+    if (this.bonusFollowerFlash) this.bonusFollowerFlash.pause();
+    if (this.bonusFollowerPulse) this.bonusFollowerPulse.play();
+
+    const FLASH_LEAD = 3000; // commence à clignoter 3s avant la fin
+
+    // Timer pour lancer le clignotement
+    this.bonusFlashTimer = this.time.delayedCall(Math.max(0, BONUS_DURATION - FLASH_LEAD), () => {
+      if (!this.multiplierActive) return;
+      if (this.bonusFollowerPulse) this.bonusFollowerPulse.pause();
+      if (this.bonusFollowerFlash) this.bonusFollowerFlash.play();
+    });
+
+    // Timer pour fin de bonus
+    this.bonusTimer = this.time.delayedCall(BONUS_DURATION, () => {
+      this.multiplierActive = false;
+
+      if (this.bonusFollower) {
+        this.bonusFollower.setVisible(false);
+      }
+      if (this.bonusFollowerPulse) this.bonusFollowerPulse.pause();
+      if (this.bonusFollowerFlash) this.bonusFollowerFlash.pause();
+    });
   }
 
   addScore(n){
@@ -623,6 +718,14 @@ class GameScene extends Phaser.Scene {
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
+
+    // coupe aussi le bonus visuel en cas de mort
+    this.multiplierActive = false;
+    if (this.bonusFollower) this.bonusFollower.setVisible(false);
+    if (this.bonusFollowerPulse) this.bonusFollowerPulse.pause();
+    if (this.bonusFollowerFlash) this.bonusFollowerFlash.pause();
+    if (this.bonusTimer) this.bonusTimer.remove(false);
+    if (this.bonusFlashTimer) this.bonusFlashTimer.remove(false);
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
