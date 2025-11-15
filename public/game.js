@@ -19,7 +19,7 @@ const PROFILE = {
 };
 
 const PAD = 2;
-const PIPE_BODY_W    = 1.0; // <- hitbox tuyau pleine largeur
+const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.15;
 
@@ -272,14 +272,6 @@ class MenuScene extends Phaser.Scene {
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
 
-    // Compteur Borgy Coins sous le titre
-    const menuCoins = loadBorgyCoins();
-    this.add.text(W/2, H*0.19, `Borgy Coins : ${menuCoins} 🪙`, {
-      fontFamily: "monospace",
-      fontSize: 26,
-      color: "#0b4a44"
-    }).setOrigin(0.5);
-
     // Boutons
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
 
@@ -484,8 +476,7 @@ class GameScene extends Phaser.Scene {
       .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
-    // hitbox Borgy un peu plus grande
-    this.player.body.setSize(pw*0.65, ph*0.65, true).setOffset(pw*0.175, ph*0.18);
+    this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
@@ -683,10 +674,10 @@ class GameScene extends Phaser.Scene {
       this.bonuses.add(bonus);
     }
 
-    // BORGY COINS : tous les 5–10 tuyaux, toujours dans le gap
+    // BORGY COINS : tous les 5–10 tuyaux, au centre du gap de cette paire
     if (this.started && this.pairsSpawned >= this.nextCoinAt){
-      const coinX = x + 520;
-      const coinY = gapY;
+      const coinX = x;     // même X que les tuyaux
+      const coinY = gapY;  // centre du gap
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
       this.nextCoinAt += Phaser.Math.Between(5, 10);
     }
@@ -737,16 +728,19 @@ class GameScene extends Phaser.Scene {
       .setScale(0.10)
       .setImmovable(true);
     coin.body.setAllowGravity(false);
+
+    // même vitesse horizontale que les tuyaux pour rester au centre du gap
     coin.body.setVelocityX(vx);
+
     // hitbox un peu plus large
     coin.body.setSize(coin.displayWidth*1.2, coin.displayHeight*1.2, true);
     this.borgyCoins.add(coin);
 
-    // Flip gauche/droite (illusion de rotation 3D)
+    // Flip gauche/droite (illusion de rotation 3D) plus LENT
     this.tweens.add({
       targets: coin,
-      scaleX: 0.02,          // vue de profil
-      duration: 200,
+      scaleX: 0.02,          // se “rétrécit” -> vue de profil
+      duration: 350,         // plus grand => rotation moins rapide
       yoyo: true,
       repeat: -1,
       ease: "Sine.inOut"
