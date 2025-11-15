@@ -733,13 +733,14 @@ class GameScene extends Phaser.Scene {
     coin.body.setSize(coin.displayWidth*1.2, coin.displayHeight*1.2, true);
     this.borgyCoins.add(coin);
 
-    // Rotation continue
+    // Flip gauche/droite (illusion de rotation 3D)
     this.tweens.add({
       targets: coin,
-      angle: 360,
-      duration: 800,
+      scaleX: 0.02,          // se “rétrécit” -> vue de profil
+      duration: 200,
+      yoyo: true,
       repeat: -1,
-      ease: "Linear"
+      ease: "Sine.inOut"
     });
   }
 
@@ -887,4 +888,3 @@ window.addEventListener("load", () => {
     fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
-
