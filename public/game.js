@@ -13,10 +13,10 @@ const GAME_W = 1024, GAME_H = 1536;
 
 const PROFILE = {
   gravity: 1400,
-  jump: -380,
+  jump: -390,
   pipeSpeed: -220,
-  gap: 270,
-  spawnDelay: 2500
+  gap: 260,
+  spawnDelay: 2400
 };
 
 const PAD = 2;
@@ -28,7 +28,7 @@ const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
-const PIPE_RIM_MAX_PCT  = 0.82;
+const PIPE_RIM_MAX_PCT  = 0.80;
 
 const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
