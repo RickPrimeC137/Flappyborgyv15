@@ -764,11 +764,12 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // BONUS SWISSBORG — toujours au centre du gap, hitbox large, récupérable facilement
-    if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = gapY;
+    // Centre EXACT du trou entre les deux tuyaux
+    const gapCenterY = (yTopRim0 + yBottomRim0) / 2;
 
-      const bonus = this.physics.add.image(x + 420, by, "bonus_sb")
+    // BONUS SWISSBORG — au centre du gap, hitbox large
+    if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
+      const bonus = this.physics.add.image(x + 420, gapCenterY, "bonus_sb")
         .setDepth(7)
         .setScale(0.55)
         .setImmovable(true);
@@ -788,10 +789,10 @@ class GameScene extends Phaser.Scene {
       this.bonuses.add(bonus);
     }
 
-    // BORGY COINS : tous les 5–10 tuyaux, toujours dans le gap
+    // BORGY COINS : tous les 5–10 tuyaux, toujours au centre du gap
     if (this.started && this.pairsSpawned >= this.nextCoinAt){
       const coinX = x + 520;
-      const coinY = gapY;
+      const coinY = gapCenterY;
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
       this.nextCoinAt += Phaser.Math.Between(5, 10);
     }
