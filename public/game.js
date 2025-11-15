@@ -581,7 +581,7 @@ class GameScene extends Phaser.Scene {
       .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
-    this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
+    this.player.body.setSize(pw*0.50, ph*0.50, true).setOffset(pw*0.20, ph*0.22);
     this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
