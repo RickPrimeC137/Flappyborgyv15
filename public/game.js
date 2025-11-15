@@ -772,7 +772,7 @@ class GameScene extends Phaser.Scene {
 
       const coin = this.physics.add.image(x + 480, cy, "coin_borgy")
         .setDepth(8)
-        .setScale(0.55)
+        .setScale(0.20)
         .setImmovable(true);
       coin.body.setAllowGravity(false);
       coin.body.setVelocityX(this.curSpeed);
