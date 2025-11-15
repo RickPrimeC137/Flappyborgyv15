@@ -45,8 +45,8 @@ const BORGY_COINS_KEY = "flappy_borgy_coins_v1";
 const LOCAL_BEST_KEY  = "flappy_borgy_bestscore_v1";
 
 /* ===== Anim “portes” (Hard) ===== */
-const HARD_DOOR_AMPLITUDE_PX = 70;      // déplacement max de CHAQUE bord
-const HARD_DOOR_HALF_PERIOD  = 900;     // ms pour “fermer” puis yoyo pour “ouvrir”
+const HARD_DOOR_AMPLITUDE_PX = 70;
+const HARD_DOOR_HALF_PERIOD  = 900;
 
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
@@ -78,7 +78,9 @@ function ensureBgm(scene, opts = {}) {
   scene.game.events.off(Phaser.Core.Events.BLUR);
   scene.game.events.off(Phaser.Core.Events.FOCUS);
   scene.game.events.on(Phaser.Core.Events.BLUR, () => gm._bgm?.pause());
-  scene.game.events.on(Phaser.Core.Events.FOCUS, () => { if (!scene.sound.locked) gm._bgm?.resume(); });
+  scene.game.events.on(Phaser.Core.Events.FOCUS, () => {
+    if (!scene.sound.locked) gm._bgm?.resume();
+  });
 }
 
 /* ======= Difficulté ======= */
@@ -111,9 +113,9 @@ async function postScore(score, isHard=false){
 async function fetchLeaderboard(limit = 10, isHard = false) {
   try {
     const url = `${API_BASE}/api/leaderboard?limit=${limit}${isHard ? "&mode=hard" : ""}&_=${Date.now()}`;
-    const r = await fetch(url, { cache: "no-store" }); // évite 304 sans body
+    const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) { console.warn("lb status", r.status); return []; }
-    const j = await r.json().catch(() => null); // si jamais
+    const j = await r.json().catch(() => null);
     return j?.ok ? j.list : [];
   } catch (e) {
     console.warn("lb fetch error", e);
@@ -156,7 +158,6 @@ function generateDailyQuests(){
 
   const q1Target = Math.max(20, Math.round(best * 0.4));
   const q2Target = Math.max(q1Target + 30, Math.round(best * 1.1));
-
   const bonusCount = best < 80 ? 1 : (best < 150 ? 2 : 3);
 
   const quests = [
@@ -337,7 +338,7 @@ class MenuScene extends Phaser.Scene {
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
-    ensureBgm(this); // musique normale en menu
+    ensureBgm(this);
 
     const muteBtn = this.add.text(W - 70, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
       .setOrigin(0.5).setDepth(50).setInteractive({useHandCursor:true});
@@ -348,14 +349,12 @@ class MenuScene extends Phaser.Scene {
       s?.setMute(!m); this.game._muted = !m; muteBtn.setText(this.game._muted ? "🔇" : "🔊");
     });
 
-    // Titre centré
     this.add.text(W/2, H*0.13, "FlappyBorgy", {
       fontFamily:"Georgia,serif",
       fontSize:64,
       color:"#0b4a44"
     }).setOrigin(0.5);
 
-    // Compteur de Borgy Coins sous le titre
     const totalCoins = loadBorgyCoins();
     this.add.text(W/2, H*0.19, `Borgy Coins : ${totalCoins}`, {
       fontFamily:"monospace",
@@ -363,7 +362,6 @@ class MenuScene extends Phaser.Scene {
       color:"#0b4a44"
     }).setOrigin(0.5);
 
-    // Boutons bien alignés / centrés
     this.makeBtn(W/2, H*0.30, "Jouer",       () => this.scene.start("game"));
     this.makeBtn(W/2, H*0.38, "Leaderboard", async () => {
       const isHard = this.game._hardMode === true;
@@ -389,7 +387,6 @@ class MenuScene extends Phaser.Scene {
       }
     });
 
-    // Bascule Hard
     if (typeof this.game._hardMode === "undefined") {
       try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
       catch { this.game._hardMode = false; }
@@ -455,7 +452,6 @@ class MenuScene extends Phaser.Scene {
     const data = loadQuests();
     const W = this.scale.width, H = this.scale.height; const depth = 700;
 
-    // applique les récompenses (x2 si Hard)
     const isHard = this.game._hardMode === true;
     const totalAfter = applyQuestCoins(data, isHard);
 
@@ -496,7 +492,6 @@ class MenuScene extends Phaser.Scene {
   showShop(){
     const W = this.scale.width, H = this.scale.height; const depth = 650;
 
-    // on applique aussi les récompenses avant d’afficher la boutique
     const data = loadQuests();
     const isHard = this.game._hardMode === true;
     const coins = applyQuestCoins(data, isHard);
@@ -543,7 +538,7 @@ class GameScene extends Phaser.Scene {
     this.bonusFollower = null;
 
     this.borgyCoinCount = loadBorgyCoins();
-    this.nextCoinAt = Phaser.Math.Between(5, 10);
+    this.nextCoinAt = Phaser.Math.Between(3, 7);
   }
 
   create(){
@@ -635,7 +630,6 @@ class GameScene extends Phaser.Scene {
     this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
     this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
-    // pièces : même vitesse que les tuyaux => restent fixes dans le gap
     this.borgyCoins.children.iterate(c => { if (c?.body) c.body.setVelocityX(this.curSpeed); });
   }
 
@@ -652,7 +646,6 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      // premier spawn immédiat (pas de point)
       this.spawnPair(true);
       this.lastSpawnMs = this.time.now;
       this.nextSpawnAt = this.time.now + this.curDelay;
@@ -686,7 +679,6 @@ class GameScene extends Phaser.Scene {
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
     this.borgyCoins.children.iterate(c => { if (c && c.active && c.x < -KILL_MARGIN) c.destroy(); });
 
-    // bonus follower suit Borgy + clignote sur les 3 dernières secondes
     if (this.multiplierActive && this.bonusFollower && this.player.active){
       this.bonusFollower.x = this.player.x - this.player.displayWidth*0.9;
       this.bonusFollower.y = this.player.y;
@@ -703,7 +695,6 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ===== util: met à jour l’échelle/physique d’un tuyau selon la position de sa "lèvre" =====
   _resizePipeToRim(img, isTop, rimY, scaleX){
     const H = this.scale.height;
     const targetH = isTop
@@ -754,12 +745,14 @@ class GameScene extends Phaser.Scene {
     topImg.body.setVelocityX(vx);
     bottomImg.body.setVelocityX(vx);
 
-    // Hard : teinte “lave”
     if (this.game._hardMode === true) { topImg.setTint(0x6d1f12); bottomImg.setTint(0x6d1f12); }
     else { topImg.clearTint(); bottomImg.clearTint(); }
 
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
+
+    // centre réel du gap après redimensionnement
+    const gapCenterY = (topImg.y + bottomImg.y) / 2;
 
     const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
     const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
@@ -773,34 +766,32 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // BONUS SWISSBORG : toujours exactement dans le milieu du gap
+    // BONUS SWISSBORG : au milieu de la paire (même X, centre du trou)
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = gapY;  // centre du gap
-      const bonus = this.physics.add.image(x + 420, by, "bonus_sb")
+      const bonusX = x;
+      const bonusY = gapCenterY;
+      const bonus = this.physics.add.image(bonusX, bonusY, "bonus_sb")
         .setDepth(7).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
-      bonus.body.setVelocityX(this.curSpeed); // même vitesse que les tuyaux
-      // hitbox un peu plus large
-      bonus.body.setSize(bonus.displayWidth*1.4, bonus.displayHeight*1.4, true);
+      bonus.body.setVelocityX(this.curSpeed);
+      bonus.body.setSize(bonus.displayWidth*1.6, bonus.displayHeight*1.6, true);
       this.bonuses.add(bonus);
     }
 
-    // BORGY COINS : tous les 5–10 tuyaux, exactement au milieu du gap
+    // BORGY COINS : tous les 5–10 tuyaux, également au centre du gap
     if (this.started && this.pairsSpawned >= this.nextCoinAt){
-      const coinX = x + 520;
-      const coinY = gapY; // milieu du gap
+      const coinX = x;
+      const coinY = gapCenterY;
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
       this.nextCoinAt += Phaser.Math.Between(5, 10);
     }
 
-    /* ====== Animation porte (Hard uniquement) ====== */
     if (this.game._hardMode === true) {
-      // amplitude sûre pour ne jamais passer sous MIN_GAP
       const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
       const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
 
       if (amp > 0) {
-        const driver = { delta: 0 }; // delta >0 ferme, <0 ouvre
+        const driver = { delta: 0 };
         const tween = this.tweens.add({
           targets: driver,
           delta: amp,
@@ -812,20 +803,17 @@ class GameScene extends Phaser.Scene {
             const d = driver.delta;
             const newTop    = yTopRim0    + d;
             const newBottom = yBottomRim0 - d;
-            // bornes de sécurité (empêche de sortir de la zone)
             const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
             const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
 
             this._resizePipeToRim(topImg, true,  topClamped,    scaleXt);
             this._resizePipeToRim(bottomImg, false, bottomClamped, scaleXb);
 
-            // conserver la vitesse horizontale actuelle
             topImg.body.setVelocityX(this.curSpeed);
             bottomImg.body.setVelocityX(this.curSpeed);
           }
         });
 
-        // Nettoyage du tween si les sprites disparaissent
         const stopTween = () => { try { tween.stop(); tween.remove(); } catch {} };
         topImg.once('destroy', stopTween);
         bottomImg.once('destroy', stopTween);
@@ -838,7 +826,7 @@ class GameScene extends Phaser.Scene {
     if (!coin || !coin.active) return;
     const cx = coin.x;
     const cy = coin.y;
-    coin.disableBody(true, true);      // désactive la hitbox immédiatement
+    coin.disableBody(true, true);
     this.onCollectBorgyCoin(cx, cy);
   }
 
@@ -848,9 +836,8 @@ class GameScene extends Phaser.Scene {
       .setScale(0.10)
       .setImmovable(true);
     coin.body.setAllowGravity(false);
-    coin.body.setVelocityX(vx);  // même vitesse que les tuyaux => fixe dans le gap
+    coin.body.setVelocityX(vx);
 
-    // hitbox bien large et centrée (facile à récupérer)
     const bw = coin.displayWidth * 1.8;
     const bh = coin.displayHeight * 1.8;
     coin.body.setSize(bw, bh);
@@ -861,11 +848,10 @@ class GameScene extends Phaser.Scene {
 
     this.borgyCoins.add(coin);
 
-    // Flip gauche/droite plus lent (illusion de rotation 3D)
     this.tweens.add({
       targets: coin,
       scaleX: 0.02,
-      duration: 600,    // plus grand = plus lent
+      duration: 600,
       yoyo: true,
       repeat: -1,
       ease: "Sine.inOut"
@@ -900,7 +886,6 @@ class GameScene extends Phaser.Scene {
       this.bonusFollower.destroy();
       this.bonusFollower = null;
     }
-    // petit logo qui suit Borgy
     this.bonusFollower = this.add.image(
       this.player.x - this.player.displayWidth*0.9,
       this.player.y,
@@ -932,10 +917,8 @@ class GameScene extends Phaser.Scene {
     if (this.isOver) return;
     this.isOver = true; this.started = false;
 
-    // met à jour le best local pour les quêtes du lendemain
     saveLocalBestScore(this.score);
 
-    // 🔧 Empêche la zone d'input du jeu d'intercepter les clics sur les boutons d'overlay
     try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
     try { this.input.keyboard.removeAllListeners(); } catch {}
 
