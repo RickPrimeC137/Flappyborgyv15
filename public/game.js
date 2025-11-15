@@ -19,7 +19,7 @@ const PROFILE = {
 };
 
 const PAD = 2;
-const PIPE_BODY_W    = 0.92;
+const PIPE_BODY_W    = 1.0; // <- hitbox tuyau pleine largeur
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.15;
 
@@ -272,6 +272,14 @@ class MenuScene extends Phaser.Scene {
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
 
+    // Compteur Borgy Coins sous le titre
+    const menuCoins = loadBorgyCoins();
+    this.add.text(W/2, H*0.19, `Borgy Coins : ${menuCoins} 🪙`, {
+      fontFamily: "monospace",
+      fontSize: 26,
+      color: "#0b4a44"
+    }).setOrigin(0.5);
+
     // Boutons
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
 
@@ -476,7 +484,8 @@ class GameScene extends Phaser.Scene {
       .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
-    this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
+    // hitbox Borgy un peu plus grande
+    this.player.body.setSize(pw*0.65, ph*0.65, true).setOffset(pw*0.175, ph*0.18);
     this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
@@ -736,7 +745,7 @@ class GameScene extends Phaser.Scene {
     // Flip gauche/droite (illusion de rotation 3D)
     this.tweens.add({
       targets: coin,
-      scaleX: 0.02,          // se “rétrécit” -> vue de profil
+      scaleX: 0.02,          // vue de profil
       duration: 200,
       yoyo: true,
       repeat: -1,
