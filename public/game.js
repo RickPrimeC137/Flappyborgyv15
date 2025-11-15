@@ -40,6 +40,10 @@ const ENABLE_BONUS = true;
 const BONUS_EVERY = 20;
 const BONUS_DURATION = 15000;
 
+// Pièces Borgy
+const COIN_MIN_PIPES = 5;
+const COIN_MAX_PIPES = 10;
+
 /* ===== Anim “portes” (Hard) ===== */
 const HARD_DOOR_AMPLITUDE_PX = 70;      // déplacement max de CHAQUE bord
 const HARD_DOOR_HALF_PERIOD  = 900;     // ms pour “fermer” puis yoyo pour “ouvrir”
@@ -79,7 +83,7 @@ function ensureBgm(scene, opts = {}) {
 
 /* ======= Difficulté ======= */
 const DIFF = {
-  stepMs: 14000,
+  stepMs: 13000,
   speedDelta: -20,
   delayDelta: -150,
   minSpeed: -380,
@@ -104,6 +108,7 @@ async function postScore(score, isHard=false){
     });
   }catch(e){ console.warn("score post error", e); }
 }
+
 async function fetchLeaderboard(limit = 10, isHard = false) {
   try {
     const url = `${API_BASE}/api/leaderboard?limit=${limit}${isHard ? "&mode=hard" : ""}&_=${Date.now()}`;
@@ -117,31 +122,156 @@ async function fetchLeaderboard(limit = 10, isHard = false) {
   }
 }
 
-/* ================== Quêtes ================== */
-const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
-function loadQuests(){
-  try{ const raw = localStorage.getItem(QUEST_STORAGE_KEY); if (raw) return JSON.parse(raw); }catch(e){}
-  const base = { quests: [
-    { id:"score50",  title:"Atteins 50 points",  type:"score", target:50,  progress:0, done:false, reward:"+50 pts" },
-    { id:"score150", title:"Atteins 150 points", type:"score", target:150, progress:0, done:false, reward:"+150 pts" },
-    { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"Sticker 🎉" },
-  ]};
-  saveQuests(base); return base;
+/* ================== Quêtes + Borgy Coins ================== */
+const QUEST_STORAGE_KEY = "flappy_borgy_quests_v2";
+const COINS_STORAGE_KEY = "flappy_borgy_coins_v1";
+
+function todayKey(){ return new Date().toISOString().slice(0,10); }
+
+function makeNewQuestSet(oldStats = {}) {
+  const stats = {
+    bestNormal: oldStats.bestNormal || 0,
+    bestHard: oldStats.bestHard || 0,
+    gamesPlayed: oldStats.gamesPlayed || 0,
+    bonusesTaken: oldStats.bonusesTaken || 0
+  };
+
+  const bestAny = Math.max(20, stats.bestNormal, stats.bestHard);
+  const easyTarget = Math.max(20, Math.round(bestAny * 0.6));
+  const proTarget  = Math.max(easyTarget + 10, Math.round(bestAny * 1.1));
+
+  const bonusTarget = Math.max(
+    1,
+    Math.min(5, Math.ceil((stats.bonusesTaken || 0) / 3) + 1)
+  );
+
+  return {
+    day: todayKey(),
+    stats,
+    quests: [
+      {
+        id: "score_easy",
+        title: `Atteins ${easyTarget} points`,
+        type: "score",
+        target: easyTarget,
+        progress: 0,
+        done: false,
+        rewardNormal: 5,
+        rewardHard: 8
+      },
+      {
+        id: "score_pro",
+        title: `Atteins ${proTarget} points`,
+        type: "score",
+        target: proTarget,
+        progress: 0,
+        done: false,
+        rewardNormal: 10,
+        rewardHard: 15
+      },
+      {
+        id: "bonus_hunter",
+        title: `Ramasse ${bonusTarget} bonus`,
+        type: "bonus",
+        target: bonusTarget,
+        progress: 0,
+        done: false,
+        rewardNormal: 8,
+        rewardHard: 12
+      }
+    ]
+  };
 }
-function saveQuests(data){ try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){} }
-function updateQuestsFromEvent(evt, value){
-  const data = loadQuests(); let changed = false;
+
+function loadQuests(){
+  try{
+    const raw = localStorage.getItem(QUEST_STORAGE_KEY);
+    if (raw) {
+      let data = JSON.parse(raw);
+      if (!data.day || data.day !== todayKey()) {
+        // Nouveau jour => on régénère à partir des stats
+        data = makeNewQuestSet(data.stats || {});
+        saveQuests(data);
+        return data;
+      }
+      // s'assure que stats existe
+      if (!data.stats) data.stats = { bestNormal:0, bestHard:0, gamesPlayed:0, bonusesTaken:0 };
+      return data;
+    }
+  }catch(e){ console.warn("loadQuests error", e); }
+  const base = makeNewQuestSet({});
+  saveQuests(base);
+  return base;
+}
+function saveQuests(data){
+  try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+}
+
+function getBorgyCoins(){
+  try{
+    const raw = localStorage.getItem(COINS_STORAGE_KEY);
+    return raw ? Number(raw) || 0 : 0;
+  }catch(e){ return 0; }
+}
+function addBorgyCoins(n){
+  const cur = getBorgyCoins();
+  const next = Math.max(0, cur + (Number(n) || 0));
+  try{ localStorage.setItem(COINS_STORAGE_KEY, String(next)); }catch(e){}
+  return next;
+}
+
+// evt: "score" | "bonus" | "game"
+// value: score courant ou 1
+// ctx: { isHard?: boolean }
+function updateQuestsFromEvent(evt, value, ctx = {}){
+  const data = loadQuests();
+  const stats = data.stats || (data.stats = { bestNormal:0, bestHard:0, gamesPlayed:0, bonusesTaken:0 });
+  const isHard = !!ctx.isHard;
+
+  // Stats globales
+  if (evt === "score") {
+    if (isHard) stats.bestHard  = Math.max(stats.bestHard  || 0, value);
+    else        stats.bestNormal= Math.max(stats.bestNormal|| 0, value);
+  }
+  if (evt === "bonus") {
+    stats.bonusesTaken = (stats.bonusesTaken || 0) + 1;
+  }
+  if (evt === "game") {
+    stats.gamesPlayed = (stats.gamesPlayed || 0) + 1;
+  }
+
+  let gained = 0;
+  let changed = false;
+
   for (const q of data.quests){
     if (q.done) continue;
+
+    let newProg = q.progress;
     if (q.type === "score" && evt === "score") {
-      const v = Math.max(q.progress, value);
-      if (v !== q.progress){ q.progress = v; if (q.progress >= q.target) q.done = true; changed = true; }
+      newProg = Math.max(q.progress, value);
     }
-    if (q.type === "bonus" && evt === "bonus") { q.progress += 1; if (q.progress >= q.target) q.done = true; changed = true; }
-    if (q.type === "game"  && evt === "game")  { q.progress += 1; if (q.progress >= q.target) q.done = true; changed = true; }
+    if (q.type === "bonus" && evt === "bonus") {
+      newProg = q.progress + 1;
+    }
+    if (q.type === "game"  && evt === "game")  {
+      newProg = q.progress + 1;
+    }
+
+    if (newProg !== q.progress){
+      q.progress = newProg;
+      changed = true;
+      if (q.progress >= q.target){
+        q.done = true;
+        const reward = isHard ? q.rewardHard : q.rewardNormal;
+        gained += reward;
+      }
+    }
   }
+
   if (changed) saveQuests(data);
-  return changed;
+  if (gained > 0) addBorgyCoins(gained);
+
+  return { changed, gained };
 }
 
 /* ================== PRELOAD ================== */
@@ -173,6 +303,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
+    // Bonus SwissBorg + Borgy Coin
+    if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
+    this.load.image("coin_borgy", "borgy_coin.png");
+
     // Audio normal
     this.load.audio("bgm", "bgm.mp3");
     this.load.audio("bgm_alt", "audio_a19c0824bd.mp3");
@@ -182,8 +316,6 @@ class PreloadScene extends Phaser.Scene {
     // SFX
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
-
-    if (ENABLE_BONUS) this.load.image("bonus_sb", "sb_token_user.png");
 
     // Barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
@@ -201,6 +333,7 @@ class PreloadScene extends Phaser.Scene {
 /* ================== MENU ================== */
 class MenuScene extends Phaser.Scene {
   constructor(){ super("menu"); }
+
   create(){
     const W = this.scale.width, H = this.scale.height;
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
@@ -218,6 +351,13 @@ class MenuScene extends Phaser.Scene {
     });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
+
+    // Affichage des Borgy Coins
+    const coins = getBorgyCoins();
+    this.add.text(W/2, H*0.19, `Borgy Coins : ${coins}`, {
+      fontFamily:"monospace", fontSize:28, color:"#0b4a44", backgroundColor:"rgba(255,255,255,0.7)",
+      padding:{ left:12, right:12, top:6, bottom:6 }
+    }).setOrigin(0.5);
 
     // Leaderboard : si Hard activé, affiche le board Hard
     this.makeBtn(W/2, H*0.35, "Leaderboard", async () => {
@@ -239,7 +379,7 @@ class MenuScene extends Phaser.Scene {
       }
     });
 
-    // 🔥 NOUVEAU bouton "Buy Borgy"
+    // Bouton "Buy Borgy"
     this.makeBtn(W/2, H*0.57, "Buy Borgy", () => {
       const url = "https://borgysol.com/";
       if (window.Telegram?.WebApp?.openLink) {
@@ -270,6 +410,7 @@ class MenuScene extends Phaser.Scene {
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
   }
+
   makeBtn(x,y,label,cb){
     const t = this.add.text(x,y,label,{ fontFamily:"monospace", fontSize:34, color:"#fff",
       backgroundColor:"#12a38a", padding:{left:18,right:18,top:10,bottom:10} })
@@ -279,6 +420,7 @@ class MenuScene extends Phaser.Scene {
     t.on("pointerdown", cb);
     return t;
   }
+
   showLeaderboard(list, isHard = false){
     const W = this.scale.width, H = this.scale.height; const depth = 500;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
@@ -302,22 +444,31 @@ class MenuScene extends Phaser.Scene {
       .forEach(o => o?.destroy());
     close.on("pointerdown", destroyAll);
   }
+
   showQuests(){
-    const data = loadQuests(); const W = this.scale.width, H = this.scale.height; const depth = 700;
+    const data = loadQuests();
+    const coins = getBorgyCoins();
+    const W = this.scale.width, H = this.scale.height; const depth = 700;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
-    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+    const title = this.add.text(W/2, H*0.24, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
       .setOrigin(0.5).setDepth(depth+1);
-    const startY = H*0.33, lineH = 72;
+
+    this.add.text(W/2, H*0.30, `Borgy Coins : ${coins}`, {
+      fontFamily:"monospace", fontSize:26, color:"#fff"
+    }).setOrigin(0.5).setDepth(depth+1);
+
+    const startY = H*0.35, lineH = 80;
     data.quests.forEach((q, i) => {
       const y = startY + i*lineH; const pct = Math.min(1, q.progress / q.target);
-      this.add.text(W*0.14, y, q.title, { fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff" })
+      this.add.text(W*0.14, y, q.title, { fontFamily:"monospace", fontSize:26, color:q.done ? "#b3ffcf" : "#fff" })
         .setOrigin(0,0.5).setDepth(depth+1);
-      const barW=W*0.38, barX=W*0.54;
+      const barW=W*0.40, barX=W*0.52;
       this.add.rectangle(barX, y, barW, 12, 0xffffff, 0.15).setOrigin(0,0.5).setDepth(depth+1);
       this.add.rectangle(barX, y, barW*pct, 12, q.done ? 0x15b665 : 0x17a689, 1).setOrigin(0,0.5).setDepth(depth+1);
-      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, { fontFamily:"monospace", fontSize:24, color:"#fff" })
+      this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, { fontFamily:"monospace", fontSize:22, color:"#fff" })
         .setOrigin(1,0.5).setDepth(depth+1);
-      this.add.text(W*0.14, y+28, `Récompense: ${q.reward}`, { fontFamily:"monospace", fontSize:18, color:"#c3ede5" })
+      this.add.text(W*0.14, y+24, `Récompense: ${q.rewardNormal}🪙 (Normal) / ${q.rewardHard}🪙 (Hard)`,
+        { fontFamily:"monospace", fontSize:18, color:"#c3ede5" })
         .setOrigin(0,0.5).setDepth(depth+1);
     });
     const close = this.add.text(W/2, H*0.78, "Fermer", { fontFamily:"monospace", fontSize:40, color:"#fff",
@@ -337,15 +488,21 @@ class GameScene extends Phaser.Scene {
     this.started = false; this.isOver  = false;
     this.score = 0; this.pairsSpawned = 0;
     this.pipes = null; this.sensors = null; this.bonuses = null;
+    this.coinItems = null;
     this.nextSpawnAt = Infinity; this.lastSpawnMs = -1;
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
     this.DEBUG = false; this.debugTxt = null;
 
-    // Bonus tracking
+    // Bonus x2 + aura Borgy
     this.multiplierActive = false;
-    this.bonusFollower = null;
-    this.bonusBlinkTween = null;
+    this.borgyAura = null;
+    this.borgyAuraVisible = false;
+    this.borgyAuraFlickerEvt = null;
+
+    // Apparition des pièces Borgy
+    this.pipesSinceCoin = 0;
+    this.nextCoinIn = Phaser.Math.Between(COIN_MIN_PIPES, COIN_MAX_PIPES);
   }
 
   create(){
@@ -367,6 +524,7 @@ class GameScene extends Phaser.Scene {
     this.pipes   = this.physics.add.group();
     this.sensors = this.physics.add.group();
     this.bonuses = this.physics.add.group();
+    this.coinItems = this.physics.add.group();
 
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on("pointerdown", () => this.onTap());
@@ -374,6 +532,12 @@ class GameScene extends Phaser.Scene {
 
     this.scoreText = this.add.text(24, 18, "Score: 0",
       { fontFamily:"monospace", fontSize:46, color:"#fff", stroke:"#0a3a38", strokeThickness:8 }).setDepth(20);
+
+    // Compteur de Borgy Coins (haut droit)
+    const currentCoins = getBorgyCoins();
+    this.coinsText = this.add.text(W - 32, 22, `🪙 ${currentCoins}`, {
+      fontFamily:"monospace", fontSize:32, color:"#fff", stroke:"#0a3a38", strokeThickness:6
+    }).setOrigin(1,0).setDepth(20);
 
     if (this.DEBUG){
       this.debugTxt = this.add.text(16, 64, "", { fontFamily:"monospace", fontSize: 16, color: "#bff" }).setDepth(20);
@@ -385,6 +549,12 @@ class GameScene extends Phaser.Scene {
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
     this.player.body.setSize(pw*0.45, ph*0.45, true).setOffset(pw*0.215, ph*0.20);
     this.player.setGravityY(0);
+
+    // Aura Borgy (bonus x2)
+    this.borgyAura = this.add.image(this.player.x - 90, this.player.y - 6, "borgy")
+      .setScale(PLAYER_SCALE * 0.7)
+      .setDepth(9)
+      .setAlpha(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
@@ -406,7 +576,16 @@ class GameScene extends Phaser.Scene {
       sensor.isScore = false; sensor.destroy(); this.addScore(1);
     }, null, this);
     this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
-      if (!bonus.active) return; bonus.destroy(); this.activateMultiplier(); updateQuestsFromEvent("bonus", 1);
+      if (!bonus.active) return;
+      bonus.destroy();
+      this.activateMultiplier();
+      updateQuestsFromEvent("bonus", 1, { isHard: this.game._hardMode === true });
+    }, null, this);
+    this.physics.add.overlap(this.player, this.coinItems, (_p, coin) => {
+      if (!coin.active) return;
+      const cx = coin.x, cy = coin.y;
+      coin.destroy();
+      this.collectBorgyCoin(cx, cy);
     }, null, this);
 
     this.time.addEvent({
@@ -425,6 +604,7 @@ class GameScene extends Phaser.Scene {
     this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(this.curSpeed); });
     this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
+    this.coinItems.children.iterate(c => { if (c?.body) c.body.setVelocityX(this.curSpeed); });
   }
 
   _maybeSwitchToHardMusic(){
@@ -447,7 +627,7 @@ class GameScene extends Phaser.Scene {
 
       this._maybeSwitchToHardMusic();
 
-      updateQuestsFromEvent("game", 1);
+      updateQuestsFromEvent("game", 1, { isHard: this.game._hardMode === true });
       try { TG?.expand?.(); } catch {}
     }
     if (this.player.active) this.player.setVelocityY(PROFILE.jump);
@@ -472,13 +652,14 @@ class GameScene extends Phaser.Scene {
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
+    this.coinItems.children.iterate(c => { if (c && c.active && c.x < -KILL_MARGIN) c.destroy(); });
 
-    // Faire suivre le logo-bonus à Borgy quand le bonus est actif
-    if (this.multiplierActive && this.bonusFollower && this.player.active) {
-      const offsetX = -this.player.displayWidth * 0.7;
-      const offsetY = -this.player.displayHeight * 0.1;
-      this.bonusFollower.x = this.player.x + offsetX;
-      this.bonusFollower.y = this.player.y + offsetY;
+    // Aura Borgy suit le joueur
+    if (this.borgyAura && this.borgyAuraVisible) {
+      const targetX = this.player.x - 90;
+      const targetY = this.player.y - 6;
+      this.borgyAura.x = Phaser.Math.Linear(this.borgyAura.x, targetX, 0.25);
+      this.borgyAura.y = Phaser.Math.Linear(this.borgyAura.y, targetY, 0.25);
     }
 
     if (this.DEBUG && this.debugTxt){
@@ -555,35 +736,52 @@ class GameScene extends Phaser.Scene {
     this.sensors.add(sensor);
 
     this.pairsSpawned++;
+    this.pipesSinceCoin++;
 
-    // 🔥 Bonus SwissBorg : toujours dans le gap, un peu random + hitbox agrandie
+    // BONUS SwissBorg : toujours dans le trou
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const SAFE_MARGIN = 30;                           // pour ne pas coller les bords du gap
-      const halfGapSafe = Math.max(10, GAP / 2 - SAFE_MARGIN);
-
-      const minBonusY = gapY - halfGapSafe;
-      const maxBonusY = gapY + halfGapSafe;
-
-      // by toujours dans l’ouverture entre les tuyaux
-      const by = Phaser.Math.Between(minBonusY, maxBonusY);
+      const maxOffset = Math.max(20, GAP * 0.25);
+      let by = gapY + Phaser.Math.Between(-maxOffset, maxOffset);
+      const innerTop = gapY - GAP/2 + 30;
+      const innerBot = gapY + GAP/2 - 30;
+      by = Phaser.Math.Clamp(by, innerTop, innerBot);
 
       const bonus = this.physics.add.image(x + 520, by, "bonus_sb")
-        .setDepth(7)
-        .setScale(0.55)
-        .setImmovable(true);
-
+        .setDepth(7).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
       bonus.body.setVelocityX(this.curSpeed);
 
-      // Hitbox plus large que le visuel pour être plus permissif
-      const HITBOX_FACTOR = 1.6;
-      bonus.body.setSize(
-        bonus.displayWidth * HITBOX_FACTOR,
-        bonus.displayHeight * HITBOX_FACTOR,
-        true
-      );
+      // Hitbox un peu plus large
+      const bw = bonus.displayWidth;
+      const bh = bonus.displayHeight;
+      bonus.body.setSize(bw*1.2, bh*1.2, true);
 
       this.bonuses.add(bonus);
+    }
+
+    // Pièce Borgy : tous les 5–10 couples, toujours dans l'écart
+    if (this.started && this.pipesSinceCoin >= this.nextCoinIn){
+      this.pipesSinceCoin = 0;
+      this.nextCoinIn = Phaser.Math.Between(COIN_MIN_PIPES, COIN_MAX_PIPES);
+
+      const coinOffsetMax = Math.max(20, GAP * 0.2);
+      let cy = gapY + Phaser.Math.Between(-coinOffsetMax, coinOffsetMax);
+      const coinInnerTop = gapY - GAP/2 + 35;
+      const coinInnerBot = gapY + GAP/2 - 35;
+      cy = Phaser.Math.Clamp(cy, coinInnerTop, coinInnerBot);
+
+      const coin = this.physics.add.image(x + 480, cy, "coin_borgy")
+        .setDepth(8)
+        .setScale(0.55)
+        .setImmovable(true);
+      coin.body.setAllowGravity(false);
+      coin.body.setVelocityX(this.curSpeed);
+
+      const cw = coin.displayWidth;
+      const ch = coin.displayHeight;
+      coin.body.setSize(cw*1.2, ch*1.2, true);
+
+      this.coinItems.add(coin);
     }
 
     /* ====== Animation porte (Hard uniquement) ====== */
@@ -628,57 +826,67 @@ class GameScene extends Phaser.Scene {
 
   activateMultiplier(){
     this.multiplierActive = true;
+    this.borgyAuraVisible = true;
+    if (this.borgyAura) this.borgyAura.setAlpha(0.9);
 
-    // Crée ou réinitialise le logo qui suit Borgy
-    if (!this.bonusFollower || !this.bonusFollower.active) {
-      this.bonusFollower = this.add.image(this.player.x, this.player.y, "bonus_sb")
-        .setDepth(11)
-        .setScale(0.35);
-    } else {
-      this.bonusFollower.setVisible(true).setAlpha(1);
+    if (this.borgyAuraFlickerEvt) {
+      this.borgyAuraFlickerEvt.remove(false);
+      this.borgyAuraFlickerEvt = null;
     }
 
-    // Nettoyage d’un éventuel ancien tween de clignotement
-    if (this.bonusBlinkTween) {
-      try { this.bonusBlinkTween.stop(); this.bonusBlinkTween.remove(); } catch {}
-      this.bonusBlinkTween = null;
-    }
-
-    const now = this.time.now;
-
-    // Lance le clignotement sur les 3 dernières secondes
-    const BLINK_TIME = 3000;
-    if (BONUS_DURATION > BLINK_TIME) {
-      this.time.delayedCall(BONUS_DURATION - BLINK_TIME, () => {
-        if (!this.multiplierActive || !this.bonusFollower || !this.bonusFollower.active) return;
-        this.bonusBlinkTween = this.tweens.add({
-          targets: this.bonusFollower,
-          alpha: 0.2,
-          duration: 200,
-          yoyo: true,
-          repeat: -1
-        });
+    const flickerStart = BONUS_DURATION - 3000;
+    this.time.delayedCall(flickerStart, () => {
+      if (!this.borgyAura) return;
+      let on = true;
+      this.borgyAura.setAlpha(0.9);
+      this.borgyAuraFlickerEvt = this.time.addEvent({
+        delay: 150,
+        repeat: Math.floor(3000 / 150),
+        callback: () => {
+          if (!this.borgyAuraVisible) return;
+          on = !on;
+          this.borgyAura.setAlpha(on ? 0.9 : 0.25);
+        }
       });
-    }
+    });
 
-    // Fin de bonus
     this.time.delayedCall(BONUS_DURATION, () => {
       this.multiplierActive = false;
-      if (this.bonusBlinkTween) {
-        try { this.bonusBlinkTween.stop(); this.bonusBlinkTween.remove(); } catch {}
-        this.bonusBlinkTween = null;
+      this.borgyAuraVisible = false;
+      if (this.borgyAura) this.borgyAura.setAlpha(0);
+      if (this.borgyAuraFlickerEvt) {
+        this.borgyAuraFlickerEvt.remove(false);
+        this.borgyAuraFlickerEvt = null;
       }
-      if (this.bonusFollower) {
-        this.bonusFollower.destroy();
-        this.bonusFollower = null;
-      }
+    });
+  }
+
+  collectBorgyCoin(x, y){
+    const total = addBorgyCoins(1);
+    if (this.coinsText) this.coinsText.setText(`🪙 ${total}`);
+
+    const t = this.add.text(x, y - 40, "+1", {
+      fontFamily:"monospace",
+      fontSize:32,
+      color:"#ffeb3b",
+      stroke:"#000",
+      strokeThickness:6
+    }).setDepth(30).setOrigin(0.5);
+
+    this.tweens.add({
+      targets: t,
+      y: y - 100,
+      alpha: 0,
+      duration: 700,
+      ease: "Cubic.out",
+      onComplete: () => t.destroy()
     });
   }
 
   addScore(n){
     this.score += this.multiplierActive ? n*2 : n;
     this.scoreText.setText("Score: " + this.score);
-    updateQuestsFromEvent("score", this.score);
+    updateQuestsFromEvent("score", this.score, { isHard: this.game._hardMode === true });
     if (!this.game._muted && this.sfxScore) this.sfxScore.play();
   }
 
@@ -697,20 +905,10 @@ class GameScene extends Phaser.Scene {
       this.sfxGameOver.play();
     }
 
-    // Stop / nettoie le bonus visuel
-    this.multiplierActive = false;
-    if (this.bonusBlinkTween) {
-      try { this.bonusBlinkTween.stop(); this.bonusBlinkTween.remove(); } catch {}
-      this.bonusBlinkTween = null;
-    }
-    if (this.bonusFollower) {
-      this.bonusFollower.destroy();
-      this.bonusFollower = null;
-    }
-
     this.pipes.clear(true, true);
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
+    this.coinItems.clear(true, true);
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
