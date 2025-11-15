@@ -79,7 +79,7 @@ function ensureBgm(scene, opts = {}) {
 
 /* ======= Difficulté ======= */
 const DIFF = {
-  stepMs: 13000,
+  stepMs: 14000,
   speedDelta: -20,
   delayDelta: -150,
   minSpeed: -380,
@@ -475,7 +475,7 @@ class GameScene extends Phaser.Scene {
 
     // Faire suivre le logo-bonus à Borgy quand le bonus est actif
     if (this.multiplierActive && this.bonusFollower && this.player.active) {
-      const offsetX = -this.player.displayWidth * 0.4;
+      const offsetX = -this.player.displayWidth * 0.7;
       const offsetY = -this.player.displayHeight * 0.1;
       this.bonusFollower.x = this.player.x + offsetX;
       this.bonusFollower.y = this.player.y + offsetY;
