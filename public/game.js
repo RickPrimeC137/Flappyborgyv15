@@ -774,7 +774,7 @@ class GameScene extends Phaser.Scene {
         .setDepth(7).setScale(0.55).setImmovable(true);
       bonus.body.setAllowGravity(false);
       bonus.body.setVelocityX(this.curSpeed);
-      bonus.body.setSize(bonus.displayWidth*1.6, bonus.displayHeight*1.6, true);
+      bonus.body.setSize(bonus.displayWidth*2.0, bonus.displayHeight*2.0, true);
       this.bonuses.add(bonus);
     }
 
@@ -783,7 +783,7 @@ class GameScene extends Phaser.Scene {
       const coinX = x;
       const coinY = gapCenterY;
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
-      this.nextCoinAt += Phaser.Math.Between(5, 10);
+      this.nextCoinAt += Phaser.Math.Between(3, 7);
     }
 
     if (this.game._hardMode === true) {
@@ -838,8 +838,8 @@ class GameScene extends Phaser.Scene {
     coin.body.setAllowGravity(false);
     coin.body.setVelocityX(vx);
 
-    const bw = coin.displayWidth * 1.8;
-    const bh = coin.displayHeight * 1.8;
+    const bw = coin.displayWidth * 2.2;
+    const bh = coin.displayHeight * 2.2;
     coin.body.setSize(bw, bh);
     coin.body.setOffset(
       (coin.displayWidth  - bw) / 2,
