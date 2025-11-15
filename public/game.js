@@ -41,6 +41,7 @@ const BONUS_DURATION = 15000;
 
 // Borgy coins
 const BORGY_COINS_KEY = "flappy_borgy_coins_v1";
+const BEST_SCORE_KEY  = "flappy_borgy_best_score_v1";
 
 /* ===== Anim “portes” (Hard) ===== */
 const HARD_DOOR_AMPLITUDE_PX = 70;      // déplacement max de CHAQUE bord
@@ -120,14 +121,14 @@ async function fetchLeaderboard(limit = 10, isHard = false) {
 }
 
 /* ================== Quêtes & Coins ================== */
-const QUEST_STORAGE_KEY    = "flappy_borgy_quests_v1";
-const BEST_SCORE_KEY       = "flappy_borgy_best_score_v1";
+const QUEST_STORAGE_KEY = "flappy_borgy_quests_v1";
 
-function todayStr(){
-  try {
-    return new Date().toISOString().slice(0, 10); // "YYYY-MM-DD"
-  } catch {
-    return "";
+function getTodayKey(){
+  try{
+    const d = new Date();
+    return d.toISOString().slice(0,10); // YYYY-MM-DD
+  }catch(e){
+    return null;
   }
 }
 
@@ -142,93 +143,6 @@ function saveBestScore(n){
   try{ localStorage.setItem(BEST_SCORE_KEY, String(Math.max(0, n|0))); }catch(e){}
 }
 
-/**
- * Génère les quêtes du jour en fonction du meilleur score local
- * + une quête spéciale Hard si le best score est élevé.
- */
-function generateDailyQuests(){
-  const today = todayStr();
-  const best = loadBestScore();
-
-  const base = best > 0 ? best : 80;
-
-  const easy   = Math.max(10, Math.round(base * 0.30));
-  const medium = Math.max(easy + 10, Math.round(base * 0.60));
-  const hard   = Math.max(medium + 20, Math.round(base * 0.90));
-
-  const quests = [
-    {
-      id: "daily_score_easy",
-      title: `Atteins ${easy} points`,
-      type: "score",
-      target: easy,
-      progress: 0,
-      done: false,
-      reward: "+25 BorgyCoins",
-      coins: 25              // base reward (sera x2 en Hard)
-    },
-    {
-      id: "daily_score_mid",
-      title: `Atteins ${medium} points`,
-      type: "score",
-      target: medium,
-      progress: 0,
-      done: false,
-      reward: "+50 BorgyCoins",
-      coins: 50
-    },
-    {
-      id: "daily_games",
-      title: "Joue 5 parties aujourd'hui",
-      type: "game",
-      target: 5,
-      progress: 0,
-      done: false,
-      reward: "+30 BorgyCoins",
-      coins: 30
-    }
-  ];
-
-  // Si le joueur est chaud (best >= 200), on ajoute une quête Hard-only
-  if (best >= 200){
-    quests.push({
-      id: "daily_hard_score",
-      title: `Atteins ${hard} points en mode Hard`,
-      type: "score",
-      target: hard,
-      requireHard: true,
-      progress: 0,
-      done: false,
-      reward: "+80 BorgyCoins (Hard)",
-      coins: 80
-    });
-  }
-
-  return { date: today, quests };
-}
-
-function loadQuests(){
-  const today = todayStr();
-  try{
-    const raw = localStorage.getItem(QUEST_STORAGE_KEY);
-    if (raw){
-      const data = JSON.parse(raw);
-      if (data && data.date === today && Array.isArray(data.quests)) {
-        return data;
-      }
-    }
-  }catch(e){}
-
-  const fresh = generateDailyQuests();
-  saveQuests(fresh);
-  return fresh;
-}
-
-function saveQuests(data){
-  try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
-}
-
-// (on garde le même BORGY_COINS_KEY défini plus haut)
 function loadBorgyCoins(){
   try{
     const raw = localStorage.getItem(BORGY_COINS_KEY);
@@ -240,64 +154,125 @@ function saveBorgyCoins(n){
   try{ localStorage.setItem(BORGY_COINS_KEY, String(Math.max(0, n|0))); }catch(e){}
 }
 
+// Génère les quêtes du jour en fonction du meilleur score
+function generateDailyQuests(bestScore){
+  const base = Math.max(20, bestScore || 0);
+
+  const q1Target = Math.max(20, Math.round(base * 0.4) || 30);
+  const q2Target = Math.max(q1Target + 30, Math.round(base * 0.8) || 80);
+  const bonusTarget = 1;
+
+  const today = getTodayKey();
+
+  return {
+    date: today,
+    quests: [
+      {
+        id:"score_easy",
+        title:`Atteins ${q1Target} points`,
+        type:"score",
+        target:q1Target,
+        progress:0,
+        done:false,
+        reward:`+${q1Target} BorgyCoins`,
+        coins:q1Target
+      },
+      {
+        id:"score_hard",
+        title:`Atteins ${q2Target} points`,
+        type:"score",
+        target:q2Target,
+        progress:0,
+        done:false,
+        reward:`+${q2Target} BorgyCoins`,
+        coins:q2Target
+      },
+      {
+        id:"bonus1",
+        title:`Ramasse ${bonusTarget} bonus`,
+        type:"bonus",
+        target:bonusTarget,
+        progress:0,
+        done:false,
+        reward:"+25 BorgyCoins",
+        coins:25
+      }
+    ]
+  };
+}
+
+function saveQuests(data){
+  try{ localStorage.setItem(QUEST_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+}
+
+// Quêtes évolutives : changent chaque jour selon le score du joueur
+function loadQuests(){
+  const today = getTodayKey();
+  let data = null;
+
+  try{
+    const raw = localStorage.getItem(QUEST_STORAGE_KEY);
+    if (raw) data = JSON.parse(raw);
+  }catch(e){
+    data = null;
+  }
+
+  if (!data || data.date !== today){
+    const best = loadBestScore();
+    data = generateDailyQuests(best);
+    saveQuests(data);
+  }
+  return data;
+}
+
 /**
- * Met à jour les quêtes en fonction d'un évènement de jeu
- * evt : "score" | "bonus" | "game"
- * isHardMode : true si la partie est en mode Hard (=> récompenses doublées)
+ * Met à jour les quêtes suite à un évènement:
+ *  - evt: "score" | "bonus" | "game"
+ *  - value: score actuel / +1 bonus / +1 game
+ *  - isHardMode: si true, les récompenses en BorgyCoins sont doublées
  */
 function updateQuestsFromEvent(evt, value, isHardMode = false){
   const data = loadQuests();
   let changed = false;
-  let coinsToAdd = 0;
+  let totalCoins = loadBorgyCoins();
 
   for (const q of data.quests){
     if (q.done) continue;
 
-    const requireHard = q.requireHard === true;
-
     if (q.type === "score" && evt === "score") {
-      if (requireHard && !isHardMode) continue;
       const v = Math.max(q.progress, value);
       if (v !== q.progress){
         q.progress = v;
-        if (q.progress >= q.target){
-          q.done = true;
-          const baseReward = typeof q.coins === "number" ? q.coins : 0;
-          coinsToAdd += baseReward * (isHardMode ? 2 : 1);
-        }
+        if (q.progress >= q.target) q.done = true;
         changed = true;
       }
     }
 
     if (q.type === "bonus" && evt === "bonus") {
-      if (requireHard && !isHardMode) continue;
-      q.progress += 1;
-      if (q.progress >= q.target){
-        q.done = true;
-        const baseReward = typeof q.coins === "number" ? q.coins : 0;
-        coinsToAdd += baseReward * (isHardMode ? 2 : 1);
-      }
+      q.progress += value || 1;
+      if (q.progress >= q.target) q.done = true;
       changed = true;
     }
 
     if (q.type === "game"  && evt === "game")  {
-      if (requireHard && !isHardMode) continue;
-      q.progress += 1;
-      if (q.progress >= q.target){
-        q.done = true;
-        const baseReward = typeof q.coins === "number" ? q.coins : 0;
-        coinsToAdd += baseReward * (isHardMode ? 2 : 1);
-      }
+      q.progress += value || 1;
+      if (q.progress >= q.target) q.done = true;
+      changed = true;
+    }
+
+    // Récompense en BorgyCoins (une seule fois)
+    if (q.done && !q._rewardGiven && typeof q.coins === "number"){
+      let reward = q.coins;
+      if (isHardMode) reward *= 2; // double en mode Hard
+      totalCoins += reward;
+      q._rewardGiven = true;
       changed = true;
     }
   }
 
   if (changed){
     saveQuests(data);
-    if (coinsToAdd > 0){
-      const cur = loadBorgyCoins();
-      saveBorgyCoins(cur + coinsToAdd);
-    }
+    saveBorgyCoins(totalCoins);
   }
   return changed;
 }
@@ -612,16 +587,22 @@ class GameScene extends Phaser.Scene {
     }
 
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
+
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
       sensor.isScore = false; sensor.destroy(); this.addScore(1);
     }, null, this);
-    this.physics.add.overlap(this.player, this.bonuses, (_p, bonus) => {
-      if (!bonus.active) return;
-      bonus.destroy();
-      this.activateMultiplier();
-      updateQuestsFromEvent("bonus", 1, this.game._hardMode === true);
-    }, null, this);
+
+    // Bonus SwissBorg
+    this.physics.add.overlap(
+      this.player,
+      this.bonuses,
+      this.handleBonusOverlap,
+      null,
+      this
+    );
+
+    // Borgy Coins
     this.physics.add.overlap(
       this.player,
       this.borgyCoins,
@@ -783,16 +764,27 @@ class GameScene extends Phaser.Scene {
 
     this.pairsSpawned++;
 
-    // BONUS SWISSBORG
+    // BONUS SWISSBORG — toujours au centre du gap, hitbox large, récupérable facilement
     if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const by = Phaser.Math.Clamp(gapY + Phaser.Math.Between(-120,120),
-        H*PLAYFIELD_TOP_PCT+40, H*PLAYFIELD_BOT_PCT-40);
+      const by = gapY;
+
       const bonus = this.physics.add.image(x + 420, by, "bonus_sb")
-        .setDepth(7).setScale(0.55).setImmovable(true);
+        .setDepth(7)
+        .setScale(0.55)
+        .setImmovable(true);
+
       bonus.body.setAllowGravity(false);
       bonus.body.setVelocityX(this.curSpeed);
-      // hitbox un peu plus large pour être plus facile à attraper
-      bonus.body.setSize(bonus.displayWidth*1.4, bonus.displayHeight*1.4, true);
+
+      // Hitbox bien large et centrée
+      const bw = bonus.displayWidth * 1.6;
+      const bh = bonus.displayHeight * 1.6;
+      bonus.body.setSize(bw, bh);
+      bonus.body.setOffset(
+        (bonus.displayWidth  - bw) / 2,
+        (bonus.displayHeight - bh) / 2
+      );
+
       this.bonuses.add(bonus);
     }
 
@@ -844,6 +836,16 @@ class GameScene extends Phaser.Scene {
     }
   }
 
+  // ====== gestion du contact Borgy / BONUS SwissBorg ======
+  handleBonusOverlap(player, bonus){
+    if (!bonus || !bonus.active) return;
+
+    bonus.disableBody(true, true); // désactive la hitbox et cache le sprite
+
+    this.activateMultiplier();
+    updateQuestsFromEvent("bonus", 1, this.game._hardMode === true);
+  }
+
   // ====== gestion du contact Borgy / pièce ======
   handleBorgyCoinOverlap(player, coin){
     if (!coin || !coin.active) return;
@@ -878,7 +880,7 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({
       targets: coin,
       scaleX: 0.02,
-      duration: 600,
+      duration: 600,    // plus grand = plus lent
       yoyo: true,
       repeat: -1,
       ease: "Sine.inOut"
@@ -937,6 +939,11 @@ class GameScene extends Phaser.Scene {
 
     this.score += value;
     this.scoreText.setText("Score: " + this.score);
+
+    // met à jour le meilleur score (pour les quêtes du lendemain)
+    const prevBest = loadBestScore();
+    if (this.score > prevBest) saveBestScore(this.score);
+
     updateQuestsFromEvent("score", this.score, isHard);
     if (!this.game._muted && this.sfxScore) this.sfxScore.play();
   }
@@ -944,12 +951,6 @@ class GameScene extends Phaser.Scene {
   gameOver(){
     if (this.isOver) return;
     this.isOver = true; this.started = false;
-
-    // Met à jour le meilleur score local (sert pour les quêtes du jour)
-    const prevBest = loadBestScore();
-    if (this.score > prevBest){
-      saveBestScore(this.score);
-    }
 
     // 🔧 Empêche la zone d'input du jeu d'intercepter les clics sur les boutons d'overlay
     try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
