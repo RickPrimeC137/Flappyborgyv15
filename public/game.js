@@ -128,10 +128,9 @@ function loadQuests(){
     if (raw) return JSON.parse(raw);
   }catch(e){}
   const base = { quests: [
-    { id:"score50",   title:"Atteins 50 points",    type:"score", target:50,  progress:0, done:false, reward:"+50 BorgyCoins",  coins:50 },
-    { id:"score150",  title:"Atteins 150 points",   type:"score", target:150, progress:0, done:false, reward:"+150 BorgyCoins", coins:150 },
-    { id:"bonus1",    title:"Ramasse 1 bonus",      type:"bonus", target:1,   progress:0, done:false, reward:"+25 BorgyCoins",  coins:25 },
-    { id:"games3",    title:"Joue 3 parties",       type:"game",  target:3,   progress:0, done:false, reward:"+30 BorgyCoins",  coins:30 },
+    { id:"score50",  title:"Atteins 50 points",  type:"score", target:50,  progress:0, done:false, reward:"+50 BorgyCoins",  coins:50 },
+    { id:"score150", title:"Atteins 150 points", type:"score", target:150, progress:0, done:false, reward:"+150 BorgyCoins", coins:150 },
+    { id:"bonus1",   title:"Ramasse 1 bonus",    type:"bonus", target:1,   progress:0, done:false, reward:"+25 BorgyCoins",  coins:25 },
   ]};
   saveQuests(base);
   return base;
@@ -255,7 +254,6 @@ class PreloadScene extends Phaser.Scene {
 /* ================== MENU ================== */
 class MenuScene extends Phaser.Scene {
   constructor(){ super("menu"); }
-
   create(){
     const W = this.scale.width, H = this.scale.height;
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
@@ -273,14 +271,6 @@ class MenuScene extends Phaser.Scene {
     });
 
     this.add.text(W/2, H*0.13, "FlappyBorgy", { fontFamily:"Georgia,serif", fontSize:64, color:"#0b4a44" }).setOrigin(0.5);
-
-    // Affichage des Borgy Coins dans le menu
-    const menuCoins = loadBorgyCoins();
-    this.add.text(W/2, H*0.19, `Borgy Coins : ${menuCoins}`, {
-      fontFamily:"monospace", fontSize:28, color:"#0b4a44",
-      backgroundColor:"rgba(255,255,255,0.7)",
-      padding:{ left:12, right:12, top:6, bottom:6 }
-    }).setOrigin(0.5);
 
     // Boutons
     this.makeBtn(W/2, H*0.27, "Jouer",       () => this.scene.start("game"));
@@ -373,20 +363,11 @@ class MenuScene extends Phaser.Scene {
   }
 
   showQuests(){
-    const data = loadQuests();
-    // 👉 Applique les récompenses de quêtes (une seule fois grâce à _rewardGiven)
-    const totalCoins = applyQuestCoins(data);
-
-    const W = this.scale.width, H = this.scale.height; const depth = 700;
+    const data = loadQuests(); const W = this.scale.width, H = this.scale.height; const depth = 700;
     const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
-    const title = this.add.text(W/2, H*0.24, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
       .setOrigin(0.5).setDepth(depth+1);
-
-    this.add.text(W*0.5, H*0.30, `Borgy Coins : ${totalCoins}`, {
-      fontFamily:"monospace", fontSize:26, color:"#cffff1", align:"center"
-    }).setOrigin(0.5).setDepth(depth+1);
-
-    const startY = H*0.35, lineH = 72;
+    const startY = H*0.33, lineH = 72;
     data.quests.forEach((q, i) => {
       const y = startY + i*lineH; const pct = Math.min(1, q.progress / q.target);
       this.add.text(W*0.14, y, q.title, { fontFamily:"monospace", fontSize:30, color:q.done ? "#b3ffcf" : "#fff" })
@@ -566,7 +547,6 @@ class GameScene extends Phaser.Scene {
 
       this._maybeSwitchToHardMusic();
 
-      // partie jouée => quêtes type "game"
       updateQuestsFromEvent("game", 1);
       try { TG?.expand?.(); } catch {}
     }
@@ -587,7 +567,7 @@ class GameScene extends Phaser.Scene {
       this.nextSpawnAt = this.time.now + this.curDelay;
     }
 
-    // plus de _forceVelocities() ici → moins de boulot par frame
+    if (this.started) this._forceVelocities();
 
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
@@ -823,16 +803,6 @@ class GameScene extends Phaser.Scene {
     if (this.isOver) return;
     this.isOver = true; this.started = false;
 
-    // 👉 Met à jour quêtes et crédite les récompenses de coins
-    try {
-      const qData = loadQuests();
-      const totalCoins = applyQuestCoins(qData);
-      this.borgyCoinCount = totalCoins;
-      if (this.borgyCoinText){
-        this.borgyCoinText.setText(`🪙 ${totalCoins}`);
-      }
-    } catch(e){ console.warn("quest apply error", e); }
-
     // 🔧 Empêche la zone d'input du jeu d'intercepter les clics sur les boutons d'overlay
     try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
     try { this.input.keyboard.removeAllListeners(); } catch {}
@@ -917,3 +887,4 @@ window.addEventListener("load", () => {
     fps: { target: 60, min: 30, forceSetTimeOut: true }
   });
 });
+
