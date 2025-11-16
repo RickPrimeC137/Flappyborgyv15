@@ -33,7 +33,7 @@ const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
 const KILL_MARGIN   = 260;
 
-const ENABLE_KILL_BANDS = true;
+const ENABLE_KILL_BANDS = false; // on n'utilise plus les bandes invisibles
 
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 20;
@@ -379,6 +379,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image(BG_KEY,      "bg_mountains.jpg");
     this.load.image(BG_HARD_KEY, "bg_volcano.png");
 
+    // Nuages top/bottom
+    this.load.image("cloud_top",    "cloud_top.png");
+    this.load.image("cloud_bottom", "cloud_bottom.png");
+
     // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
@@ -718,6 +722,8 @@ class GameScene extends Phaser.Scene {
     this.pipes = null; this.sensors = null;
     this.bonuses = null; this.borgyCoins = null;
     this.bots = null;
+    this.cloudTop = null;
+    this.cloudBottom = null;
     this.nextSpawnAt = Infinity; this.lastSpawnMs = -1;
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
@@ -780,20 +786,33 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(pw*0.50, ph*0.50, true).setOffset(pw*0.20, ph*0.22);
     this.player.setGravityY(0);
 
+    // SFX
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
     this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.8 });
 
-    if (ENABLE_KILL_BANDS){
-      const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
-      const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
-      this.killTop = this.add.rectangle(W/2, topBand/2, W, topBand, 0, 0).setDepth(0);
-      this.physics.add.existing(this.killTop, true);
-      this.killBottom = this.add.rectangle(W/2, (H + botBand)/2, W, H - botBand, 0, 0).setDepth(0);
-      this.physics.add.existing(this.killBottom, true);
-      this.physics.add.overlap(this.player, this.killTop,    () => this.gameOver(), null, this);
-      this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
-    }
+    // Nuages de bordure (10% de la hauteur en haut et en bas)
+    const cloudBandH = H * 0.10;
+
+    this.cloudTop = this.physics.add.image(W/2, cloudBandH / 2, "cloud_top")
+      .setOrigin(0.5, 0.5)
+      .setDepth(2);
+    const scaleTop = W / this.cloudTop.width;
+    this.cloudTop.setScale(scaleTop, cloudBandH / this.cloudTop.height);
+    this.cloudTop.setImmovable(true);
+    this.cloudTop.body.setAllowGravity(false);
+
+    this.cloudBottom = this.physics.add.image(W/2, H - cloudBandH / 2, "cloud_bottom")
+      .setOrigin(0.5, 0.5)
+      .setDepth(2);
+    const scaleBottom = W / this.cloudBottom.width;
+    this.cloudBottom.setScale(scaleBottom, cloudBandH / this.cloudBottom.height);
+    this.cloudBottom.setImmovable(true);
+    this.cloudBottom.body.setAllowGravity(false);
+
+    // Collisions / overlaps
+    this.physics.add.overlap(this.player, this.cloudTop,    () => this.gameOver(), null, this);
+    this.physics.add.overlap(this.player, this.cloudBottom, () => this.gameOver(), null, this);
 
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
@@ -1132,8 +1151,7 @@ class GameScene extends Phaser.Scene {
       this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
     }
 
-    // son de prise de pièce
-    if (!this.game._muted && this.sfxCoin){
+    if (!this.game._muted && this.sfxCoin) {
       this.sfxCoin.play();
     }
 
