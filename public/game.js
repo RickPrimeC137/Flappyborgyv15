@@ -1102,11 +1102,23 @@ class GameScene extends Phaser.Scene {
   coin.body.setAllowGravity(false);
   coin.body.setVelocityX(vx);
 
-  // --- NOUVELLE HITBOX CARRÉE, COMPATIBLE AVEC LE JOUEUR ---
-  const baseSize = Math.min(this.player.body.width, this.player.body.height);
-  const size = baseSize * 0.9; // 90% de la hitbox du joueur, ajuste si besoin
-  coin.body.setSize(size, size, true); // carré, centré sur le sprite
-  // plus besoin de coin.body.setOffset(...)
+  spawnBorgyCoin(x, y, vx){
+  const coin = this.physics.add.image(x, y, "borgy_coin")
+    .setDepth(8)
+    .setScale(0.10)
+    .setImmovable(true);
+
+  coin.body.setAllowGravity(false);
+  coin.body.setVelocityX(vx);
+
+  // --- HITBOX CARRÉE, BIEN LARGE ET CENTRÉE SUR LA PIÈCE ---
+  // on part de la taille affichée de la pièce
+  const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0; // 3.0 = hitbox généreuse, ajuste si tu veux
+  coin.body.setSize(side, side);
+  coin.body.setOffset(
+    coin.displayWidth  / 2 - side / 2,
+    coin.displayHeight / 2 - side / 2
+  );
 
   this.borgyCoins.add(coin);
 
