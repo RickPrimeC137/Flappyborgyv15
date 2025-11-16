@@ -735,7 +735,7 @@ class GameScene extends Phaser.Scene {
 
     const isHard = this.game._hardMode === true;
     const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
-       const hasKey = this.textures.exists(keyWanted);
+    const hasKey = this.textures.exists(keyWanted);
     const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
@@ -1093,44 +1093,35 @@ class GameScene extends Phaser.Scene {
     this.onCollectBorgyCoin(cx, cy);
   }
 
+  // ====== Spawn d’une pièce avec grosse hitbox carrée ======
   spawnBorgyCoin(x, y, vx){
-  const coin = this.physics.add.image(x, y, "borgy_coin")
-    .setDepth(8)
-    .setScale(0.09)
-    .setImmovable(true);
+    const coin = this.physics.add.image(x, y, "borgy_coin")
+      .setDepth(8)
+      .setScale(0.10)
+      .setImmovable(true);
 
-  coin.body.setAllowGravity(false);
-  coin.body.setVelocityX(vx);
+    coin.body.setAllowGravity(false);
+    coin.body.setVelocityX(vx);
 
-  spawnBorgyCoin(x, y, vx){
-  const coin = this.physics.add.image(x, y, "borgy_coin")
-    .setDepth(8)
-    .setScale(0.10)
-    .setImmovable(true);
+    // HITBOX CARRÉE, LARGE, CENTRÉE SUR LA PIÈCE
+    const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0; // 3x plus large que le sprite
+    coin.body.setSize(side, side);
+    coin.body.setOffset(
+      coin.displayWidth  / 2 - side / 2,
+      coin.displayHeight / 2 - side / 2
+    );
 
-  coin.body.setAllowGravity(false);
-  coin.body.setVelocityX(vx);
+    this.borgyCoins.add(coin);
 
-  // --- HITBOX CARRÉE, BIEN LARGE ET CENTRÉE SUR LA PIÈCE ---
-  // on part de la taille affichée de la pièce
-  const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0; // 3.0 = hitbox généreuse, ajuste si tu veux
-  coin.body.setSize(side, side);
-  coin.body.setOffset(
-    coin.displayWidth  / 2 - side / 2,
-    coin.displayHeight / 2 - side / 2
-  );
-
-  this.borgyCoins.add(coin);
-
-  this.tweens.add({
-    targets: coin,
-    scaleX: 0.02,
-    duration: 600,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.inOut"
-  });
-}
+    this.tweens.add({
+      targets: coin,
+      scaleX: 0.02,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.inOut"
+    });
+  }
 
   onCollectBorgyCoin(x, y){
     this.borgyCoinCount += 1;
