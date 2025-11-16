@@ -753,27 +753,36 @@ class GameScene extends Phaser.Scene {
     this.cameras.main.roundPixels = true;
 
     // ===== Nuages haut / bas =====
-    const topCloudHeight    = H * CLOUD_TOP_HEIGHT_PCT;
-    const bottomCloudHeight = H * CLOUD_BOTTOM_HEIGHT_PCT;
+const topCloudHeight    = H * CLOUD_TOP_HEIGHT_PCT;
+const bottomCloudHeight = H * CLOUD_BOTTOM_HEIGHT_PCT;
 
-    // Nuage du haut (collé au bord supérieur)
-    this.topCloud = this.add.image(
-      W / 2,
-      topCloudHeight / 2,
-      "cloud_top"
-    ).setDepth(5);
+// Hauteur VISUELLE un peu plus grande pour que les sprites débordent
+const topCloudVisualHeight    = topCloudHeight * 1.6;
+const bottomCloudVisualHeight = bottomCloudHeight * 1.6;
 
-    const topScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.topCloud.width;
-    const topScaleY = topCloudHeight / this.topCloud.height;
-    this.topCloud.setScale(topScaleX, topScaleY);
+// --- Nuage du haut : déborde au-dessus de l'écran ---
+const topCloudY = topCloudHeight - topCloudVisualHeight / 2;
+this.topCloud = this.add.image(
+  W / 2,
+  topCloudY,
+  "cloud_top"
+).setDepth(5);
 
-    // Nuage du bas (bande qui remplit tout le bas de l'écran)
-    const bottomCenterY = H - bottomCloudHeight / 2;
-    this.bottomCloud = this.add.image(
-      W / 2,
-      bottomCenterY,
-      "cloud_bottom"
-    ).setDepth(5);
+const topScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.topCloud.width;
+const topScaleY = topCloudVisualHeight / this.topCloud.height;
+this.topCloud.setScale(topScaleX, topScaleY);
+
+// --- Nuage du bas : déborde sous l'écran ---
+const bottomCloudY = H - bottomCloudHeight + bottomCloudVisualHeight / 2;
+this.bottomCloud = this.add.image(
+  W / 2,
+  bottomCloudY,
+  "cloud_bottom"
+).setDepth(5);
+
+const bottomScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.bottomCloud.width;
+const bottomScaleY = bottomCloudVisualHeight / this.bottomCloud.height;
+this.bottomCloud.setScale(bottomScaleX, bottomScaleY);
 
     const bottomScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.bottomCloud.width;
     const bottomScaleY = bottomCloudHeight / this.bottomCloud.height;
