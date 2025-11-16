@@ -15,7 +15,7 @@ const PROFILE = {
   jump: -390,
   pipeSpeed: -220,
   gap: 260,
-  spawnDelay: 2400
+  spawnDelay: 2450
 };
 
 const PAD = 2;
@@ -90,7 +90,7 @@ const DIFF = {
   delayDelta: -150,
   minSpeed: -380,
   minDelay: 1250,
-  cooldownMs: 250
+  cooldownMs: 260
 };
 const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 
@@ -980,7 +980,7 @@ class GameScene extends Phaser.Scene {
       const coinX = x;
       const coinY = gapCenterY;
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
-      this.nextCoinAt += Phaser.Math.Between(3, 7);
+      this.nextCoinAt += Phaser.Math.Between(3, 6);
     }
 
     // Robot SwissBorg décoratif : 1 apparition toutes les 15 paires (haut ou bas)
@@ -1094,32 +1094,31 @@ class GameScene extends Phaser.Scene {
   }
 
   spawnBorgyCoin(x, y, vx){
-    const coin = this.physics.add.image(x, y, "borgy_coin")
-      .setDepth(8)
-      .setScale(0.10)
-      .setImmovable(true);
-    coin.body.setAllowGravity(false);
-    coin.body.setVelocityX(vx);
+  const coin = this.physics.add.image(x, y, "borgy_coin")
+    .setDepth(8)
+    .setScale(0.09)
+    .setImmovable(true);
 
-    const bw = coin.displayWidth * 3.2;
-    const bh = coin.displayHeight * 3.2;
-    coin.body.setSize(bw, bh);
-    coin.body.setOffset(
-      (coin.displayWidth  - bw) / 3,
-      (coin.displayHeight - bh) / 3
-    );
+  coin.body.setAllowGravity(false);
+  coin.body.setVelocityX(vx);
 
-    this.borgyCoins.add(coin);
+  // --- NOUVELLE HITBOX CARRÉE, COMPATIBLE AVEC LE JOUEUR ---
+  const baseSize = Math.min(this.player.body.width, this.player.body.height);
+  const size = baseSize * 0.6; // 60% de la hitbox du joueur, ajuste si besoin
+  coin.body.setSize(size, size, true); // carré, centré sur le sprite
+  // plus besoin de coin.body.setOffset(...)
 
-    this.tweens.add({
-      targets: coin,
-      scaleX: 0.02,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.inOut"
-    });
-  }
+  this.borgyCoins.add(coin);
+
+  this.tweens.add({
+    targets: coin,
+    scaleX: 0.02,
+    duration: 600,
+    yoyo: true,
+    repeat: -1,
+    ease: "Sine.inOut"
+  });
+}
 
   onCollectBorgyCoin(x, y){
     this.borgyCoinCount += 1;
