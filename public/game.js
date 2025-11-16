@@ -907,139 +907,141 @@ class GameScene extends Phaser.Scene {
     img.body.setOffset((displayW - displayW*PIPE_BODY_W)/2, isTop ? img.displayHeight - img.body.height : 0);
   }
 
-  // ========= Génération d’une paire =========
-  spawnPair(silentFirst){
-    const W = this.scale.width, H = this.scale.height;
+ // ========= Génération d’une paire =========
+spawnPair(silentFirst){
+  const W = this.scale.width, H = this.scale.height;
 
-    const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
-    const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
-    const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
+  const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
+  const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
+  const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
 
-    const playable = Math.max(40, BOT_BAND - TOP_BAND);
-    const MIN_GAP = 90;
-    const GAP = Math.round(Phaser.Math.Clamp(this.curGap ?? PROFILE.gap, MIN_GAP, playable - 40));
+  const playable = Math.max(40, BOT_BAND - TOP_BAND);
+  const MIN_GAP = 90;
+  const GAP = Math.round(Phaser.Math.Clamp(this.curGap ?? PROFILE.gap, MIN_GAP, playable - 40));
 
-    let minY = TOP_BAND + Math.floor(GAP/2);
-    let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
-    if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
-    const gapY = Phaser.Math.Between(minY, maxY);
+  let minY = TOP_BAND + Math.floor(GAP/2);
+  let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
+  if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
+  const gapY = Phaser.Math.Between(minY, maxY);
 
-    const x  = W + SPAWN_X_OFFSET;
-    const vx = this.started ? this.curSpeed : 0;
+  const x  = W + SPAWN_X_OFFSET;
+  const vx = this.started ? this.curSpeed : 0;
 
-    const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
-    const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
+  const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
+  const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
 
-    const scaleXt = PIPE_W_DISPLAY / topImg.width;
-    const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
+  const scaleXt = PIPE_W_DISPLAY / topImg.width;
+  const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
 
-    let yTopRim0    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
-    let yBottomRim0 = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
+  let yTopRim0    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
+  let yBottomRim0 = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
-    this._resizePipeToRim(topImg, true,  yTopRim0,    scaleXt);
-    this._resizePipeToRim(bottomImg, false, yBottomRim0, scaleXb);
+  this._resizePipeToRim(topImg, true,  yTopRim0,    scaleXt);
+  this._resizePipeToRim(bottomImg, false, yBottomRim0, scaleXb);
 
-    topImg.body.setVelocityX(vx);
-    bottomImg.body.setVelocityX(vx);
+  topImg.body.setVelocityX(vx);
+  bottomImg.body.setVelocityX(vx);
 
-    if (this.game._hardMode === true) { topImg.setTint(0x6d1f12); bottomImg.setTint(0x6d1f12); }
-    else { topImg.clearTint(); bottomImg.clearTint(); }
+  if (this.game._hardMode === true) { topImg.setTint(0x6d1f12); bottomImg.setTint(0x6d1f12); }
+  else { topImg.clearTint(); bottomImg.clearTint(); }
 
-    this.pipes.add(topImg);
-    this.pipes.add(bottomImg);
+  this.pipes.add(topImg);
+  this.pipes.add(bottomImg);
 
-    // centre réel du gap après redimensionnement
-    const gapCenterY = (topImg.y + bottomImg.y) / 2;
+  // centre réel du gap après redimensionnement
+  const gapCenterY = (topImg.y + bottomImg.y) / 2;
 
-    const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
-    const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
-    sensor.setVisible(false);
-    this.physics.add.existing(sensor, false);
-    sensor.body.setAllowGravity(false);
-    sensor.body.setImmovable(true);
-    sensor.body.setVelocityX(vx);
-    sensor.isScore = !silentFirst;
-    this.sensors.add(sensor);
+  const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
+  const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
+  sensor.setVisible(false);
+  this.physics.add.existing(sensor, false);
+  sensor.body.setAllowGravity(false);
+  sensor.body.setImmovable(true);
+  sensor.body.setVelocityX(vx);
+  sensor.isScore = !silentFirst;
+  this.sensors.add(sensor);
 
-    this.pairsSpawned++;
+  this.pairsSpawned++;
 
-    // BONUS SWISSBORG : au milieu de la paire (même X, centre du trou)
-    if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
-      const bonusX = x;
-      const bonusY = gapCenterY;
-      const bonus = this.physics.add.image(bonusX, bonusY, "bonus_sb")
-        .setDepth(7).setScale(0.55).setImmovable(true);
-      bonus.body.setAllowGravity(false);
-      bonus.body.setVelocityX(this.curSpeed);
-      bonus.body.setSize(bonus.displayWidth*3.0, bonus.displayHeight*3.0, true);
-      this.bonuses.add(bonus);
-    }
+  // BONUS SWISSBORG : au milieu de la paire (même X, centre du trou)
+  if (ENABLE_BONUS && this.started && (this.pairsSpawned % BONUS_EVERY === 0)){
+    const bonusX = x;
+    const bonusY = gapCenterY;
+    const bonus = this.physics.add.image(bonusX, bonusY, "bonus_sb")
+      .setDepth(7).setScale(0.55).setImmovable(true);
+    bonus.body.setAllowGravity(false);
+    bonus.body.setVelocityX(this.curSpeed);
+    bonus.body.setSize(bonus.displayWidth*3.0, bonus.displayHeight*3.0, true);
+    this.bonuses.add(bonus);
+  }
 
-    // BORGY COINS : tous les 3–7 tuyaux, également au centre du gap
-    if (this.started && this.pairsSpawned >= this.nextCoinAt){
-      const coinX = x;
-      const coinY = gapCenterY;
-      this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
-      this.nextCoinAt += Phaser.Math.Between(3, 7);
-    }
+  // BORGY COINS : tous les 3–7 tuyaux, également au centre du gap
+  if (this.started && this.pairsSpawned >= this.nextCoinAt){
+    const coinX = x;
+    const coinY = gapCenterY;
+    this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
+    this.nextCoinAt += Phaser.Math.Between(3, 7);
+  }
 
-    // Robot SwissBorg accroché à un tuyau du bas : 1 apparition sur 20
-    if (Phaser.Math.Between(1, 20) === 1){
-      const botX = bottomImg.x + bottomImg.displayWidth * 0.35;
-      const botY = bottomImg.y + 80;
-      const bot = this.physics.add.image(botX, botY, "sb_robot")
-        .setDepth(5)
-        .setScale(0.23)
-        .setImmovable(true);
-      bot.body.setAllowGravity(false);
-      bot.body.setVelocityX(vx);
-      this.bots.add(bot);
+  // Robot SwissBorg accroché à un tuyau du bas : 1 apparition sur 20
+  if (Phaser.Math.Between(1, 20) === 1){
+    const botX = bottomImg.x + bottomImg.displayWidth * 0.35;
+    // placé à ~10% de la hauteur du tuyau à partir du haut
+    const botY = bottomImg.y + bottomImg.displayHeight * 0.10;
 
-      // petite anim de "coucou"
-      this.tweens.add({
-        targets: bot,
-        angle: { from: -8, to: 8 },
-        duration: 700,
+    const bot = this.physics.add.image(botX, botY, "sb_robot")
+      .setDepth(5)
+      .setScale(0.14) // ~40% plus petit que 0.23
+      .setImmovable(true);
+    bot.body.setAllowGravity(false);
+    bot.body.setVelocityX(vx);
+    this.bots.add(bot);
+
+    // mouvement de coucou plus léger
+    this.tweens.add({
+      targets: bot,
+      angle: { from: -4, to: 4 },
+      duration: 700,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.inOut"
+    });
+  }
+
+  if (this.game._hardMode === true) {
+    const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
+    const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
+
+    if (amp > 0) {
+      const driver = { delta: 0 };
+      const tween = this.tweens.add({
+        targets: driver,
+        delta: amp,
+        duration: HARD_DOOR_HALF_PERIOD,
         yoyo: true,
         repeat: -1,
-        ease: "Sine.inOut"
+        ease: 'Sine.inOut',
+        onUpdate: () => {
+          const d = driver.delta;
+          const newTop    = yTopRim0    + d;
+          const newBottom = yBottomRim0 - d;
+          const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
+          const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
+
+          this._resizePipeToRim(topImg, true,  topClamped,    scaleXt);
+          this._resizePipeToRim(bottomImg, false, bottomClamped, scaleXb);
+
+          topImg.body.setVelocityX(this.curSpeed);
+          bottomImg.body.setVelocityX(this.curSpeed);
+        }
       });
-    }
 
-    if (this.game._hardMode === true) {
-      const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
-      const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
-
-      if (amp > 0) {
-        const driver = { delta: 0 };
-        const tween = this.tweens.add({
-          targets: driver,
-          delta: amp,
-          duration: HARD_DOOR_HALF_PERIOD,
-          yoyo: true,
-          repeat: -1,
-          ease: 'Sine.inOut',
-          onUpdate: () => {
-            const d = driver.delta;
-            const newTop    = yTopRim0    + d;
-            const newBottom = yBottomRim0 - d;
-            const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
-            const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
-
-            this._resizePipeToRim(topImg, true,  topClamped,    scaleXt);
-            this._resizePipeToRim(bottomImg, false, bottomClamped, scaleXb);
-
-            topImg.body.setVelocityX(this.curSpeed);
-            bottomImg.body.setVelocityX(this.curSpeed);
-          }
-        });
-
-        const stopTween = () => { try { tween.stop(); tween.remove(); } catch {} };
-        topImg.once('destroy', stopTween);
-        bottomImg.once('destroy', stopTween);
-      }
+      const stopTween = () => { try { tween.stop(); tween.remove(); } catch {} };
+      topImg.once('destroy', stopTween);
+      bottomImg.once('destroy', stopTween);
     }
   }
+}
 
   // ====== gestion du contact Borgy / pièce ======
   handleBorgyCoinOverlap(player, coin){
