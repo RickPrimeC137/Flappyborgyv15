@@ -580,26 +580,37 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
+  // *** NOUVELLE VERSION DU SHOP (avec nettoyage complet des éléments) ***
   showShop(){
-    const W = this.scale.width, H = this.scale.height; const depth = 650;
+    const W = this.scale.width, H = this.scale.height;
+    const depth = 650;
 
-    // applique d'éventuelles récompenses de quêtes avant d'afficher les coins
+    // on applique les récompenses de quêtes avant d'afficher les coins
     const dataQ = loadQuests();
     const isHard = this.game._hardMode === true;
     applyQuestCoins(dataQ, isHard);
 
+    // tous les objets du shop seront stockés ici pour pouvoir les détruire proprement
+    const ui = [];
+
     const panel = this.add.rectangle(W/2, H*0.5, W*0.8, H*0.55, 0x05252f, 0.96).setDepth(depth);
-    const title = this.add.text(W/2, H*0.26, "Borgy Coins Shop", { fontFamily:"Georgia,serif", fontSize:54, color:"#ffffff" })
-      .setOrigin(0.5).setDepth(depth+1);
+    ui.push(panel);
+
+    const title = this.add.text(W/2, H*0.26, "Borgy Coins Shop", {
+      fontFamily:"Georgia,serif", fontSize:54, color:"#ffffff"
+    }).setOrigin(0.5).setDepth(depth+1);
+    ui.push(title);
 
     const coinsNow = loadBorgyCoins();
     const coinsText = this.add.text(W*0.5, H*0.33, `Tu as actuellement : ${coinsNow} 🪙`, {
       fontFamily:"monospace", fontSize:30, color:"#cffff1", align:"center"
     }).setOrigin(0.5).setDepth(depth+1);
+    ui.push(coinsText);
 
-    this.add.text(W*0.5, H*0.38, "Choisis ton skin Borgy :", {
+    const infoText = this.add.text(W*0.5, H*0.38, "Choisis ton skin Borgy :", {
       fontFamily:"monospace", fontSize:22, color:"#9be7ff", align:"center"
     }).setOrigin(0.5).setDepth(depth+1);
+    ui.push(infoText);
 
     let skinState = loadSkinState();
     const buttonsById = {};
@@ -629,19 +640,22 @@ class MenuScene extends Phaser.Scene {
       const y = startY + i*lineH;
       const priceStr = skin.price === 0 ? "Gratuit" : `${skin.price} 🪙`;
 
-      this.add.text(W*0.16, y, skin.name, {
+      const nameTxt = this.add.text(W*0.16, y, skin.name, {
         fontFamily:"monospace", fontSize:26, color:"#ffffff"
       }).setOrigin(0,0.5).setDepth(depth+1);
+      ui.push(nameTxt);
 
-      this.add.text(W*0.60, y, priceStr, {
+      const priceTxt = this.add.text(W*0.60, y, priceStr, {
         fontFamily:"monospace", fontSize:22, color:"#ffedd5"
       }).setOrigin(1,0.5).setDepth(depth+1);
+      ui.push(priceTxt);
 
       const btn = this.add.text(W*0.62, y, "...", {
         fontFamily:"monospace", fontSize:22, color:"#ffffff",
         backgroundColor:"#b45309",
         padding:{left:14,right:14,top:6,bottom:6}
       }).setOrigin(0,0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+      ui.push(btn);
 
       buttonsById[skin.id] = btn;
 
@@ -658,19 +672,20 @@ class MenuScene extends Phaser.Scene {
               backgroundColor:"#7f1d1d",
               padding:{left:16,right:16,top:6,bottom:6}
             }).setOrigin(0.5).setDepth(depth+2);
+            ui.push(warn);
             this.tweens.add({
               targets: warn,
               alpha: 0,
               duration: 1200,
               delay: 900,
-              onComplete: () => warn.destroy()
+              onComplete: () => { try { warn.destroy(); } catch(e){} }
             });
             return;
           }
           // on sélectionne automatiquement le nouveau skin acheté
           selectSkin(skin.id);
         } else {
-          // juste sélectionner
+          // simplement sélectionner le skin déjà possédé
           selectSkin(skin.id);
         }
         refreshButtons();
@@ -683,9 +698,11 @@ class MenuScene extends Phaser.Scene {
       fontFamily:"monospace", fontSize:40, color:"#fff",
       backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+    ui.push(close);
 
-    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
-      .forEach(o => o?.destroy());
+    const destroyAll = () => {
+      ui.forEach(o => { try { o.destroy(); } catch(e){} });
+    };
     close.on("pointerdown", destroyAll);
   }
 }
@@ -978,7 +995,7 @@ class GameScene extends Phaser.Scene {
       bot.body.setVelocityX(vx);
       this.bots.add(bot);
 
-      // petite anim de "coucou" avec le bras
+      // petite anim de "coucou"
       this.tweens.add({
         targets: bot,
         angle: { from: -8, to: 8 },
