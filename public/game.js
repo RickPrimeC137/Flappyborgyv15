@@ -33,7 +33,7 @@ const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
 const KILL_MARGIN   = 260;
 
-const ENABLE_KILL_BANDS = false; // on n'utilise plus les bandes invisibles
+const ENABLE_KILL_BANDS = false; // plus utilisé, gardé pour compat
 
 const ENABLE_BONUS = true;
 const BONUS_EVERY = 20;
@@ -379,10 +379,6 @@ class PreloadScene extends Phaser.Scene {
     this.load.image(BG_KEY,      "bg_mountains.jpg");
     this.load.image(BG_HARD_KEY, "bg_volcano.png");
 
-    // Nuages top/bottom
-    this.load.image("cloud_top",    "cloud_top.png");
-    this.load.image("cloud_bottom", "cloud_bottom.png");
-
     // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
@@ -399,6 +395,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("bonus_sb",   "sb_token_user.png");
     this.load.image("borgy_coin", "borgy_coin.png");
 
+    // Nuages mur du haut/bas
+    this.load.image("cloud_top",    "cloud_top.png");
+    this.load.image("cloud_bottom", "cloud_bottom.png");
+
     // Robot SwissBorg (accroché aux tuyaux du bas)
     this.load.image("sb_robot", "sb_robot.png");
 
@@ -411,7 +411,8 @@ class PreloadScene extends Phaser.Scene {
     // SFX
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
-    this.load.audio("sfx_coin",     "jackpot_metal_realistic_0_5s.wav");
+    // SFX pièce
+    this.load.audio("sfx_coin", "jackpot_metal_realistic_0_5s.wav");
 
     // Barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
@@ -722,8 +723,6 @@ class GameScene extends Phaser.Scene {
     this.pipes = null; this.sensors = null;
     this.bonuses = null; this.borgyCoins = null;
     this.bots = null;
-    this.cloudTop = null;
-    this.cloudBottom = null;
     this.nextSpawnAt = Infinity; this.lastSpawnMs = -1;
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
@@ -743,7 +742,7 @@ class GameScene extends Phaser.Scene {
     const isHard = this.game._hardMode === true;
     const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
     const hasKey = this.textures.exists(keyWanted);
-    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-10);
+    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
@@ -757,7 +756,7 @@ class GameScene extends Phaser.Scene {
     this.sensors    = this.physics.add.group();
     this.bonuses    = this.physics.add.group();
     this.borgyCoins = this.physics.add.group();
-    this.bots       = this.physics.add.group(); // robots SwissBorg décoratifs
+    this.bots       = this.physics.add.group(); // robots SwissBorg
 
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on("pointerdown", () => this.onTap());
@@ -786,34 +785,49 @@ class GameScene extends Phaser.Scene {
     this.player.body.setSize(pw*0.50, ph*0.50, true).setOffset(pw*0.20, ph*0.22);
     this.player.setGravityY(0);
 
-    // SFX
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
     this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.8 });
 
-    // Nuages de bordure (10% de la hauteur en haut et en bas)
-    const cloudBandH = H * 0.10;
+    // --- Nuages en haut et en bas, alignés avec l'image de fond ---
+    const topBandHeight    = H * 0.12; // ~zone de ciel tout en haut
+    const bottomBandHeight = H * 0.14; // zone avec le train en bas
 
-    this.cloudTop = this.physics.add.image(W/2, cloudBandH / 2, "cloud_top")
-      .setOrigin(0.5, 0.5)
-      .setDepth(2);
-    const scaleTop = W / this.cloudTop.width;
-    this.cloudTop.setScale(scaleTop, cloudBandH / this.cloudTop.height);
-    this.cloudTop.setImmovable(true);
+    // Nuage du haut
+    this.cloudTop = this.physics.add.sprite(
+      W / 2,
+      topBandHeight / 2,
+      "cloud_top"
+    )
+      .setDepth(-5) // devant le fond mais derrière le joueur
+      .setImmovable(true);
+    this.cloudTop.setScale(
+      W / this.cloudTop.width,
+      topBandHeight / this.cloudTop.height
+    );
     this.cloudTop.body.setAllowGravity(false);
+    this.cloudTop.body.setSize(W, topBandHeight, true);
 
-    this.cloudBottom = this.physics.add.image(W/2, H - cloudBandH / 2, "cloud_bottom")
-      .setOrigin(0.5, 0.5)
-      .setDepth(2);
-    const scaleBottom = W / this.cloudBottom.width;
-    this.cloudBottom.setScale(scaleBottom, cloudBandH / this.cloudBottom.height);
-    this.cloudBottom.setImmovable(true);
+    // Nuage du bas
+    this.cloudBottom = this.physics.add.sprite(
+      W / 2,
+      H - bottomBandHeight / 2,
+      "cloud_bottom"
+    )
+      .setDepth(-5)
+      .setImmovable(true);
+    this.cloudBottom.setScale(
+      W / this.cloudBottom.width,
+      bottomBandHeight / this.cloudBottom.height
+    );
     this.cloudBottom.body.setAllowGravity(false);
+    this.cloudBottom.body.setSize(W, bottomBandHeight, true);
 
-    // Collisions / overlaps
+    // Game over si on touche les nuages
     this.physics.add.overlap(this.player, this.cloudTop,    () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.cloudBottom, () => this.gameOver(), null, this);
 
+    // Collisions normales
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
@@ -829,6 +843,8 @@ class GameScene extends Phaser.Scene {
       null,
       this
     );
+    // Collision avec les robots
+    this.physics.add.overlap(this.player, this.bots, () => this.gameOver(), null, this);
 
     this.time.addEvent({
       delay: DIFF.stepMs, loop: true, callback: () => {
@@ -1004,13 +1020,13 @@ class GameScene extends Phaser.Scene {
       this.nextCoinAt += Phaser.Math.Between(3, 6);
     }
 
-    // Robot SwissBorg décoratif : 1 apparition toutes les 15 paires (haut ou bas)
+    // Robot SwissBorg décoratif / létal : 1 apparition toutes les 15 paires
     if (this.started && this.pairsSpawned > 0 && this.pairsSpawned % 15 === 0){
       const botScale = 0.14;
       const fromBottom = Phaser.Math.Between(0, 1) === 0;
 
-      // --- tuyau du bas ---
       if (fromBottom) {
+        // --- tuyau du bas ---
         const bot = this.physics.add.image(
           bottomImg.x,
           bottomImg.y,
@@ -1021,6 +1037,10 @@ class GameScene extends Phaser.Scene {
           .setImmovable(true);
         bot.body.setAllowGravity(false);
         bot.body.setVelocityX(vx);
+
+        const bw = bot.displayWidth, bh = bot.displayHeight;
+        bot.body.setSize(bw * 0.6, bh * 0.8, true);
+
         this.bots.add(bot);
 
         const h = bot.displayHeight;
@@ -1038,8 +1058,8 @@ class GameScene extends Phaser.Scene {
           ease: "Sine.inOut"
         });
       }
-      // --- tuyau du haut (sprite inversé verticalement) ---
       else {
+        // --- tuyau du haut (sprite inversé verticalement) ---
         const bot = this.physics.add.image(
           topImg.x,
           topImg.y,
@@ -1051,6 +1071,10 @@ class GameScene extends Phaser.Scene {
           .setImmovable(true);
         bot.body.setAllowGravity(false);
         bot.body.setVelocityX(vx);
+
+        const bw = bot.displayWidth, bh = bot.displayHeight;
+        bot.body.setSize(bw * 0.6, bh * 0.8, true);
+
         this.bots.add(bot);
 
         const h = bot.displayHeight;
@@ -1151,7 +1175,7 @@ class GameScene extends Phaser.Scene {
       this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
     }
 
-    if (!this.game._muted && this.sfxCoin) {
+    if (!this.game._muted && this.sfxCoin){
       this.sfxCoin.play();
     }
 
