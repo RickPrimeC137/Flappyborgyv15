@@ -752,37 +752,40 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // ===== Nuages haut / bas =====
-const topCloudHeight    = H * CLOUD_TOP_HEIGHT_PCT;
-const bottomCloudHeight = H * CLOUD_BOTTOM_HEIGHT_PCT;
+// ===== Nuages haut / bas =====
+{
+  const topCloudHeight    = H * CLOUD_TOP_HEIGHT_PCT;
+  const bottomCloudHeight = H * CLOUD_BOTTOM_HEIGHT_PCT;
 
-// Hauteur VISUELLE un peu plus grande pour que les sprites débordent
-const topCloudVisualHeight    = topCloudHeight * 1.6;
-const bottomCloudVisualHeight = bottomCloudHeight * 1.6;
+  // Hauteur visuelle plus grande pour que les sprites débordent
+  const topCloudVisualHeight    = topCloudHeight * 1.6;
+  const bottomCloudVisualHeight = bottomCloudHeight * 1.8; // un peu plus pour bien remplir le bas
 
-// --- Nuage du haut : déborde au-dessus de l'écran ---
-const topCloudY = topCloudHeight - topCloudVisualHeight / 2;
-this.topCloud = this.add.image(
-  W / 2,
-  topCloudY,
-  "cloud_top"
-).setDepth(5);
+  // --- Nuage du haut : déborde au-dessus de l'écran ---
+  const topCloudY = topCloudHeight - topCloudVisualHeight / 2;
+  this.topCloud = this.add.image(
+    W / 2,
+    topCloudY,
+    "cloud_top"
+  ).setDepth(5);
 
-const topScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.topCloud.width;
-const topScaleY = topCloudVisualHeight / this.topCloud.height;
-this.topCloud.setScale(topScaleX, topScaleY);
+  const topScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.topCloud.width;
+  const topScaleY = topCloudVisualHeight / this.topCloud.height;
+  this.topCloud.setScale(topScaleX, topScaleY);
 
-// --- Nuage du bas : déborde sous l'écran ---
-const bottomCloudY = H - bottomCloudHeight + bottomCloudVisualHeight / 2;
-this.bottomCloud = this.add.image(
-  W / 2,
-  bottomCloudY,
-  "cloud_bottom"
-).setDepth(5);
+  // --- Nuage du bas : déborde sous l'écran ---
+  const bottomCloudY = H - bottomCloudHeight + bottomCloudVisualHeight / 2;
+  this.bottomCloud = this.add.image(
+    W / 2,
+    bottomCloudY,
+    "cloud_bottom"
+  ).setDepth(5);
 
-const bottomScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.bottomCloud.width;
-const bottomScaleY = bottomCloudVisualHeight / this.bottomCloud.height;
-this.bottomCloud.setScale(bottomScaleX, bottomScaleY);
+  const bottomScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.bottomCloud.width;
+  const bottomScaleY = bottomCloudVisualHeight / this.bottomCloud.height;
+  this.bottomCloud.setScale(bottomScaleX, bottomScaleY);
+}
+// ===== Fin nuages =====
 
     const bottomScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.bottomCloud.width;
     const bottomScaleY = bottomCloudHeight / this.bottomCloud.height;
