@@ -21,7 +21,7 @@ const PROFILE = {
 const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
-const PLAYER_SCALE   = 0.15;
+const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les skins
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
@@ -274,6 +274,87 @@ function updateQuestsFromEvent(evt, value){
   return changed;
 }
 
+/* ================== SKINS ================== */
+const SKINS_STORAGE_KEY = "flappy_borgy_skins_v1";
+
+const SKINS_DEF = [
+  { id: "borgy_default", key: "borgy",         name: "Borgy Classique",  price: 0,    ownedByDefault: true  },
+  { id: "borgy_knight",  key: "borgy_knight",  name: "Borgy Chevalier",  price: 1000, ownedByDefault: false },
+  { id: "borgy_dragon",  key: "borgy_dragon",  name: "Borgy Dragon",     price: 1000, ownedByDefault: false },
+  { id: "borgy_space",   key: "borgy_space",   name: "Borgy Astronaute", price: 1000, ownedByDefault: false },
+  { id: "borgy_cyber",   key: "borgy_cyber",   name: "Borgy Cyber",      price: 1000, ownedByDefault: false },
+  { id: "borgy_cowboy",  key: "borgy_cowboy",  name: "Borgy Cow-boy",    price: 1000, ownedByDefault: false }
+];
+
+function loadSkinState(){
+  try{
+    const raw = localStorage.getItem(SKINS_STORAGE_KEY);
+    if (raw){
+      const data = JSON.parse(raw);
+      if (data && Array.isArray(data.skins) && data.skins.length){
+        return data;
+      }
+    }
+  }catch(e){}
+  // init par défaut
+  const skins = SKINS_DEF.map(s => ({
+    id: s.id,
+    key: s.key,
+    name: s.name,
+    price: s.price,
+    owned: !!s.ownedByDefault,
+    selected: false
+  }));
+  const selectedId = SKINS_DEF[0].id;
+  const first = skins.find(s => s.id === selectedId);
+  if (first) first.selected = true;
+  const data = { skins, selectedId };
+  saveSkinState(data);
+  return data;
+}
+
+function saveSkinState(data){
+  try{ localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
+}
+
+function getSelectedSkinKey(){
+  const data = loadSkinState();
+  const found = data.skins.find(s => s.id === data.selectedId && s.owned);
+  if (found) return found.key;
+  const def = SKINS_DEF[0];
+  return def ? def.key : "borgy";
+}
+
+function selectSkin(id){
+  const data = loadSkinState();
+  const skin = data.skins.find(s => s.id === id && s.owned);
+  if (!skin) return data;
+  data.selectedId = id;
+  data.skins.forEach(s => { s.selected = (s.id === id); });
+  saveSkinState(data);
+  return data;
+}
+
+// Essaie d'acheter un skin, renvoie { ok, reason, coinsLeft, data }
+function tryBuySkin(id){
+  const data = loadSkinState();
+  const skin = data.skins.find(s => s.id === id);
+  if (!skin) return { ok:false, reason:"unknown_skin", coinsLeft:loadBorgyCoins(), data };
+  if (skin.owned){
+    return { ok:true, reason:"already_owned", coinsLeft:loadBorgyCoins(), data };
+  }
+  const coins = loadBorgyCoins();
+  if (coins < skin.price){
+    return { ok:false, reason:"not_enough_coins", coinsLeft:coins, data };
+  }
+  const newCoins = coins - skin.price;
+  saveBorgyCoins(newCoins);
+  skin.owned = true;
+  data.coinsSpent = (data.coinsSpent || 0) + skin.price;
+  saveSkinState(data);
+  return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
+}
+
 /* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
@@ -303,9 +384,19 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
+    // Skins joueur
+    this.load.image("borgy_knight",  "borgy_knight.png");
+    this.load.image("borgy_dragon",  "borgy_dragon.png");
+    this.load.image("borgy_space",   "borgy_space.png");
+    this.load.image("borgy_cyber",   "borgy_cyber.png");
+    this.load.image("borgy_cowboy",  "borgy_cowboy.png");
+
     // Bonus visuels
     this.load.image("bonus_sb",   "sb_token_user.png");
     this.load.image("borgy_coin", "borgy_coin.png");
+
+    // Robot SwissBorg (accroché aux tuyaux du bas)
+    this.load.image("sb_robot", "sb_robot.png");
 
     // Audio normal
     this.load.audio("bgm", "bgm.mp3");
@@ -492,23 +583,103 @@ class MenuScene extends Phaser.Scene {
   showShop(){
     const W = this.scale.width, H = this.scale.height; const depth = 650;
 
-    const data = loadQuests();
+    // applique d'éventuelles récompenses de quêtes avant d'afficher les coins
+    const dataQ = loadQuests();
     const isHard = this.game._hardMode === true;
-    const coins = applyQuestCoins(data, isHard);
+    applyQuestCoins(dataQ, isHard);
 
     const panel = this.add.rectangle(W/2, H*0.5, W*0.8, H*0.55, 0x05252f, 0.96).setDepth(depth);
     const title = this.add.text(W/2, H*0.26, "Borgy Coins Shop", { fontFamily:"Georgia,serif", fontSize:54, color:"#ffffff" })
       .setOrigin(0.5).setDepth(depth+1);
 
-    this.add.text(W*0.5, H*0.35, `Tu as actuellement : ${coins} 🪙`, {
+    const coinsNow = loadBorgyCoins();
+    const coinsText = this.add.text(W*0.5, H*0.33, `Tu as actuellement : ${coinsNow} 🪙`, {
       fontFamily:"monospace", fontSize:30, color:"#cffff1", align:"center"
     }).setOrigin(0.5).setDepth(depth+1);
 
-    this.add.text(W*0.5, H*0.43, "(Les skins arrivent bientôt 👀)", {
-      fontFamily:"monospace", fontSize:24, color:"#9be7ff", align:"center"
+    this.add.text(W*0.5, H*0.38, "Choisis ton skin Borgy :", {
+      fontFamily:"monospace", fontSize:22, color:"#9be7ff", align:"center"
     }).setOrigin(0.5).setDepth(depth+1);
 
-    const close = this.add.text(W/2, H*0.68, "Fermer", {
+    let skinState = loadSkinState();
+    const buttonsById = {};
+    const startY = H*0.42;
+    const lineH  = 64;
+
+    const refreshButtons = () => {
+      skinState = loadSkinState();
+      coinsText.setText(`Tu as actuellement : ${loadBorgyCoins()} 🪙`);
+      skinState.skins.forEach(s => {
+        const btn = buttonsById[s.id];
+        if (!btn) return;
+        if (!s.owned){
+          btn.setText("Acheter");
+          btn.setBackgroundColor("#b45309");
+        } else if (skinState.selectedId === s.id){
+          btn.setText("Sélectionné");
+          btn.setBackgroundColor("#15803d");
+        } else {
+          btn.setText("Utiliser");
+          btn.setBackgroundColor("#0db187");
+        }
+      });
+    };
+
+    skinState.skins.forEach((skin, i) => {
+      const y = startY + i*lineH;
+      const priceStr = skin.price === 0 ? "Gratuit" : `${skin.price} 🪙`;
+
+      this.add.text(W*0.16, y, skin.name, {
+        fontFamily:"monospace", fontSize:26, color:"#ffffff"
+      }).setOrigin(0,0.5).setDepth(depth+1);
+
+      this.add.text(W*0.60, y, priceStr, {
+        fontFamily:"monospace", fontSize:22, color:"#ffedd5"
+      }).setOrigin(1,0.5).setDepth(depth+1);
+
+      const btn = this.add.text(W*0.62, y, "...", {
+        fontFamily:"monospace", fontSize:22, color:"#ffffff",
+        backgroundColor:"#b45309",
+        padding:{left:14,right:14,top:6,bottom:6}
+      }).setOrigin(0,0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
+
+      buttonsById[skin.id] = btn;
+
+      btn.on("pointerdown", () => {
+        const state = loadSkinState();
+        const s = state.skins.find(ss => ss.id === skin.id);
+        if (!s) return;
+
+        if (!s.owned){
+          const res = tryBuySkin(skin.id);
+          if (!res.ok && res.reason === "not_enough_coins"){
+            const warn = this.add.text(W*0.5, H*0.64, "Pas assez de Borgy Coins !", {
+              fontFamily:"monospace", fontSize:22, color:"#ffb4b4",
+              backgroundColor:"#7f1d1d",
+              padding:{left:16,right:16,top:6,bottom:6}
+            }).setOrigin(0.5).setDepth(depth+2);
+            this.tweens.add({
+              targets: warn,
+              alpha: 0,
+              duration: 1200,
+              delay: 900,
+              onComplete: () => warn.destroy()
+            });
+            return;
+          }
+          // on sélectionne automatiquement le nouveau skin acheté
+          selectSkin(skin.id);
+        } else {
+          // juste sélectionner
+          selectSkin(skin.id);
+        }
+        refreshButtons();
+      });
+    });
+
+    refreshButtons();
+
+    const close = this.add.text(W/2, H*0.78, "Fermer", {
       fontFamily:"monospace", fontSize:40, color:"#fff",
       backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10}
     }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
@@ -528,6 +699,7 @@ class GameScene extends Phaser.Scene {
     this.score = 0; this.pairsSpawned = 0;
     this.pipes = null; this.sensors = null;
     this.bonuses = null; this.borgyCoins = null;
+    this.bots = null;
     this.nextSpawnAt = Infinity; this.lastSpawnMs = -1;
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
@@ -561,6 +733,7 @@ class GameScene extends Phaser.Scene {
     this.sensors    = this.physics.add.group();
     this.bonuses    = this.physics.add.group();
     this.borgyCoins = this.physics.add.group();
+    this.bots       = this.physics.add.group(); // robots SwissBorg décoratifs
 
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on("pointerdown", () => this.onTap());
@@ -577,7 +750,12 @@ class GameScene extends Phaser.Scene {
       this.debugTxt = this.add.text(16, 64, "", { fontFamily:"monospace", fontSize: 16, color: "#bff" }).setDepth(20);
     }
 
-    this.player = this.physics.add.sprite(W*0.18, H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2), "borgy")
+    const skinKey = getSelectedSkinKey();
+    this.player = this.physics.add.sprite(
+      W*0.18,
+      H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2),
+      skinKey
+    )
       .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
@@ -631,6 +809,7 @@ class GameScene extends Phaser.Scene {
     this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(this.curSpeed); });
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
     this.borgyCoins.children.iterate(c => { if (c?.body) c.body.setVelocityX(this.curSpeed); });
+    this.bots.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
   }
 
   _maybeSwitchToHardMusic(){
@@ -678,6 +857,7 @@ class GameScene extends Phaser.Scene {
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
     this.borgyCoins.children.iterate(c => { if (c && c.active && c.x < -KILL_MARGIN) c.destroy(); });
+    this.bots.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
     if (this.multiplierActive && this.bonusFollower && this.player.active){
       this.bonusFollower.x = this.player.x - this.player.displayWidth*0.9;
@@ -778,12 +958,35 @@ class GameScene extends Phaser.Scene {
       this.bonuses.add(bonus);
     }
 
-    // BORGY COINS : tous les 5–10 tuyaux, également au centre du gap
+    // BORGY COINS : tous les 3–7 tuyaux, également au centre du gap
     if (this.started && this.pairsSpawned >= this.nextCoinAt){
       const coinX = x;
       const coinY = gapCenterY;
       this.spawnBorgyCoin(coinX, coinY, this.curSpeed);
       this.nextCoinAt += Phaser.Math.Between(3, 7);
+    }
+
+    // Robot SwissBorg accroché à un tuyau du bas : 1 apparition sur 20
+    if (Phaser.Math.Between(1, 20) === 1){
+      const botX = bottomImg.x + bottomImg.displayWidth * 0.35;
+      const botY = bottomImg.y + 80;
+      const bot = this.physics.add.image(botX, botY, "sb_robot")
+        .setDepth(5)
+        .setScale(0.23)
+        .setImmovable(true);
+      bot.body.setAllowGravity(false);
+      bot.body.setVelocityX(vx);
+      this.bots.add(bot);
+
+      // petite anim de "coucou" avec le bras
+      this.tweens.add({
+        targets: bot,
+        angle: { from: -8, to: 8 },
+        duration: 700,
+        yoyo: true,
+        repeat: -1,
+        ease: "Sine.inOut"
+      });
     }
 
     if (this.game._hardMode === true) {
@@ -933,6 +1136,7 @@ class GameScene extends Phaser.Scene {
     this.sensors.clear(true, true);
     this.bonuses.clear(true, true);
     this.borgyCoins.clear(true, true);
+    this.bots.clear(true, true);
     if (this.bonusFollower){
       this.bonusFollower.destroy();
       this.bonusFollower = null;
