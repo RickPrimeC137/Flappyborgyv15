@@ -33,7 +33,7 @@ const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
 const KILL_MARGIN   = 260;
 
-// Ancien système de bandes kill désactivé, on utilise les nuages
+// On n’utilise plus les bandes kill, on laisse les nuages faire les murs
 const ENABLE_KILL_BANDS = false;
 
 const ENABLE_BONUS = true;
@@ -48,6 +48,11 @@ const LOCAL_BEST_KEY  = "flappy_borgy_bestscore_v1";
 /* ===== Anim “portes” (Hard) ===== */
 const HARD_DOOR_AMPLITUDE_PX = 70;
 const HARD_DOOR_HALF_PERIOD  = 900;
+
+/* ===== Nuages bande haut/bas ===== */
+const CLOUD_TOP_HEIGHT_PCT    = 0.11; // ~11% de la hauteur en haut
+const CLOUD_BOTTOM_HEIGHT_PCT = 0.22; // ~22% de la hauteur en bas (plus large)
+const CLOUD_EXTRA_SCALE_X     = 1.25; // un peu plus large que l’écran pour éviter les trous sur les côtés
 
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
@@ -380,6 +385,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image(BG_KEY,      "bg_mountains.jpg");
     this.load.image(BG_HARD_KEY, "bg_volcano.png");
 
+    // Nuages bande haut / bas
+    this.load.image("cloud_top",    "cloud_top.png");
+    this.load.image("cloud_bottom", "cloud_bottom.png");
+
     // Sprites & pipes
     this.load.image("borgy",       "borgy_ingame.png");
     this.load.image("pipe_top",    "pipe_light_top.png");
@@ -396,10 +405,6 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("bonus_sb",   "sb_token_user.png");
     this.load.image("borgy_coin", "borgy_coin.png");
 
-    // Nuages (murs haut/bas)
-    this.load.image("cloud_top",    "cloud_top.png");
-    this.load.image("cloud_bottom", "cloud_bottom.png");
-
     // Robot SwissBorg (accroché aux tuyaux du bas)
     this.load.image("sb_robot", "sb_robot.png");
 
@@ -412,6 +417,7 @@ class PreloadScene extends Phaser.Scene {
     // SFX
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
+    // Son de collecte de pièce
     this.load.audio("sfx_coin",     "jackpot_metal_realistic_0_5s.wav");
 
     // Barre de chargement
@@ -742,9 +748,46 @@ class GameScene extends Phaser.Scene {
     const isHard = this.game._hardMode === true;
     const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
     const hasKey = this.textures.exists(keyWanted);
-    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-20);
+    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
+
+    // ===== Nuages haut / bas =====
+    const topCloudHeight    = H * CLOUD_TOP_HEIGHT_PCT;
+    const bottomCloudHeight = H * CLOUD_BOTTOM_HEIGHT_PCT;
+
+    // Nuage du haut (collé au bord supérieur)
+    this.topCloud = this.add.image(
+      W / 2,
+      topCloudHeight / 2,
+      "cloud_top"
+    ).setDepth(5);
+
+    const topScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.topCloud.width;
+    const topScaleY = topCloudHeight / this.topCloud.height;
+    this.topCloud.setScale(topScaleX, topScaleY);
+
+    // Nuage du bas (bande qui remplit tout le bas de l'écran)
+    const bottomCenterY = H - bottomCloudHeight / 2;
+    this.bottomCloud = this.add.image(
+      W / 2,
+      bottomCenterY,
+      "cloud_bottom"
+    ).setDepth(5);
+
+    const bottomScaleX = (W * CLOUD_EXTRA_SCALE_X) / this.bottomCloud.width;
+    const bottomScaleY = bottomCloudHeight / this.bottomCloud.height;
+    this.bottomCloud.setScale(bottomScaleX, bottomScaleY);
+
+    // Physique des nuages (murs)
+    this.physics.add.existing(this.topCloud, true);
+    this.physics.add.existing(this.bottomCloud, true);
+
+    this.topCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, topCloudHeight, true);
+    this.topCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
+
+    this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
+    this.bottomCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
 
     if (isHard) {
       this.curSpeed = PROFILE.pipeSpeed - 60;
@@ -787,53 +830,23 @@ class GameScene extends Phaser.Scene {
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
-    this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.75 });
+    this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.7 });
 
-    // --- Nuages haut / bas + colliders larges ---
-    const topBandHeight    = H * 0.18; // ~12% en haut
-    const bottomBandHeight = H * 0.22; // un peu plus grand pour être sûr de toucher
+    // Game over si on touche les nuages
+    this.physics.add.overlap(this.player, this.topCloud,    () => this.gameOver(), null, this);
+    this.physics.add.overlap(this.player, this.bottomCloud, () => this.gameOver(), null, this);
 
-    // Sprite décoratif du haut
-    this.cloudTop = this.add.image(
-      W / 2,
-      topBandHeight / 2.5,
-      "cloud_top"
-    ).setDepth(-5);
-    const topScaleX = (W * 1.15) / this.cloudTop.width;
-    const topScaleY = topBandHeight / this.cloudTop.height;
-    this.cloudTop.setScale(topScaleX, topScaleY);
+    if (ENABLE_KILL_BANDS){
+      const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
+      const botBand = Math.round(H * PLAYFIELD_BOT_PCT);
+      this.killTop = this.add.rectangle(W/2, topBand/2, W, topBand, 0, 0).setDepth(0);
+      this.physics.add.existing(this.killTop, true);
+      this.killBottom = this.add.rectangle(W/2, (H + botBand)/2, W, H - botBand, 0, 0).setDepth(0);
+      this.physics.add.existing(this.killBottom, true);
+      this.physics.add.overlap(this.player, this.killTop,    () => this.gameOver(), null, this);
+      this.physics.add.overlap(this.player, this.killBottom, () => this.gameOver(), null, this);
+    }
 
-    // Sprite décoratif du bas
-    this.cloudBottom = this.add.image(
-      W / 2,
-      H - bottomBandHeight / 2.5,
-      "cloud_bottom"
-    ).setDepth(-5);
-    const bottomScaleX = (W * 1.15) / this.cloudBottom.width;
-    const bottomScaleY = bottomBandHeight / this.cloudBottom.height;
-    this.cloudBottom.setScale(bottomScaleX, bottomScaleY);
-
-    // Colliders invisibles alignés sur les nuages
-    this.cloudTopColl = this.add.rectangle(
-      W / 2,
-      topBandHeight / 2,
-      W * 1.15,
-      topBandHeight
-    ).setVisible(false);
-    this.cloudBottomColl = this.add.rectangle(
-      W / 2,
-      H - bottomBandHeight / 2,
-      W * 1.15,
-      bottomBandHeight
-    ).setVisible(false);
-
-    this.physics.add.existing(this.cloudTopColl, true);
-    this.physics.add.existing(this.cloudBottomColl, true);
-
-    this.physics.add.overlap(this.player, this.cloudTopColl,    () => this.gameOver(), null, this);
-    this.physics.add.overlap(this.player, this.cloudBottomColl, () => this.gameOver(), null, this);
-
-    // Collisions pipes / bonus / coins
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
@@ -1107,10 +1120,6 @@ class GameScene extends Phaser.Scene {
             const d = driver.delta;
             const newTop    = yTopRim0    + d;
             const newBottom = yBottomRim0 - d;
-            const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
-            const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
-            const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
-
             const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
             const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
 
@@ -1148,7 +1157,8 @@ class GameScene extends Phaser.Scene {
     coin.body.setAllowGravity(false);
     coin.body.setVelocityX(vx);
 
-    const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0;
+    // HITBOX CARRÉE, LARGE, CENTRÉE SUR LA PIÈCE
+    const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0; // 3x plus large que le sprite
     coin.body.setSize(side, side);
     coin.body.setOffset(
       coin.displayWidth  / 2 - side / 2,
