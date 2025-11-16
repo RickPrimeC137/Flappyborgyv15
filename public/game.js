@@ -1104,7 +1104,7 @@ class GameScene extends Phaser.Scene {
 
   // --- NOUVELLE HITBOX CARRÉE, COMPATIBLE AVEC LE JOUEUR ---
   const baseSize = Math.min(this.player.body.width, this.player.body.height);
-  const size = baseSize * 0.6; // 60% de la hitbox du joueur, ajuste si besoin
+  const size = baseSize * 0.9; // 90% de la hitbox du joueur, ajuste si besoin
   coin.body.setSize(size, size, true); // carré, centré sur le sprite
   // plus besoin de coin.body.setOffset(...)
 
