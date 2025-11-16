@@ -407,6 +407,7 @@ class PreloadScene extends Phaser.Scene {
     // SFX
     this.load.audio("sfx_gameover", "flappy-borgy-game-over-C.wav");
     this.load.audio("sfx_score",    "flappy_borgy_wouf_chiot_0_2s.wav");
+    this.load.audio("sfx_coin",     "jackpot_metal_realistic_0_5s.wav");
 
     // Barre de chargement
     const bgBar = this.add.rectangle(W/2, H*0.8, W*0.52, 12, 0x000000, 0.25).setOrigin(0.5);
@@ -781,6 +782,7 @@ class GameScene extends Phaser.Scene {
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
+    this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.8 });
 
     if (ENABLE_KILL_BANDS){
       const topBand = Math.round(H * PLAYFIELD_TOP_PCT);
@@ -1128,6 +1130,11 @@ class GameScene extends Phaser.Scene {
     saveBorgyCoins(this.borgyCoinCount);
     if (this.borgyCoinText){
       this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
+    }
+
+    // son de prise de pièce
+    if (!this.game._muted && this.sfxCoin){
+      this.sfxCoin.play();
     }
 
     const floatTxt = this.add.text(x, y, "+1", {
