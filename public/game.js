@@ -436,6 +436,7 @@ class PreloadScene extends Phaser.Scene {
 /* ================== MENU ================== */
 class MenuScene extends Phaser.Scene {
   constructor(){ super("menu"); }
+
   create(){
     const W = this.scale.width, H = this.scale.height;
     const bg = this.add.image(W/2, H/2, BG_KEY).setDepth(-20);
@@ -509,6 +510,9 @@ class MenuScene extends Phaser.Scene {
 
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
+
+    // === Popup de bienvenue au-dessus du menu ===
+    this.showWelcomePopup();
   }
 
   makeBtn(x,y,label,cb){
@@ -716,6 +720,85 @@ class MenuScene extends Phaser.Scene {
       ui.forEach(o => { try { o.destroy(); } catch(e){} });
     };
     close.on("pointerdown", destroyAll);
+  }
+
+  // === Popup de bienvenue avant d'utiliser le menu ===
+  showWelcomePopup(){
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depthOverlay = 880;
+    const depthPanel   = 890;
+
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
+      .setDepth(depthOverlay)
+      .setInteractive(); // bloque les clics sur le menu derrière
+
+    const panel = this.add.rectangle(W/2, H/2, W*0.84, H*0.78, 0x08313a, 0.96)
+      .setDepth(depthPanel);
+
+    const title = this.add.text(
+      W/2,
+      H*0.23,
+      "Bienvenue dans le jeu Flappy-Borgy !!!",
+      {
+        fontFamily: "Georgia,serif",
+        fontSize: 42,
+        color: "#ffffff",
+        align: "center",
+        wordWrap: { width: W*0.76 }
+      }
+    ).setOrigin(0.5).setDepth(depthPanel+1);
+
+    const msg =
+      "L'objectif est de passer entre les tuyaux pour faire des points et battre le record ;\n\n" +
+      "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC. " +
+      "Si tu es sur mobile un pouce suffit mais je te conseille les deux ;)\n\n" +
+      "- Récupère des Borgy Coins pour acheter des skins.\n\n" +
+      "- Des quêtes évolutives et journalières sont disponibles (elles s'adaptent le lendemain en fonction de ton score).\n\n" +
+      "- Le logo bonus vert apparaît de temps en temps et double le score pendant un temps limité.\n\n" +
+      "- Attention au robot vert qui sort des tuyaux.\n\n" +
+      "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés dans ce mode).\n\n" +
+      "- Tu peux voter pour ton même coin BORGY préféré directement depuis le bouton \"Voter pour BORGY\".\n\n" +
+      "- Tu as accès au site BorgySol.com directement aussi si tu veux.\n\n" +
+      "Voilà, fais-toi plaisir et LFG BORGY <3\n\n" +
+      "Fait par un fan dévoué corps et âme à la team BORGY <3";
+
+    const body = this.add.text(
+      W*0.16,
+      H*0.32,
+      msg,
+      {
+        fontFamily: "monospace",
+        fontSize: 22,
+        color: "#e6fef9",
+        align: "left",
+        wordWrap: { width: W*0.68 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+
+    const okBtn = this.add.text(
+      W/2,
+      H*0.82,
+      "OK, c'est parti !",
+      {
+        fontFamily:"monospace",
+        fontSize: 32,
+        color:"#ffffff",
+        backgroundColor:"#0db187",
+        padding:{left:24,right:24,top:10,bottom:10}
+      }
+    ).setOrigin(0.5).setDepth(depthPanel+1).setInteractive({useHandCursor:true});
+
+    const closePopup = () => {
+      overlay.destroy();
+      panel.destroy();
+      title.destroy();
+      body.destroy();
+      okBtn.destroy();
+    };
+
+    okBtn.on("pointerdown", closePopup);
+    overlay.on("pointerdown", closePopup);
   }
 }
 
