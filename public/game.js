@@ -33,7 +33,7 @@ const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
 const KILL_MARGIN   = 260;
 
-// on NE s'en sert plus, remplacé par les nuages
+// Ancien système de bandes kill désactivé, on utilise les nuages
 const ENABLE_KILL_BANDS = false;
 
 const ENABLE_BONUS = true;
@@ -742,7 +742,7 @@ class GameScene extends Phaser.Scene {
     const isHard = this.game._hardMode === true;
     const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
     const hasKey = this.textures.exists(keyWanted);
-    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-10);
+    const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-20);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
@@ -789,40 +789,51 @@ class GameScene extends Phaser.Scene {
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
     this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.75 });
 
-    // --- Nuages haut / bas (mur de 10–14% environ) ---
-    const topBandHeight    = H * 0.12;
-    const bottomBandHeight = H * 0.14;
+    // --- Nuages haut / bas + colliders larges ---
+    const topBandHeight    = H * 0.12; // ~12% en haut
+    const bottomBandHeight = H * 0.16; // un peu plus grand pour être sûr de toucher
 
-    // Nuage du haut
-    this.cloudTop = this.physics.add.image(
+    // Sprite décoratif du haut
+    this.cloudTop = this.add.image(
       W / 2,
       topBandHeight / 2,
       "cloud_top"
-    )
-      .setDepth(-5)
-      .setImmovable(true);
+    ).setDepth(-5);
+    const topScaleX = (W * 1.15) / this.cloudTop.width;
+    const topScaleY = topBandHeight / this.cloudTop.height;
+    this.cloudTop.setScale(topScaleX, topScaleY);
 
-    this.cloudTop.setDisplaySize(W * 1.1, topBandHeight); // un peu plus large que le jeu
-    this.cloudTop.body.setAllowGravity(false);
-    this.cloudTop.body.setSize(W, topBandHeight, true);   // hitbox = bande du haut
-
-    // Nuage du bas
-    this.cloudBottom = this.physics.add.image(
+    // Sprite décoratif du bas
+    this.cloudBottom = this.add.image(
       W / 2,
       H - bottomBandHeight / 2,
       "cloud_bottom"
-    )
-      .setDepth(-5)
-      .setImmovable(true);
+    ).setDepth(-5);
+    const bottomScaleX = (W * 1.15) / this.cloudBottom.width;
+    const bottomScaleY = bottomBandHeight / this.cloudBottom.height;
+    this.cloudBottom.setScale(bottomScaleX, bottomScaleY);
 
-    this.cloudBottom.setDisplaySize(W * 1.1, bottomBandHeight);
-    this.cloudBottom.body.setAllowGravity(false);
-    this.cloudBottom.body.setSize(W, bottomBandHeight, true); // hitbox = bande du bas
+    // Colliders invisibles alignés sur les nuages
+    this.cloudTopColl = this.add.rectangle(
+      W / 2,
+      topBandHeight / 2,
+      W * 1.15,
+      topBandHeight
+    ).setVisible(false);
+    this.cloudBottomColl = this.add.rectangle(
+      W / 2,
+      H - bottomBandHeight / 2,
+      W * 1.15,
+      bottomBandHeight
+    ).setVisible(false);
 
-    // Collisions
-    this.physics.add.overlap(this.player, this.cloudTop,    () => this.gameOver(), null, this);
-    this.physics.add.overlap(this.player, this.cloudBottom, () => this.gameOver(), null, this);
+    this.physics.add.existing(this.cloudTopColl, true);
+    this.physics.add.existing(this.cloudBottomColl, true);
 
+    this.physics.add.overlap(this.player, this.cloudTopColl,    () => this.gameOver(), null, this);
+    this.physics.add.overlap(this.player, this.cloudBottomColl, () => this.gameOver(), null, this);
+
+    // Collisions pipes / bonus / coins
     this.physics.add.overlap(this.player, this.pipes,   () => this.gameOver(), null, this);
     this.physics.add.overlap(this.player, this.sensors, (_p, sensor) => {
       if (this.isOver || !sensor.active || !sensor.isScore) return;
@@ -1096,6 +1107,10 @@ class GameScene extends Phaser.Scene {
             const d = driver.delta;
             const newTop    = yTopRim0    + d;
             const newBottom = yBottomRim0 - d;
+            const TOP_BAND  = Math.round(H * PLAYFIELD_TOP_PCT);
+            const BOT_BAND  = Math.round(H * PLAYFIELD_BOT_PCT);
+            const RIM_LIMIT = Math.round(H * PIPE_RIM_MAX_PCT);
+
             const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
             const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
 
@@ -1133,8 +1148,7 @@ class GameScene extends Phaser.Scene {
     coin.body.setAllowGravity(false);
     coin.body.setVelocityX(vx);
 
-    // HITBOX CARRÉE, LARGE, CENTRÉE SUR LA PIÈCE
-    const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0; // 3x plus large que le sprite
+    const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0;
     coin.body.setSize(side, side);
     coin.body.setOffset(
       coin.displayWidth  / 2 - side / 2,
