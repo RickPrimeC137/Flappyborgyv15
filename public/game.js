@@ -790,13 +790,13 @@ class GameScene extends Phaser.Scene {
     this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.75 });
 
     // --- Nuages haut / bas + colliders larges ---
-    const topBandHeight    = H * 0.12; // ~12% en haut
-    const bottomBandHeight = H * 0.16; // un peu plus grand pour être sûr de toucher
+    const topBandHeight    = H * 0.20; // ~12% en haut
+    const bottomBandHeight = H * 0.20; // un peu plus grand pour être sûr de toucher
 
     // Sprite décoratif du haut
     this.cloudTop = this.add.image(
       W / 2,
-      topBandHeight / 2,
+      topBandHeight / 1.5,
       "cloud_top"
     ).setDepth(-5);
     const topScaleX = (W * 1.15) / this.cloudTop.width;
