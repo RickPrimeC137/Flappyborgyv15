@@ -731,7 +731,7 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
-  // === Popup de bienvenue (avec icônes) ===
+  // === Popup de bienvenue (icônes propres & petites) ===
   showWelcomePopup(){
     const W = this.scale.width;
     const H = this.scale.height;
@@ -740,11 +740,13 @@ class MenuScene extends Phaser.Scene {
 
     const elements = [];
 
+    // fond sombre qui bloque les clics
     const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
       .setDepth(depthOverlay)
-      .setInteractive(); // bloque les clics sur le menu derrière
+      .setInteractive();
     elements.push(overlay);
 
+    // panneau principal
     const panel = this.add.rectangle(W/2, H/2, W*0.84, H*0.78, 0x08313a, 0.96)
       .setDepth(depthPanel);
     elements.push(panel);
@@ -777,29 +779,35 @@ class MenuScene extends Phaser.Scene {
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(intro);
 
-    const lineGap = H * 0.045;
-    let y = H*0.33;
+    // paramètres de mise en page
+    const lineGap   = H * 0.055;
+    const iconSize  = W * 0.07;   // taille max ~70px sur 1024px de large
+    const iconX     = W * 0.14;   // colonne icônes
+    const textX     = W * 0.20;   // colonne texte
 
-    // Contrôles
+    let y = H * 0.32;
+
+    // 1) Contrôles (pas d'icône)
     const txtControls = this.add.text(
-      W*0.16,
+      textX,
       y,
-      "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC.\n  " +
-      "Si tu es sur mobile un pouce suffit mais je te conseille les deux ;)",
+      "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC.\n" +
+      "  Si tu es sur mobile un pouce suffit mais je te conseille les deux ;)",
       {
         fontFamily:"monospace",
         fontSize:22,
         color:"#e6fef9",
         align:"left",
-        wordWrap:{ width: W*0.68 }
+        wordWrap:{ width: W*0.68 - (textX - W*0.16) }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtControls);
+
     y += lineGap * 1.3;
 
-    // Borgy Coins + icône pièce
+    // 2) Borgy Coins + icône pièce
     const txtCoins = this.add.text(
-      W*0.19,
+      textX,
       y,
       "- Récupère des Borgy Coins pour acheter des skins.",
       {
@@ -807,63 +815,72 @@ class MenuScene extends Phaser.Scene {
         fontSize:22,
         color:"#e6fef9",
         align:"left",
-        wordWrap:{ width: W*0.65 }
+        wordWrap:{ width: W*0.68 - (textX - W*0.16) }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtCoins);
 
     const coinIcon = this.add.image(
-      W*0.15,
+      iconX,
       y + 14,
       "borgy_coin"
-    ).setDepth(depthPanel+2).setScale(0.20).setOrigin(0.5);
+    )
+      .setOrigin(0.5,0)
+      .setDepth(depthPanel+2);
+    coinIcon.setDisplaySize(iconSize, iconSize);
     elements.push(coinIcon);
 
     y += lineGap;
 
-    // Quêtes
+    // 3) Quêtes
     const txtQuests = this.add.text(
-      W*0.16,
+      textX,
       y,
-      "- Des quêtes évolutives et journalières sont disponibles\n  (elles s'adaptent le lendemain en fonction de ton score).",
+      "- Des quêtes évolutives et journalières sont disponibles\n" +
+      "  (elles s'adaptent le lendemain en fonction de ton score).",
       {
         fontFamily:"monospace",
         fontSize:22,
         color:"#e6fef9",
         align:"left",
-        wordWrap:{ width: W*0.68 }
+        wordWrap:{ width: W*0.68 - (textX - W*0.16) }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtQuests);
+
     y += lineGap * 1.3;
 
-    // Bonus vert + icône bonus
+    // 4) Bonus vert + icône
     const txtBonus = this.add.text(
-      W*0.19,
+      textX,
       y,
-      "- Le logo bonus vert apparaît de temps en temps et double le score\n  pendant un temps limité.",
+      "- Le logo bonus vert apparaît de temps en temps et double le score\n" +
+      "  pendant un temps limité.",
       {
         fontFamily:"monospace",
         fontSize:22,
         color:"#e6fef9",
         align:"left",
-        wordWrap:{ width: W*0.65 }
+        wordWrap:{ width: W*0.68 - (textX - W*0.16) }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtBonus);
 
     const bonusIcon = this.add.image(
-      W*0.15,
+      iconX,
       y + 16,
       "bonus_sb"
-    ).setDepth(depthPanel+2).setScale(0.20).setOrigin(0.5);
+    )
+      .setOrigin(0.5,0)
+      .setDepth(depthPanel+2);
+    bonusIcon.setDisplaySize(iconSize, iconSize);
     elements.push(bonusIcon);
 
     y += lineGap * 1.3;
 
-    // Robot vert + icône robot
+    // 5) Robot + icône
     const txtRobot = this.add.text(
-      W*0.19,
+      textX,
       y,
       "- Attention au robot vert qui sort des tuyaux.",
       {
@@ -871,31 +888,37 @@ class MenuScene extends Phaser.Scene {
         fontSize:22,
         color:"#e6fef9",
         align:"left",
-        wordWrap:{ width: W*0.65 }
+        wordWrap:{ width: W*0.68 - (textX - W*0.16) }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtRobot);
 
     const robotIcon = this.add.image(
-      W*0.15,
-      y + 14,
+      iconX,
+      y + 10,
       "sb_robot"
-    ).setDepth(depthPanel+2).setScale(0.16).setOrigin(0.5);
+    )
+      .setOrigin(0.5,0)
+      .setDepth(depthPanel+2);
+    // robot un peu plus haut que large, mais petit
+    robotIcon.setDisplaySize(iconSize * 0.9, iconSize * 1.2);
     elements.push(robotIcon);
 
     y += lineGap;
 
-    // Mode Hard
+    // 6) Mode Hard
     const txtHard = this.add.text(
-      W*0.16,
+      textX,
       y,
-      "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton\n  Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés\n  dans ce mode).",
+      "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton\n" +
+      "  Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés\n" +
+      "  dans ce mode).",
       {
         fontFamily:"monospace",
         fontSize:22,
         color:"#e6fef9",
         align:"left",
-        wordWrap:{ width: W*0.68 }
+        wordWrap:{ width: W*0.68 - (textX - W*0.16) }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtHard);
@@ -904,7 +927,8 @@ class MenuScene extends Phaser.Scene {
     const txtEnd = this.add.text(
       W*0.16,
       H*0.70,
-      "Voilà, fais-toi plaisir et LFG BORGY <3\n\nFait par un fan dévoué corps et âme à la team BORGY <3",
+      "Voilà, fais-toi plaisir et LFG BORGY <3\n\n" +
+      "Fait par un fan dévoué corps et âme à la team BORGY <3",
       {
         fontFamily:"monospace",
         fontSize:22,
@@ -915,6 +939,7 @@ class MenuScene extends Phaser.Scene {
     ).setOrigin(0,0).setDepth(depthPanel+1);
     elements.push(txtEnd);
 
+    // Bouton OK
     const okBtn = this.add.text(
       W/2,
       H*0.84,
@@ -937,7 +962,6 @@ class MenuScene extends Phaser.Scene {
     okBtn.on("pointerdown", closePopup);
     overlay.on("pointerdown", closePopup);
   }
-}
 
 /* ================== GAME ================== */
 class GameScene extends Phaser.Scene {
