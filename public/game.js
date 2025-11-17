@@ -963,6 +963,8 @@ class MenuScene extends Phaser.Scene {
     overlay.on("pointerdown", closePopup);
   }
 
+}  
+  
 /* ================== GAME ================== */
 class GameScene extends Phaser.Scene {
   constructor(){ super("game"); }
