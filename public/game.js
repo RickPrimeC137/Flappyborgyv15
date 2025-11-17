@@ -56,6 +56,8 @@ const CLOUD_EXTRA_SCALE_X     = 1.25; // un peu plus large que l’écran pour �
 
 /* ===== Popup bienvenue (flag) ===== */
 const WELCOME_POPUP_KEY = "flappy_borgy_welcome_seen_v1";
+// Nouveau : flag de session (réapparaît à chaque relance / reload)
+let welcomeShownThisSession = false;
 
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
@@ -514,13 +516,10 @@ class MenuScene extends Phaser.Scene {
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
 
-    // === Popup de bienvenue (une seule fois) ===
-    let welcomeSeen = false;
-    try {
-      welcomeSeen = localStorage.getItem(WELCOME_POPUP_KEY) === "1";
-    } catch(e) {}
-    if (!welcomeSeen) {
+    // === Popup de bienvenue : 1 fois par session (réapparaît à chaque relance du jeu) ===
+    if (!welcomeShownThisSession) {
       this.showWelcomePopup();
+      welcomeShownThisSession = true;
     }
   }
 
@@ -605,138 +604,24 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
-  // *** NOUVELLE VERSION DU SHOP (avec nettoyage complet des éléments) ***
-  showShop(){
-    const W = this.scale.width, H = this.scale.height;
-    const depth = 650;
-
-    // on applique les récompenses de quêtes avant d'afficher les coins
-    const dataQ = loadQuests();
-    const isHard = this.game._hardMode === true;
-    applyQuestCoins(dataQ, isHard);
-
-    // tous les objets du shop seront stockés ici pour pouvoir les détruire proprement
-    const ui = [];
-
-    const panel = this.add.rectangle(W/2, H*0.5, W*0.8, H*0.55, 0x05252f, 0.96).setDepth(depth);
-    ui.push(panel);
-
-    const title = this.add.text(W/2, H*0.26, "Borgy Coins Shop", {
-      fontFamily:"Georgia,serif", fontSize:54, color:"#ffffff"
-    }).setOrigin(0.5).setDepth(depth+1);
-    ui.push(title);
-
-    const coinsNow = loadBorgyCoins();
-    const coinsText = this.add.text(W*0.5, H*0.33, `Tu as actuellement : ${coinsNow} 🪙`, {
-      fontFamily:"monospace", fontSize:30, color:"#cffff1", align:"center"
-    }).setOrigin(0.5).setDepth(depth+1);
-    ui.push(coinsText);
-
-    const infoText = this.add.text(W*0.5, H*0.38, "Choisis ton skin Borgy :", {
-      fontFamily:"monospace", fontSize:22, color:"#9be7ff", align:"center"
-    }).setOrigin(0.5).setDepth(depth+1);
-    ui.push(infoText);
-
-    let skinState = loadSkinState();
-    const buttonsById = {};
-    const startY = H*0.42;
-    const lineH  = 64;
-
-    const refreshButtons = () => {
-      skinState = loadSkinState();
-      coinsText.setText(`Tu as actuellement : ${loadBorgyCoins()} 🪙`);
-      skinState.skins.forEach(s => {
-        const btn = buttonsById[s.id];
-        if (!btn) return;
-        if (!s.owned){
-          btn.setText("Acheter");
-          btn.setBackgroundColor("#b45309");
-        } else if (skinState.selectedId === s.id){
-          btn.setText("Sélectionné");
-          btn.setBackgroundColor("#15803d");
-        } else {
-          btn.setText("Utiliser");
-          btn.setBackgroundColor("#0db187");
-        }
-      });
-    };
-
-    skinState.skins.forEach((skin, i) => {
-      const y = startY + i*lineH;
-      const priceStr = skin.price === 0 ? "Gratuit" : `${skin.price} 🪙`;
-
-      const nameTxt = this.add.text(W*0.16, y, skin.name, {
-        fontFamily:"monospace", fontSize:26, color:"#ffffff"
-      }).setOrigin(0,0.5).setDepth(depth+1);
-      ui.push(nameTxt);
-
-      const priceTxt = this.add.text(W*0.60, y, priceStr, {
-        fontFamily:"monospace", fontSize:22, color:"#ffedd5"
-      }).setOrigin(1,0.5).setDepth(depth+1);
-      ui.push(priceTxt);
-
-      const btn = this.add.text(W*0.62, y, "...", {
-        fontFamily:"monospace", fontSize:22, color:"#ffffff",
-        backgroundColor:"#b45309",
-        padding:{left:14,right:14,top:6,bottom:6}
-      }).setOrigin(0,0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-      ui.push(btn);
-
-      buttonsById[skin.id] = btn;
-
-      btn.on("pointerdown", () => {
-        const state = loadSkinState();
-        const s = state.skins.find(ss => ss.id === skin.id);
-        if (!s) return;
-
-        if (!s.owned){
-          const res = tryBuySkin(skin.id);
-          if (!res.ok && res.reason === "not_enough_coins"){
-            const warn = this.add.text(W*0.5, H*0.64, "Pas assez de Borgy Coins !", {
-              fontFamily:"monospace", fontSize:22, color:"#ffb4b4",
-              backgroundColor:"#7f1d1d",
-              padding:{left:16,right:16,top:6,bottom:6}
-            }).setOrigin(0.5).setDepth(depth+2);
-            ui.push(warn);
-            this.tweens.add({
-              targets: warn,
-              alpha: 0,
-              duration: 1200,
-              delay: 900,
-              onComplete: () => { try { warn.destroy(); } catch(e){} }
-            });
-            return;
-          }
-          // on sélectionne automatiquement le nouveau skin acheté
-          selectSkin(skin.id);
-        } else {
-          // simplement sélectionner le skin déjà possédé
-          selectSkin(skin.id);
-        }
-        refreshButtons();
-      });
-    });
-
-    refreshButtons();
-
-    const close = this.add.text(W/2, H*0.78, "Fermer", {
-      fontFamily:"monospace", fontSize:40, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10}
-    }).setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    ui.push(close);
-
-    const destroyAll = () => {
-      ui.forEach(o => { try { o.destroy(); } catch(e){} });
-    };
-    close.on("pointerdown", destroyAll);
-  }
-
-  // === Popup de bienvenue (icônes propres & petites) ===
+  // === Popup de bienvenue (icônes propres & petites, adaptée mobile) ===
   showWelcomePopup(){
     const W = this.scale.width;
     const H = this.scale.height;
     const depthOverlay = 880;
     const depthPanel   = 890;
+
+    const displayWidth  = this.scale.displaySize ? this.scale.displaySize.width  : (window.innerWidth  || W);
+    const displayHeight = this.scale.displaySize ? this.scale.displaySize.height : (window.innerHeight || H);
+    const isMobileLike = displayWidth < 800 || displayHeight > displayWidth;
+
+    const panelWidth  = isMobileLike ? W * 0.9  : W * 0.84;
+    const panelHeight = isMobileLike ? H * 0.86 : H * 0.78;
+
+    const titleFontSize = isMobileLike ? 36 : 42;
+    const bodyFontSize  = isMobileLike ? 20 : 22;
+    const endFontSize   = isMobileLike ? 20 : 22;
+    const buttonFontSize = isMobileLike ? 28 : 32;
 
     const elements = [];
 
@@ -747,7 +632,7 @@ class MenuScene extends Phaser.Scene {
     elements.push(overlay);
 
     // panneau principal
-    const panel = this.add.rectangle(W/2, H/2, W*0.84, H*0.78, 0x08313a, 0.96)
+    const panel = this.add.rectangle(W/2, H/2, panelWidth, panelHeight, 0x08313a, 0.96)
       .setDepth(depthPanel);
     elements.push(panel);
 
@@ -757,7 +642,7 @@ class MenuScene extends Phaser.Scene {
       "Bienvenue dans le jeu Flappy-Borgy !!!",
       {
         fontFamily: "Georgia,serif",
-        fontSize: 42,
+        fontSize: titleFontSize,
         color: "#ffffff",
         align: "center",
         wordWrap: { width: W*0.76 }
@@ -771,7 +656,7 @@ class MenuScene extends Phaser.Scene {
       "L'objectif est de passer entre les tuyaux pour faire des points\net battre le record ;",
       {
         fontFamily: "monospace",
-        fontSize: 22,
+        fontSize: bodyFontSize,
         color: "#e6fef9",
         align: "left",
         wordWrap: { width: W*0.68 }
@@ -780,9 +665,9 @@ class MenuScene extends Phaser.Scene {
     elements.push(intro);
 
     // paramètres de mise en page
-    const lineGap   = H * 0.055;
-    const iconSize  = W * 0.07;   // taille max ~70px sur 1024px de large
-    const iconX     = W * 0.14;   // colonne icônes
+    const lineGap   = isMobileLike ? H * 0.05 : H * 0.055;
+    const iconSize  = isMobileLike ? W * 0.06 : W * 0.07;   // taille max ~70px sur 1024px de large
+    const iconX     = isMobileLike ? W * 0.12 : W * 0.14;   // colonne icônes
     const textX     = W * 0.20;   // colonne texte
 
     let y = H * 0.32;
@@ -795,7 +680,7 @@ class MenuScene extends Phaser.Scene {
       "  Si tu es sur mobile un pouce suffit mais je te conseille les deux ;)",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:bodyFontSize,
         color:"#e6fef9",
         align:"left",
         wordWrap:{ width: W*0.68 - (textX - W*0.16) }
@@ -812,7 +697,7 @@ class MenuScene extends Phaser.Scene {
       "- Récupère des Borgy Coins pour acheter des skins.",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:bodyFontSize,
         color:"#e6fef9",
         align:"left",
         wordWrap:{ width: W*0.68 - (textX - W*0.16) }
@@ -840,7 +725,7 @@ class MenuScene extends Phaser.Scene {
       "  (elles s'adaptent le lendemain en fonction de ton score).",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:bodyFontSize,
         color:"#e6fef9",
         align:"left",
         wordWrap:{ width: W*0.68 - (textX - W*0.16) }
@@ -858,7 +743,7 @@ class MenuScene extends Phaser.Scene {
       "  pendant un temps limité.",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:bodyFontSize,
         color:"#e6fef9",
         align:"left",
         wordWrap:{ width: W*0.68 - (textX - W*0.16) }
@@ -885,7 +770,7 @@ class MenuScene extends Phaser.Scene {
       "- Attention au robot vert qui sort des tuyaux.",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:bodyFontSize,
         color:"#e6fef9",
         align:"left",
         wordWrap:{ width: W*0.68 - (textX - W*0.16) }
@@ -915,7 +800,7 @@ class MenuScene extends Phaser.Scene {
       "  dans ce mode).",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:bodyFontSize,
         color:"#e6fef9",
         align:"left",
         wordWrap:{ width: W*0.68 - (textX - W*0.16) }
@@ -926,12 +811,12 @@ class MenuScene extends Phaser.Scene {
     // Texte final
     const txtEnd = this.add.text(
       W*0.16,
-      H*0.70,
+      isMobileLike ? H*0.68 : H*0.70,
       "Voilà, fais-toi plaisir et LFG BORGY <3\n\n" +
       "Fait par un fan dévoué corps et âme à la team BORGY <3",
       {
         fontFamily:"monospace",
-        fontSize:22,
+        fontSize:endFontSize,
         color:"#f5fffb",
         align:"left",
         wordWrap:{ width: W*0.68 }
@@ -946,7 +831,7 @@ class MenuScene extends Phaser.Scene {
       "OK, c'est parti !",
       {
         fontFamily:"monospace",
-        fontSize:32,
+        fontSize:buttonFontSize,
         color:"#ffffff",
         backgroundColor:"#0db187",
         padding:{left:24,right:24,top:10,bottom:10}
@@ -955,7 +840,6 @@ class MenuScene extends Phaser.Scene {
     elements.push(okBtn);
 
     const closePopup = () => {
-      try { localStorage.setItem(WELCOME_POPUP_KEY, "1"); } catch(e) {}
       elements.forEach(el => { try { el.destroy(); } catch(e){} });
     };
 
@@ -963,8 +847,8 @@ class MenuScene extends Phaser.Scene {
     overlay.on("pointerdown", closePopup);
   }
 
-}  
-  
+}
+
 /* ================== GAME ================== */
 class GameScene extends Phaser.Scene {
   constructor(){ super("game"); }
@@ -1054,11 +938,13 @@ class GameScene extends Phaser.Scene {
         this.bottomCloud.setTint(this._stormBaseBottomTint);
 
         this.time.addEvent({
-          delay: 2600,
+          // Moins fréquent : délai plus long
+          delay: 4200,
           loop: true,
           callback: () => {
             if (this.isOver) return;
-            if (Phaser.Math.Between(0, 100) < 60) {
+            // Moins de probabilité d'éclair
+            if (Phaser.Math.Between(0, 100) < 30) {
               this._flashStormClouds();
             }
           }
@@ -1173,10 +1059,12 @@ class GameScene extends Phaser.Scene {
     const baseTop    = this._stormBaseTopTint    ?? this.topCloud.tintTopLeft;
     const baseBottom = this._stormBaseBottomTint ?? this.bottomCloud.tintTopLeft;
 
-    this.topCloud.setTint(0xf9fafb);
-    this.bottomCloud.setTint(0xf9fafb);
+    // Moins brillant : gris clair plutôt que blanc pur
+    this.topCloud.setTint(0xe5e7eb);
+    this.bottomCloud.setTint(0x1f2937);
 
-    this.cameras.main.flash(120, 255, 255, 255, false);
+    // Flash caméra plus doux (durée + intensité réduites)
+    this.cameras.main.flash(90, 210, 220, 240, false);
 
     this.time.delayedCall(120, () => {
       if (!this.topCloud || !this.bottomCloud) return;
