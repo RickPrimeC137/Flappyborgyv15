@@ -54,6 +54,9 @@ const CLOUD_TOP_HEIGHT_PCT    = 0.11; // ~11% de la hauteur en haut
 const CLOUD_BOTTOM_HEIGHT_PCT = 0.22; // ~22% de la hauteur en bas (plus large)
 const CLOUD_EXTRA_SCALE_X     = 1.25; // un peu plus large que l’écran pour éviter les trous sur les côtés
 
+/* ===== Popup bienvenue (flag) ===== */
+const WELCOME_POPUP_KEY = "flappy_borgy_welcome_seen_v1";
+
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
   const gm = scene.game;
@@ -511,8 +514,14 @@ class MenuScene extends Phaser.Scene {
     this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
 
-    // === Popup de bienvenue au-dessus du menu ===
-    this.showWelcomePopup();
+    // === Popup de bienvenue (une seule fois) ===
+    let welcomeSeen = false;
+    try {
+      welcomeSeen = localStorage.getItem(WELCOME_POPUP_KEY) === "1";
+    } catch(e) {}
+    if (!welcomeSeen) {
+      this.showWelcomePopup();
+    }
   }
 
   makeBtn(x,y,label,cb){
@@ -722,23 +731,27 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
-  // === Popup de bienvenue avant d'utiliser le menu ===
+  // === Popup de bienvenue (avec icônes) ===
   showWelcomePopup(){
     const W = this.scale.width;
     const H = this.scale.height;
     const depthOverlay = 880;
     const depthPanel   = 890;
 
+    const elements = [];
+
     const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
       .setDepth(depthOverlay)
       .setInteractive(); // bloque les clics sur le menu derrière
+    elements.push(overlay);
 
     const panel = this.add.rectangle(W/2, H/2, W*0.84, H*0.78, 0x08313a, 0.96)
       .setDepth(depthPanel);
+    elements.push(panel);
 
     const title = this.add.text(
       W/2,
-      H*0.23,
+      H*0.20,
       "Bienvenue dans le jeu Flappy-Borgy !!!",
       {
         fontFamily: "Georgia,serif",
@@ -748,25 +761,12 @@ class MenuScene extends Phaser.Scene {
         wordWrap: { width: W*0.76 }
       }
     ).setOrigin(0.5).setDepth(depthPanel+1);
+    elements.push(title);
 
-    const msg =
-      "L'objectif est de passer entre les tuyaux pour faire des points et battre le record ;\n\n" +
-      "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC. " +
-      "Si tu es sur mobile un pouce suffit mais je te conseille les deux ;)\n\n" +
-      "- Récupère des Borgy Coins pour acheter des skins.\n\n" +
-      "- Des quêtes évolutives et journalières sont disponibles (elles s'adaptent le lendemain en fonction de ton score).\n\n" +
-      "- Le logo bonus vert apparaît de temps en temps et double le score pendant un temps limité.\n\n" +
-      "- Attention au robot vert qui sort des tuyaux.\n\n" +
-      "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés dans ce mode).\n\n" +
-      "- Tu peux voter pour ton même coin BORGY préféré directement depuis le bouton \"Voter pour BORGY\".\n\n" +
-      "- Tu as accès au site BorgySol.com directement aussi si tu veux.\n\n" +
-      "Voilà, fais-toi plaisir et LFG BORGY <3\n\n" +
-      "Fait par un fan dévoué corps et âme à la team BORGY <3";
-
-    const body = this.add.text(
+    const intro = this.add.text(
       W*0.16,
-      H*0.32,
-      msg,
+      H*0.26,
+      "L'objectif est de passer entre les tuyaux pour faire des points\net battre le record ;",
       {
         fontFamily: "monospace",
         fontSize: 22,
@@ -775,26 +775,163 @@ class MenuScene extends Phaser.Scene {
         wordWrap: { width: W*0.68 }
       }
     ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(intro);
+
+    const lineGap = H * 0.045;
+    let y = H*0.33;
+
+    // Contrôles
+    const txtControls = this.add.text(
+      W*0.16,
+      y,
+      "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC.\n  " +
+      "Si tu es sur mobile un pouce suffit mais je te conseille les deux ;)",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#e6fef9",
+        align:"left",
+        wordWrap:{ width: W*0.68 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtControls);
+    y += lineGap * 1.3;
+
+    // Borgy Coins + icône pièce
+    const txtCoins = this.add.text(
+      W*0.19,
+      y,
+      "- Récupère des Borgy Coins pour acheter des skins.",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#e6fef9",
+        align:"left",
+        wordWrap:{ width: W*0.65 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtCoins);
+
+    const coinIcon = this.add.image(
+      W*0.15,
+      y + 14,
+      "borgy_coin"
+    ).setDepth(depthPanel+2).setScale(0.20).setOrigin(0.5);
+    elements.push(coinIcon);
+
+    y += lineGap;
+
+    // Quêtes
+    const txtQuests = this.add.text(
+      W*0.16,
+      y,
+      "- Des quêtes évolutives et journalières sont disponibles\n  (elles s'adaptent le lendemain en fonction de ton score).",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#e6fef9",
+        align:"left",
+        wordWrap:{ width: W*0.68 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtQuests);
+    y += lineGap * 1.3;
+
+    // Bonus vert + icône bonus
+    const txtBonus = this.add.text(
+      W*0.19,
+      y,
+      "- Le logo bonus vert apparaît de temps en temps et double le score\n  pendant un temps limité.",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#e6fef9",
+        align:"left",
+        wordWrap:{ width: W*0.65 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtBonus);
+
+    const bonusIcon = this.add.image(
+      W*0.15,
+      y + 16,
+      "bonus_sb"
+    ).setDepth(depthPanel+2).setScale(0.20).setOrigin(0.5);
+    elements.push(bonusIcon);
+
+    y += lineGap * 1.3;
+
+    // Robot vert + icône robot
+    const txtRobot = this.add.text(
+      W*0.19,
+      y,
+      "- Attention au robot vert qui sort des tuyaux.",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#e6fef9",
+        align:"left",
+        wordWrap:{ width: W*0.65 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtRobot);
+
+    const robotIcon = this.add.image(
+      W*0.15,
+      y + 14,
+      "sb_robot"
+    ).setDepth(depthPanel+2).setScale(0.16).setOrigin(0.5);
+    elements.push(robotIcon);
+
+    y += lineGap;
+
+    // Mode Hard
+    const txtHard = this.add.text(
+      W*0.16,
+      y,
+      "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton\n  Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés\n  dans ce mode).",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#e6fef9",
+        align:"left",
+        wordWrap:{ width: W*0.68 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtHard);
+
+    // Texte final
+    const txtEnd = this.add.text(
+      W*0.16,
+      H*0.70,
+      "Voilà, fais-toi plaisir et LFG BORGY <3\n\nFait par un fan dévoué corps et âme à la team BORGY <3",
+      {
+        fontFamily:"monospace",
+        fontSize:22,
+        color:"#f5fffb",
+        align:"left",
+        wordWrap:{ width: W*0.68 }
+      }
+    ).setOrigin(0,0).setDepth(depthPanel+1);
+    elements.push(txtEnd);
 
     const okBtn = this.add.text(
       W/2,
-      H*0.82,
+      H*0.84,
       "OK, c'est parti !",
       {
         fontFamily:"monospace",
-        fontSize: 32,
+        fontSize:32,
         color:"#ffffff",
         backgroundColor:"#0db187",
         padding:{left:24,right:24,top:10,bottom:10}
       }
-    ).setOrigin(0.5).setDepth(depthPanel+1).setInteractive({useHandCursor:true});
+    ).setOrigin(0.5).setDepth(depthPanel+2).setInteractive({useHandCursor:true});
+    elements.push(okBtn);
 
     const closePopup = () => {
-      overlay.destroy();
-      panel.destroy();
-      title.destroy();
-      body.destroy();
-      okBtn.destroy();
+      try { localStorage.setItem(WELCOME_POPUP_KEY, "1"); } catch(e) {}
+      elements.forEach(el => { try { el.destroy(); } catch(e){} });
     };
 
     okBtn.on("pointerdown", closePopup);
@@ -823,6 +960,9 @@ class GameScene extends Phaser.Scene {
 
     this.borgyCoinCount = loadBorgyCoins();
     this.nextCoinAt = Phaser.Math.Between(3, 7);
+
+    this._stormBaseTopTint = null;
+    this._stormBaseBottomTint = null;
   }
 
   create(){
@@ -878,6 +1018,26 @@ class GameScene extends Phaser.Scene {
 
       this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
       this.bottomCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
+
+      // 🌩️ Nuages orageux + éclairs en mode Hard
+      if (isHard) {
+        this._stormBaseTopTint    = 0x4b5563; // gris orage
+        this._stormBaseBottomTint = 0x111827; // quasi noir
+
+        this.topCloud.setTint(this._stormBaseTopTint);
+        this.bottomCloud.setTint(this._stormBaseBottomTint);
+
+        this.time.addEvent({
+          delay: 2600,
+          loop: true,
+          callback: () => {
+            if (this.isOver) return;
+            if (Phaser.Math.Between(0, 100) < 60) {
+              this._flashStormClouds();
+            }
+          }
+        });
+      }
     }
     // ===== Fin nuages =====
 
@@ -979,6 +1139,24 @@ class GameScene extends Phaser.Scene {
     if (this.game._hardMode === true) {
       ensureBgm(this, { forceKey: "bgm_hard" });
     }
+  }
+
+  _flashStormClouds(){
+    if (!this.topCloud || !this.bottomCloud) return;
+
+    const baseTop    = this._stormBaseTopTint    ?? this.topCloud.tintTopLeft;
+    const baseBottom = this._stormBaseBottomTint ?? this.bottomCloud.tintTopLeft;
+
+    this.topCloud.setTint(0xf9fafb);
+    this.bottomCloud.setTint(0xf9fafb);
+
+    this.cameras.main.flash(120, 255, 255, 255, false);
+
+    this.time.delayedCall(120, () => {
+      if (!this.topCloud || !this.bottomCloud) return;
+      this.topCloud.setTint(baseTop);
+      this.bottomCloud.setTint(baseBottom);
+    });
   }
 
   onTap(){
