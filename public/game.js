@@ -604,6 +604,186 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
+  // *** VERSION STABLE DU SHOP ***
+  showShop(){
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 650;
+
+    // On crédite d’abord les récompenses de quêtes, au cas où
+    try {
+      const dataQ = loadQuests();
+      const isHard = this.game._hardMode === true;
+      applyQuestCoins(dataQ, isHard);
+    } catch (e) {
+      console.warn("Quest reward error in shop:", e);
+    }
+
+    // Tous les éléments du shop pour pouvoir les détruire proprement
+    const elements = [];
+
+    // Fond sombre qui bloque les clics derrière
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.45)
+      .setDepth(depth)
+      .setInteractive();
+    elements.push(overlay);
+
+    // Panneau principal
+    const panel = this.add.rectangle(W/2, H*0.5, W*0.8, H*0.55, 0x05252f, 0.96)
+      .setDepth(depth+1);
+    elements.push(panel);
+
+    const title = this.add.text(W/2, H*0.26, "Borgy Coins Shop", {
+      fontFamily: "Georgia,serif",
+      fontSize: 54,
+      color: "#ffffff"
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(title);
+
+    const coinsText = this.add.text(W*0.5, H*0.33, "", {
+      fontFamily: "monospace",
+      fontSize: 30,
+      color: "#cffff1",
+      align: "center"
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(coinsText);
+
+    const infoText = this.add.text(W*0.5, H*0.38, "Choisis ton skin Borgy :", {
+      fontFamily: "monospace",
+      fontSize: 22,
+      color: "#9be7ff",
+      align: "center"
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(infoText);
+
+    // État des skins & boutons
+    let skinState = loadSkinState();
+    const buttonsById = {};
+    const startY = H * 0.42;
+    const lineH  = 64;
+
+    const refreshCoinsText = () => {
+      const coinsNow = loadBorgyCoins() || 0;
+      coinsText.setText(`Tu as actuellement : ${coinsNow} 🪙`);
+    };
+
+    const refreshButtons = () => {
+      try {
+        skinState = loadSkinState();
+        refreshCoinsText();
+        if (!skinState || !Array.isArray(skinState.skins)) return;
+
+        skinState.skins.forEach(skin => {
+          const btn = buttonsById[skin.id];
+          if (!btn) return;
+          if (!skin.owned) {
+            btn.setText("Acheter");
+            btn.setBackgroundColor("#b45309");
+          } else if (skinState.selectedId === skin.id) {
+            btn.setText("Sélectionné");
+            btn.setBackgroundColor("#15803d");
+          } else {
+            btn.setText("Utiliser");
+            btn.setBackgroundColor("#0db187");
+          }
+        });
+      } catch (e) {
+        console.warn("refreshButtons error:", e);
+      }
+    };
+
+    // Création des lignes de skins
+    if (skinState && Array.isArray(skinState.skins)) {
+      skinState.skins.forEach((skin, i) => {
+        const y = startY + i * lineH;
+        const priceStr = skin.price === 0 ? "Gratuit" : `${skin.price} 🪙`;
+
+        const nameTxt = this.add.text(W*0.16, y, skin.name, {
+          fontFamily: "monospace",
+          fontSize: 26,
+          color: "#ffffff"
+        }).setOrigin(0, 0.5).setDepth(depth+2);
+        elements.push(nameTxt);
+
+        const priceTxt = this.add.text(W*0.60, y, priceStr, {
+          fontFamily: "monospace",
+          fontSize: 22,
+          color: "#ffedd5"
+        }).setOrigin(1, 0.5).setDepth(depth+2);
+        elements.push(priceTxt);
+
+        const btn = this.add.text(W*0.62, y, "...", {
+          fontFamily: "monospace",
+          fontSize: 22,
+          color: "#ffffff",
+          backgroundColor: "#b45309",
+          padding: { left: 14, right: 14, top: 6, bottom: 6 }
+        }).setOrigin(0, 0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+        elements.push(btn);
+
+        buttonsById[skin.id] = btn;
+
+        btn.on("pointerdown", () => {
+          try {
+            const state = loadSkinState();
+            if (!state || !Array.isArray(state.skins)) return;
+            const s = state.skins.find(ss => ss.id === skin.id);
+            if (!s) return;
+
+            if (!s.owned) {
+              const res = tryBuySkin(skin.id);
+              if (!res.ok && res.reason === "not_enough_coins") {
+                const warn = this.add.text(W*0.5, H*0.64, "Pas assez de Borgy Coins !", {
+                  fontFamily: "monospace",
+                  fontSize: 22,
+                  color: "#ffb4b4",
+                  backgroundColor: "#7f1d1d",
+                  padding: { left: 16, right: 16, top: 6, bottom: 6 }
+                }).setOrigin(0.5).setDepth(depth+3);
+                elements.push(warn);
+                this.tweens.add({
+                  targets: warn,
+                  alpha: 0,
+                  duration: 1200,
+                  delay: 900,
+                  onComplete: () => { try { warn.destroy(); } catch(e){} }
+                });
+                return;
+              }
+              // On sélectionne automatiquement le skin acheté
+              selectSkin(skin.id);
+            } else {
+              // Simple sélection d’un skin déjà possédé
+              selectSkin(skin.id);
+            }
+
+            refreshButtons();
+          } catch (e) {
+            console.warn("click skin error:", e);
+          }
+        });
+      });
+    }
+
+    refreshButtons();
+
+    const close = this.add.text(W/2, H*0.78, "Fermer", {
+      fontFamily: "monospace",
+      fontSize: 40,
+      color: "#fff",
+      backgroundColor: "#0db187",
+      padding: { left: 26, right: 26, top: 10, bottom: 10 }
+    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+    elements.push(close);
+
+    const destroyAll = () => {
+      elements.forEach(el => { try { el.destroy(); } catch(e){} });
+    };
+
+    close.on("pointerdown", destroyAll);
+    overlay.on("pointerdown", destroyAll);
+  }
+
   // === Popup de bienvenue (icônes propres & petites, adaptée mobile) ===
   showWelcomePopup(){
     const W = this.scale.width;
