@@ -1384,7 +1384,7 @@ class GameScene extends Phaser.Scene {
     const dy = c.y - this.player.y;
     const distSq = dx * dx + dy * dy;
 
-    const pickupRadius = 145; // rayon d’aimant, tu peux augmenter si tu veux
+    const pickupRadius = 130; // rayon d’aimant, tu peux augmenter si tu veux
 
     if (distSq <= pickupRadius * pickupRadius) {
       const cx = c.x;
