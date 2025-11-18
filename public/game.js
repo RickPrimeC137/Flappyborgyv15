@@ -1161,12 +1161,28 @@ class GameScene extends Phaser.Scene {
     }
 
     const skinKey = getSelectedSkinKey();
+
+    // === Égalisation de la taille visuelle de tous les skins sur la base du borgy par défaut ===
+    let finalScale = PLAYER_SCALE;
+    try {
+      const baseTex = this.textures.get("borgy").getSourceImage?.();
+      const skinTex = this.textures.get(skinKey).getSourceImage?.();
+      if (baseTex && skinTex && skinTex.height > 0) {
+        const ratio = baseTex.height / skinTex.height;
+        finalScale = PLAYER_SCALE * ratio;
+      }
+    } catch (e) {
+      finalScale = PLAYER_SCALE;
+    }
+
     this.player = this.physics.add.sprite(
       W*0.18,
       H*((PLAYFIELD_TOP_PCT+PLAYFIELD_BOT_PCT)/2),
       skinKey
     )
-      .setScale(PLAYER_SCALE).setDepth(10).setCollideWorldBounds(true);
+      .setScale(finalScale)
+      .setDepth(10)
+      .setCollideWorldBounds(true);
     this.player.body.setAllowGravity(false);
     const pw = this.player.displayWidth, ph = this.player.displayHeight;
     this.player.body.setSize(pw*0.50, ph*0.50, true).setOffset(pw*0.20, ph*0.22);
@@ -1511,7 +1527,7 @@ class GameScene extends Phaser.Scene {
     this.onCollectBorgyCoin(cx, cy);
   }
 
-  // ====== Spawn d’une pièce avec grosse hitbox carrée ======
+  // ====== Spawn d’une pièce avec grosse hitbox type bonus SwissBorg ======
   spawnBorgyCoin(x, y, vx){
     const coin = this.physics.add.image(x, y, "borgy_coin")
       .setDepth(8)
@@ -1521,13 +1537,8 @@ class GameScene extends Phaser.Scene {
     coin.body.setAllowGravity(false);
     coin.body.setVelocityX(vx);
 
-    // HITBOX CARRÉE, LARGE, CENTRÉE SUR LA PIÈCE
-    const side = Math.max(coin.displayWidth, coin.displayHeight) * 3.0; // 3x plus large que le sprite
-    coin.body.setSize(side, side);
-    coin.body.setOffset(
-      coin.displayWidth  / 2 - side / 2,
-      coin.displayHeight / 2 - side / 2
-    );
+    // Hitbox large, comme le bonus SwissBorg : 3x la taille affichée, recentrée automatiquement
+    coin.body.setSize(coin.displayWidth * 3.0, coin.displayHeight * 3.0, true);
 
     this.borgyCoins.add(coin);
 
