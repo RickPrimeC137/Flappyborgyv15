@@ -101,7 +101,7 @@ const DIFF = {
   delayDelta: -150,
   minSpeed: -380,
   minDelay: 1250,
-  cooldownMs: 260
+  cooldownMs: 265
 };
 const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 
@@ -376,7 +376,7 @@ class PreloadScene extends Phaser.Scene {
     vid.src = "assets/intro.mp4";
     vid.autoplay = true; vid.loop = true; vid.muted = true; vid.playsInline = true;
     Object.assign(vid.style,{
-      position:"absolute",left:"50%",top:"15%",transform:"translateX(-50%)",
+      position:"absolute",left:"50%",top:"25%",transform:"translateX(-50%)",
       width:"62%",maxWidth:"520px",borderRadius:"14px",zIndex:"9999",pointerEvents:"none"
     });
     root.appendChild(vid); this._loadingVideoEl = vid;
@@ -1260,7 +1260,7 @@ class GameScene extends Phaser.Scene {
       this.player.body.setAllowGravity(true);
       this.player.setGravityY(PROFILE.gravity);
 
-      this.spawnPair(true);
+      this.spawnPair(false);
       this.lastSpawnMs = this.time.now;
       this.nextSpawnAt = this.time.now + this.curDelay;
 
