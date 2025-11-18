@@ -1593,7 +1593,7 @@ class GameScene extends Phaser.Scene {
 spawnBorgyCoin(x, y, vx){
   const coin = this.physics.add.image(x, y, "borgy_coin")
     .setDepth(8)
-    .setScale(0.10) // taille VISUELLE du coin (tu peux l’augmenter si tu veux)
+    .setScale(0.09) // taille VISUELLE du coin (tu peux l’augmenter si tu veux)
     .setImmovable(true);
 
   coin.body.setAllowGravity(false);
@@ -1606,7 +1606,7 @@ spawnBorgyCoin(x, y, vx){
     const bonusImg = bonusTex.getSourceImage?.();
     if (bonusImg) {
       const bonusDisplayW = bonusImg.width * 0.55; // même scale que dans spawnPair()
-      targetSide = bonusDisplayW * 3.0;           // même facteur que bonus.body.setSize(...)
+      targetSide = bonusDisplayW * 5.0;           // même facteur que bonus.body.setSize(...)
     }
   } catch (e) {
     console.warn("calc bonus hitbox error", e);
