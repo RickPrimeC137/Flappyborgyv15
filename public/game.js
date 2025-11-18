@@ -1369,7 +1369,32 @@ class GameScene extends Phaser.Scene {
     this.pipes.children.iterate(p => { if (p && p.active && (p.x + p.displayWidth*0.5 < -KILL_MARGIN)) p.destroy(); });
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
-    this.borgyCoins.children.iterate(c => { if (c && c.active && c.x < -KILL_MARGIN) c.destroy(); });
+    this.borgyCoins.children.iterate(c => {
+  if (!c || !c.active) return;
+
+  // Si la pièce sort de l’écran, on la détruit
+  if (c.x < -KILL_MARGIN) {
+    c.destroy();
+    return;
+  }
+
+  // --- Zone spéciale autour du joueur : ramassage auto ---
+  if (this.player && this.player.active) {
+    const dx = c.x - this.player.x;
+    const dy = c.y - this.player.y;
+    const distSq = dx * dx + dy * dy;
+
+    const pickupRadius = 160; // rayon d’aimant, tu peux augmenter si tu veux
+
+    if (distSq <= pickupRadius * pickupRadius) {
+      const cx = c.x;
+      const cy = c.y;
+      c.disableBody(true, true);
+      this.onCollectBorgyCoin(cx, cy);
+    }
+  }
+});
+
     this.bots.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
     if (this.multiplierActive && this.bonusFollower && this.player.active){
