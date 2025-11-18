@@ -873,27 +873,34 @@ class MenuScene extends Phaser.Scene {
             console.warn("click skin error:", e);
           }
         });
+
+        // Texte spécifique sous certains skins
+        let noteLabel = "";
+        if (skin.id === "borgy_gold") {
+          noteLabel = "Borgy Coins x5";
+        } else if (skin.id === "borgy_emeraude") {
+          noteLabel = "Bonus Swissbord x3";
+        } else if (skin.id === "borgy_diamant") {
+          noteLabel = "1vies supplémentaire";
+        }
+
+        if (noteLabel) {
+          const noteTxt = this.add.text(
+            W * 0.16,
+            y + 22,
+            noteLabel,
+            {
+              fontFamily: "monospace",
+              fontSize: 18,
+              color: "#e5f2ff"
+            }
+          ).setOrigin(0, 0.5).setDepth(depth+2);
+          elements.push(noteTxt);
+        }
       });
     }
 
     refreshButtons();
-
-    // Notes spécifiques des nouveaux skins
-    const notes = this.add.text(
-      W*0.5,
-      H*0.70,
-      "Borgy Gold : les pièces ramassées en jeu valent x5 (hors quêtes).\n" +
-      "Borgy Émeraude : le bonus SwissBorg multiplie le score par 3 pendant sa durée.\n" +
-      "Borgy Diamant : offre une réanimation unique par partie.",
-      {
-        fontFamily: "monospace",
-        fontSize: 18,
-        color: "#e5f2ff",
-        align: "center",
-        wordWrap: { width: W*0.72 }
-      }
-    ).setOrigin(0.5).setDepth(depth+2);
-    elements.push(notes);
 
     const close = this.add.text(W/2, H*0.78, "Fermer", {
       fontFamily: "monospace",
