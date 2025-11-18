@@ -366,10 +366,49 @@ function tryBuySkin(id){
   return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
 }
 
-// Calcule un scale pour qu'un skin ait la même taille visuelle que le borgy de base
-function computeSkinScale(textures, skinKey){
+// Retourne le rectangle utile (sans les marges transparentes) d'une image
+function getVisibleBounds(img) {
+  try {
+    const w = img.width | 0;
+    const h = img.height | 0;
+    if (!w || !h) return null;
+
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
+
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    const threshold = 10; // alpha > 10 = pixel visible
+
+    for (let y = 0; y < h; y++) {
+      let row = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        const a = data[row + x * 4 + 3];
+        if (a > threshold) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
+
+    if (maxX < minX || maxY < minY) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  } catch (e) {
+    console.warn("getVisibleBounds error", e);
+    return null;
+  }
+}
+
+// Calcule un scale pour qu'un skin ait la même taille VISUELLE que le borgy de base
+function computeSkinScale(textures, skinKey) {
   const baseKey = "borgy"; // borgy_ingame.png (sprite de référence)
-  try{
+
+  try {
     const baseTex = textures.get(baseKey);
     const curTex  = textures.get(skinKey);
     if (!baseTex || !curTex) return PLAYER_SCALE;
@@ -378,13 +417,24 @@ function computeSkinScale(textures, skinKey){
     const curImg  = curTex.getSourceImage();
     if (!baseImg || !curImg) return PLAYER_SCALE;
 
-    const refH = baseImg.height;
-    const curH = curImg.height;
-    if (!refH || !curH) return PLAYER_SCALE;
+    const baseBounds = getVisibleBounds(baseImg);
+    const curBounds  = getVisibleBounds(curImg);
 
-    const ratio = refH / curH;
-    return PLAYER_SCALE * ratio;
-  }catch(e){
+    // si on n'arrive pas à lire les pixels, on retombe sur le ratio de hauteur brute
+    let ratio;
+    if (baseBounds && curBounds) {
+      ratio = (baseBounds.h || baseImg.height) / (curBounds.h || curImg.height);
+    } else {
+      ratio = baseImg.height / curImg.height;
+    }
+
+    let scale = PLAYER_SCALE * ratio;
+    if (!Number.isFinite(scale)) scale = PLAYER_SCALE;
+
+    // on évite les valeurs totalement aberrantes
+    scale = Phaser.Math.Clamp(scale, PLAYER_SCALE * 0.6, PLAYER_SCALE * 1.8);
+    return scale;
+  } catch (e) {
     console.warn("computeSkinScale error", e);
     return PLAYER_SCALE;
   }
