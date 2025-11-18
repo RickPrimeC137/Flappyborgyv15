@@ -306,11 +306,40 @@ function loadSkinState(){
     if (raw){
       const data = JSON.parse(raw);
       if (data && Array.isArray(data.skins) && data.skins.length){
+
+        // === Fusionne l’état existant avec SKINS_DEF pour ajouter les nouveaux skins ===
+        const existingIds = new Set(data.skins.map(s => s.id));
+
+        SKINS_DEF.forEach(def => {
+          if (!existingIds.has(def.id)) {
+            data.skins.push({
+              id: def.id,
+              key: def.key,
+              name: def.name,
+              price: def.price,
+              owned: !!def.ownedByDefault,
+              selected: false
+            });
+          }
+        });
+
+        // Assure la cohérence de selectedId / selected
+        if (!data.selectedId || !data.skins.some(s => s.id === data.selectedId && s.owned)) {
+          const fallback = data.skins.find(s => s.owned) || data.skins[0];
+          if (fallback) {
+            data.selectedId = fallback.id;
+          }
+        }
+        data.skins.forEach(s => { s.selected = (s.id === data.selectedId); });
+
+        // Sauvegarde l’état migré
+        saveSkinState(data);
         return data;
       }
     }
   }catch(e){}
-  // init par défaut
+
+  // === Cas où aucun état n’existe encore : init avec tous les skins de SKINS_DEF ===
   const skins = SKINS_DEF.map(s => ({
     id: s.id,
     key: s.key,
@@ -323,28 +352,6 @@ function loadSkinState(){
   const first = skins.find(s => s.id === selectedId);
   if (first) first.selected = true;
   const data = { skins, selectedId };
-  saveSkinState(data);
-  return data;
-}
-
-function saveSkinState(data){
-  try{ localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data)); }catch(e){}
-}
-
-function getSelectedSkinKey(){
-  const data = loadSkinState();
-  const found = data.skins.find(s => s.id === data.selectedId && s.owned);
-  if (found) return found.key;
-  const def = SKINS_DEF[0];
-  return def ? def.key : "borgy";
-}
-
-function selectSkin(id){
-  const data = loadSkinState();
-  const skin = data.skins.find(s => s.id === id && s.owned);
-  if (!skin) return data;
-  data.selectedId = id;
-  data.skins.forEach(s => { s.selected = (s.id === id); });
   saveSkinState(data);
   return data;
 }
