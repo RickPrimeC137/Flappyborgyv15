@@ -366,6 +366,30 @@ function tryBuySkin(id){
   return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
 }
 
+// Calcule un scale pour qu'un skin ait la même taille visuelle que le borgy de base
+function computeSkinScale(textures, skinKey){
+  const baseKey = "borgy"; // borgy_ingame.png (sprite de référence)
+  try{
+    const baseTex = textures.get(baseKey);
+    const curTex  = textures.get(skinKey);
+    if (!baseTex || !curTex) return PLAYER_SCALE;
+
+    const baseImg = baseTex.getSourceImage();
+    const curImg  = curTex.getSourceImage();
+    if (!baseImg || !curImg) return PLAYER_SCALE;
+
+    const refH = baseImg.height;
+    const curH = curImg.height;
+    if (!refH || !curH) return PLAYER_SCALE;
+
+    const ratio = refH / curH;
+    return PLAYER_SCALE * ratio;
+  }catch(e){
+    console.warn("computeSkinScale error", e);
+    return PLAYER_SCALE;
+  }
+}
+
 /* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
@@ -1161,19 +1185,7 @@ class GameScene extends Phaser.Scene {
     }
 
     const skinKey = getSelectedSkinKey();
-
-    // === Égalisation de la taille visuelle de tous les skins sur la base du borgy par défaut ===
-    let finalScale = PLAYER_SCALE;
-    try {
-      const baseTex = this.textures.get("borgy").getSourceImage?.();
-      const skinTex = this.textures.get(skinKey).getSourceImage?.();
-      if (baseTex && skinTex && skinTex.height > 0) {
-        const ratio = baseTex.height / skinTex.height;
-        finalScale = PLAYER_SCALE * ratio;
-      }
-    } catch (e) {
-      finalScale = PLAYER_SCALE;
-    }
+    const finalScale = computeSkinScale(this.textures, skinKey);
 
     this.player = this.physics.add.sprite(
       W*0.18,
