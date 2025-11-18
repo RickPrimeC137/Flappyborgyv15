@@ -400,6 +400,26 @@ function tryBuySkin(id){
   return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
 }
 
+// Essaie d'acheter un skin, renvoie { ok, reason, coinsLeft, data }
+function tryBuySkin(id){
+  const data = loadSkinState();
+  const skin = data.skins.find(s => s.id === id);
+  if (!skin) return { ok:false, reason:"unknown_skin", coinsLeft:loadBorgyCoins(), data };
+  if (skin.owned){
+    return { ok:true, reason:"already_owned", coinsLeft:loadBorgyCoins(), data };
+  }
+  const coins = loadBorgyCoins();
+  if (coins < skin.price){
+    return { ok:false, reason:"not_enough_coins", coinsLeft:coins, data };
+  }
+  const newCoins = coins - skin.price;
+  saveBorgyCoins(newCoins);
+  skin.owned = true;
+  data.coinsSpent = (data.coinsSpent || 0) + skin.price;
+  saveSkinState(data);
+  return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
+}
+
 // Retourne le rectangle utile (sans les marges transparentes) d'une image
 function getVisibleBounds(img) {
   try {
