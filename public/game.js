@@ -1589,30 +1589,44 @@ class GameScene extends Phaser.Scene {
     this.onCollectBorgyCoin(cx, cy);
   }
 
-  // ====== Spawn d’une pièce avec grosse hitbox type bonus SwissBorg ======
-  spawnBorgyCoin(x, y, vx){
-    const coin = this.physics.add.image(x, y, "borgy_coin")
-      .setDepth(8)
-      .setScale(0.10)
-      .setImmovable(true);
+  // ====== Spawn d’une pièce avec hitbox identique au bonus SwissBorg ======
+spawnBorgyCoin(x, y, vx){
+  const coin = this.physics.add.image(x, y, "borgy_coin")
+    .setDepth(8)
+    .setScale(0.10) // taille VISUELLE du coin (tu peux l’augmenter si tu veux)
+    .setImmovable(true);
 
-    coin.body.setAllowGravity(false);
-    coin.body.setVelocityX(vx);
+  coin.body.setAllowGravity(false);
+  coin.body.setVelocityX(vx);
 
-    // Hitbox large, comme le bonus SwissBorg : 3x la taille affichée, recentrée automatiquement
-    coin.body.setSize(coin.displayWidth * 4.0, coin.displayHeight * 4.0, true);
-
-    this.borgyCoins.add(coin);
-
-    this.tweens.add({
-      targets: coin,
-      scaleX: 0.02,
-      duration: 600,
-      yoyo: true,
-      repeat: -1,
-      ease: "Sine.inOut"
-    });
+  // On calcule la TAILLE DE HITBOX utilisée pour le bonus SwissBorg
+  let targetSide = 140; // fallback au cas où
+  try {
+    const bonusTex = this.textures.get("bonus_sb");
+    const bonusImg = bonusTex.getSourceImage?.();
+    if (bonusImg) {
+      const bonusDisplayW = bonusImg.width * 0.55; // même scale que dans spawnPair()
+      targetSide = bonusDisplayW * 3.0;           // même facteur que bonus.body.setSize(...)
+    }
+  } catch (e) {
+    console.warn("calc bonus hitbox error", e);
   }
+
+  // On applique exactement la même zone de collision (carrée, centrée)
+  coin.body.setSize(targetSide, targetSide, true);
+
+  this.borgyCoins.add(coin);
+
+  // Petit effet de pulsation (optionnel)
+  this.tweens.add({
+    targets: coin,
+    scaleX: 0.10 * 0.9,
+    duration: 600,
+    yoyo: true,
+    repeat: -1,
+    ease: "Sine.inOut"
+  });
+}
 
   onCollectBorgyCoin(x, y){
     this.borgyCoinCount += 1;
