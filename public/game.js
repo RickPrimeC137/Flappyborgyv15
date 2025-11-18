@@ -332,7 +332,31 @@ function loadSkinState(){
         }
         data.skins.forEach(s => { s.selected = (s.id === data.selectedId); });
 
-        function saveSkinState(data){
+        // Sauvegarde l’état migré
+        saveSkinState(data);
+        return data;
+      }
+    }
+  }catch(e){}
+
+  // === Cas où aucun état n’existe encore : init avec tous les skins de SKINS_DEF ===
+  const skins = SKINS_DEF.map(s => ({
+    id: s.id,
+    key: s.key,
+    name: s.name,
+    price: s.price,
+    owned: !!s.ownedByDefault,
+    selected: false
+  }));
+  const selectedId = SKINS_DEF[0].id;
+  const first = skins.find(s => s.id === selectedId);
+  if (first) first.selected = true;
+  const data = { skins, selectedId };
+  saveSkinState(data);
+  return data;
+}
+
+function saveSkinState(data){
   try {
     localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data));
   } catch(e){}
@@ -354,6 +378,26 @@ function selectSkin(id){
   data.skins.forEach(s => { s.selected = (s.id === id); });
   saveSkinState(data);
   return data;
+}
+
+// Essaie d'acheter un skin, renvoie { ok, reason, coinsLeft, data }
+function tryBuySkin(id){
+  const data = loadSkinState();
+  const skin = data.skins.find(s => s.id === id);
+  if (!skin) return { ok:false, reason:"unknown_skin", coinsLeft:loadBorgyCoins(), data };
+  if (skin.owned){
+    return { ok:true, reason:"already_owned", coinsLeft:loadBorgyCoins(), data };
+  }
+  const coins = loadBorgyCoins();
+  if (coins < skin.price){
+    return { ok:false, reason:"not_enough_coins", coinsLeft:coins, data };
+  }
+  const newCoins = coins - skin.price;
+  saveBorgyCoins(newCoins);
+  skin.owned = true;
+  data.coinsSpent = (data.coinsSpent || 0) + skin.price;
+  saveSkinState(data);
+  return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
 }
 
 // Retourne le rectangle utile (sans les marges transparentes) d'une image
