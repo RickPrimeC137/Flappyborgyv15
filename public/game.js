@@ -1600,7 +1600,7 @@ class GameScene extends Phaser.Scene {
     coin.body.setVelocityX(vx);
 
     // Hitbox large, comme le bonus SwissBorg : 3x la taille affichée, recentrée automatiquement
-    coin.body.setSize(coin.displayWidth * 3.0, coin.displayHeight * 3.0, true);
+    coin.body.setSize(coin.displayWidth * 4.0, coin.displayHeight * 4.0, true);
 
     this.borgyCoins.add(coin);
 
