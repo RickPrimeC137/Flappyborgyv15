@@ -289,12 +289,15 @@ function updateQuestsFromEvent(evt, value){
 const SKINS_STORAGE_KEY = "flappy_borgy_skins_v1";
 
 const SKINS_DEF = [
-  { id: "borgy_default", key: "borgy",         name: "Borgy Classique",  price: 0,    ownedByDefault: true  },
-  { id: "borgy_knight",  key: "borgy_knight",  name: "Borgy Chevalier",  price: 1000, ownedByDefault: false },
-  { id: "borgy_dragon",  key: "borgy_dragon",  name: "Borgy Dragon",     price: 1000, ownedByDefault: false },
-  { id: "borgy_space",   key: "borgy_space",   name: "Borgy Astronaute", price: 1000, ownedByDefault: false },
-  { id: "borgy_cyber",   key: "borgy_cyber",   name: "Borgy Cyber",      price: 1000, ownedByDefault: false },
-  { id: "borgy_cowboy",  key: "borgy_cowboy",  name: "Borgy Cow-boy",    price: 1000, ownedByDefault: false }
+  { id: "borgy_default",  key: "borgy",           name: "Borgy Classique",  price: 0,    ownedByDefault: true  },
+  { id: "borgy_knight",   key: "borgy_knight",    name: "Borgy Chevalier",  price: 1000, ownedByDefault: false },
+  { id: "borgy_dragon",   key: "borgy_dragon",    name: "Borgy Dragon",     price: 1000, ownedByDefault: false },
+  { id: "borgy_space",    key: "borgy_space",     name: "Borgy Astronaute", price: 1000, ownedByDefault: false },
+  { id: "borgy_cyber",    key: "borgy_cyber",     name: "Borgy Cyber",      price: 1000, ownedByDefault: false },
+  { id: "borgy_cowboy",   key: "borgy_cowboy",    name: "Borgy Cow-boy",    price: 1000, ownedByDefault: false },
+  { id: "borgy_gold",     key: "borgy_gold",      name: "Borgy Gold",       price: 2000, ownedByDefault: false },
+  { id: "borgy_emeraude", key: "borgy_emeraude",  name: "Borgy Émeraude",   price: 2000, ownedByDefault: false },
+  { id: "borgy_diamant",  key: "borgy_diamant",   name: "Borgy Diamant",    price: 2000, ownedByDefault: false }
 ];
 
 function loadSkinState(){
@@ -474,11 +477,14 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
     // Skins joueur
-    this.load.image("borgy_knight",  "borgy_knight.png");
-    this.load.image("borgy_dragon",  "borgy_dragon.png");
-    this.load.image("borgy_space",   "borgy_space.png");
-    this.load.image("borgy_cyber",   "borgy_cyber.png");
-    this.load.image("borgy_cowboy",  "borgy_cowboy.png");
+    this.load.image("borgy_knight",   "borgy_knight.png");
+    this.load.image("borgy_dragon",   "borgy_dragon.png");
+    this.load.image("borgy_space",    "borgy_space.png");
+    this.load.image("borgy_cyber",    "borgy_cyber.png");
+    this.load.image("borgy_cowboy",   "borgy_cowboy.png");
+    this.load.image("borgy_gold",     "borgy_gold.png");
+    this.load.image("borgy_emeraude", "borgy_emeraude.png");
+    this.load.image("borgy_diamant",  "borgy_diamant.png");
 
     // Bonus visuels
     this.load.image("bonus_sb",   "sb_token_user.png");
@@ -841,6 +847,23 @@ class MenuScene extends Phaser.Scene {
 
     refreshButtons();
 
+    // Notes spécifiques des nouveaux skins
+    const notes = this.add.text(
+      W*0.5,
+      H*0.70,
+      "Borgy Gold : les pièces ramassées en jeu valent x5 (hors quêtes).\n" +
+      "Borgy Émeraude : le bonus SwissBorg multiplie le score par 3 pendant sa durée.\n" +
+      "Borgy Diamant : offre une réanimation unique par partie.",
+      {
+        fontFamily: "monospace",
+        fontSize: 18,
+        color: "#e5f2ff",
+        align: "center",
+        wordWrap: { width: W*0.72 }
+      }
+    ).setOrigin(0.5).setDepth(depth+2);
+    elements.push(notes);
+
     const close = this.add.text(W/2, H*0.78, "Fermer", {
       fontFamily: "monospace",
       fontSize: 40,
@@ -1127,6 +1150,12 @@ class GameScene extends Phaser.Scene {
 
     this._stormBaseTopTint = null;
     this._stormBaseBottomTint = null;
+
+    this.skinIsGold = false;
+    this.skinIsEmerald = false;
+    this.skinIsDiamond = false;
+    this.canRevive = false;
+    this.isInvincible = false;
   }
 
   create(){
@@ -1235,6 +1264,10 @@ class GameScene extends Phaser.Scene {
     }
 
     const skinKey = getSelectedSkinKey();
+    this.skinIsGold = (skinKey === "borgy_gold");
+    this.skinIsEmerald = (skinKey === "borgy_emeraude");
+    this.skinIsDiamond = (skinKey === "borgy_diamant");
+    this.canRevive = this.skinIsDiamond;
     const finalScale = computeSkinScale(this.textures, skinKey);
 
     this.player = this.physics.add.sprite(
@@ -1370,30 +1403,30 @@ class GameScene extends Phaser.Scene {
     this.sensors.children.iterate(s => { if (s && s.active && s.x < -KILL_MARGIN) s.destroy(); });
     this.bonuses.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
     this.borgyCoins.children.iterate(c => {
-  if (!c || !c.active) return;
+      if (!c || !c.active) return;
 
-  // Si la pièce sort de l’écran, on la détruit
-  if (c.x < -KILL_MARGIN) {
-    c.destroy();
-    return;
-  }
+      // Si la pièce sort de l’écran, on la détruit
+      if (c.x < -KILL_MARGIN) {
+        c.destroy();
+        return;
+      }
 
-  // --- Zone spéciale autour du joueur : ramassage auto ---
-  if (this.player && this.player.active) {
-    const dx = c.x - this.player.x;
-    const dy = c.y - this.player.y;
-    const distSq = dx * dx + dy * dy;
+      // --- Zone spéciale autour du joueur : ramassage auto ---
+      if (this.player && this.player.active) {
+        const dx = c.x - this.player.x;
+        const dy = c.y - this.player.y;
+        const distSq = dx * dx + dy * dy;
 
-    const pickupRadius = 130; // rayon d’aimant, tu peux augmenter si tu veux
+        const pickupRadius = 130; // rayon d’aimant, tu peux augmenter si tu veux
 
-    if (distSq <= pickupRadius * pickupRadius) {
-      const cx = c.x;
-      const cy = c.y;
-      c.disableBody(true, true);
-      this.onCollectBorgyCoin(cx, cy);
-    }
-  }
-});
+        if (distSq <= pickupRadius * pickupRadius) {
+          const cx = c.x;
+          const cy = c.y;
+          c.disableBody(true, true);
+          this.onCollectBorgyCoin(cx, cy);
+        }
+      }
+    });
 
     this.bots.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
 
@@ -1615,46 +1648,47 @@ class GameScene extends Phaser.Scene {
   }
 
   // ====== Spawn d’une pièce avec hitbox identique au bonus SwissBorg ======
-spawnBorgyCoin(x, y, vx){
-  const coin = this.physics.add.image(x, y, "borgy_coin")
-    .setDepth(8)
-    .setScale(0.09) // taille VISUELLE du coin (tu peux l’augmenter si tu veux)
-    .setImmovable(true);
+  spawnBorgyCoin(x, y, vx){
+    const coin = this.physics.add.image(x, y, "borgy_coin")
+      .setDepth(8)
+      .setScale(0.09) // taille VISUELLE du coin (tu peux l’augmenter si tu veux)
+      .setImmovable(true);
 
-  coin.body.setAllowGravity(false);
-  coin.body.setVelocityX(vx);
+    coin.body.setAllowGravity(false);
+    coin.body.setVelocityX(vx);
 
-  // On calcule la TAILLE DE HITBOX utilisée pour le bonus SwissBorg
-  let targetSide = 140; // fallback au cas où
-  try {
-    const bonusTex = this.textures.get("bonus_sb");
-    const bonusImg = bonusTex.getSourceImage?.();
-    if (bonusImg) {
-      const bonusDisplayW = bonusImg.width * 0.55; // même scale que dans spawnPair()
-      targetSide = bonusDisplayW * 5.0;           // même facteur que bonus.body.setSize(...)
+    // On calcule la TAILLE DE HITBOX utilisée pour le bonus SwissBorg
+    let targetSide = 140; // fallback au cas où
+    try {
+      const bonusTex = this.textures.get("bonus_sb");
+      const bonusImg = bonusTex.getSourceImage?.();
+      if (bonusImg) {
+        const bonusDisplayW = bonusImg.width * 0.55; // même scale que dans spawnPair()
+        targetSide = bonusDisplayW * 5.0;           // même facteur que bonus.body.setSize(...)
+      }
+    } catch (e) {
+      console.warn("calc bonus hitbox error", e);
     }
-  } catch (e) {
-    console.warn("calc bonus hitbox error", e);
+
+    // On applique exactement la même zone de collision (carrée, centrée)
+    coin.body.setSize(targetSide, targetSide, true);
+
+    this.borgyCoins.add(coin);
+
+    // Petit effet de pulsation (optionnel)
+    this.tweens.add({
+      targets: coin,
+      scaleX: 0.10 * 0.9,
+      duration: 600,
+      yoyo: true,
+      repeat: -1,
+      ease: "Sine.inOut"
+    });
   }
 
-  // On applique exactement la même zone de collision (carrée, centrée)
-  coin.body.setSize(targetSide, targetSide, true);
-
-  this.borgyCoins.add(coin);
-
-  // Petit effet de pulsation (optionnel)
-  this.tweens.add({
-    targets: coin,
-    scaleX: 0.10 * 0.9,
-    duration: 600,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.inOut"
-  });
-}
-
   onCollectBorgyCoin(x, y){
-    this.borgyCoinCount += 1;
+    const gain = this.skinIsGold ? 5 : 1;
+    this.borgyCoinCount += gain;
     saveBorgyCoins(this.borgyCoinCount);
     if (this.borgyCoinText){
       this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
@@ -1664,7 +1698,7 @@ spawnBorgyCoin(x, y, vx){
       this.sfxCoin.play();
     }
 
-    const floatTxt = this.add.text(x, y, "+1", {
+    const floatTxt = this.add.text(x, y, `+${gain}`, {
       fontFamily:"monospace", fontSize:32, color:"#ffffaa", stroke:"#000000", strokeThickness:4
     }).setDepth(30).setOrigin(0.5);
     this.tweens.add({
@@ -1702,7 +1736,10 @@ spawnBorgyCoin(x, y, vx){
 
   addScore(n){
     const isHard = this.game._hardMode === true;
-    const multBase = this.multiplierActive ? 2 : 1;
+    let multBase = 1;
+    if (this.multiplierActive) {
+      multBase = this.skinIsEmerald ? 3 : 2;
+    }
     const hardBonus = isHard ? 1.2 : 1.0;
     const value = Math.round(n * multBase * hardBonus);
 
@@ -1713,6 +1750,59 @@ spawnBorgyCoin(x, y, vx){
   }
 
   gameOver(){
+    if (this.isOver) return;
+
+    if (this.isInvincible) return;
+
+    if (this.skinIsDiamond && this.canRevive) {
+      this.canRevive = false;
+      this._revivePlayer();
+      return;
+    }
+
+    this._finalGameOver();
+  }
+
+  _revivePlayer(){
+    if (!this.player || !this.player.body) {
+      this._finalGameOver();
+      return;
+    }
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+
+    const safeX = W * 0.18;
+    const centerY = H * ((PLAYFIELD_TOP_PCT + PLAYFIELD_BOT_PCT) / 2);
+    const safeTop = H * PLAYFIELD_TOP_PCT + 80;
+    const safeBottom = H * PLAYFIELD_BOT_PCT - 80;
+    const targetY = Phaser.Math.Clamp(this.player.y || centerY, safeTop, safeBottom);
+
+    this.player.setVelocity(0, 0);
+    this.player.setAngle(0);
+    this.player.setPosition(safeX, targetY);
+
+    const txt = this.add.text(
+      this.player.x,
+      this.player.y - 60,
+      "Réanimation !",
+      { fontFamily:"monospace", fontSize:32, color:"#ffffff", stroke:"#000000", strokeThickness:6 }
+    ).setOrigin(0.5).setDepth(200);
+
+    this.tweens.add({
+      targets: txt,
+      y: txt.y - 40,
+      alpha: 0,
+      duration: 800,
+      ease: "Cubic.out",
+      onComplete: () => txt.destroy()
+    });
+
+    this.isInvincible = true;
+    this.time.delayedCall(1500, () => { this.isInvincible = false; });
+  }
+
+  _finalGameOver(){
     if (this.isOver) return;
     this.isOver = true; this.started = false;
 
