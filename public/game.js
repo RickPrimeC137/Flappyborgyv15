@@ -103,7 +103,11 @@ const DIFF = {
   minDelay: 1250,
   cooldownMs: 265
 };
+
 const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
+
+// distance horizontale minimale entre deux paires de tuyaux
+const MIN_PAIR_DIST_PX = 320;
 
 /* ================== LEADERBOARD ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
@@ -1194,6 +1198,13 @@ class GameScene extends Phaser.Scene {
     this.skinIsDiamond = false;
     this.canRevive = false;
     this.isInvincible = false;
+
+    // Paires de tuyaux pour la réanimation
+    this.pipePairs = [];
+
+    // Paliers de difficulté liés au score (mode normal)
+    this.scoreSpeedStep = 0;
+    this.scoreGapStep = 0;
   }
 
   create(){
@@ -1356,12 +1367,16 @@ class GameScene extends Phaser.Scene {
       this
     );
 
+    // Difficulté temporelle progressive (base)
     this.time.addEvent({
-      delay: DIFF.stepMs, loop: true, callback: () => {
+      delay: DIFF.stepMs,
+      loop: true,
+      callback: () => {
         this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + DIFF.speedDelta);
         this.curDelay = Math.max(DIFF.minDelay, this.curDelay + DIFF.delayDelta);
         if (this.started) {
-          this.nextSpawnAt = Math.max(this.time.now + this.curDelay, this.nextSpawnAt);
+          const effDelay = this._getSpawnDelay();
+          this.nextSpawnAt = Math.max(this.time.now + effDelay, this.nextSpawnAt);
           this._forceVelocities();
         }
       }
@@ -1402,6 +1417,15 @@ class GameScene extends Phaser.Scene {
     });
   }
 
+  // Retourne le délai effectif entre deux spawns en respectant la distance horizontale minimale
+  _getSpawnDelay(){
+    const base = this.curDelay;
+    const speedAbs = Math.abs(this.curSpeed || PROFILE.pipeSpeed);
+    if (speedAbs <= 0) return base;
+    const minDelayFromDist = (MIN_PAIR_DIST_PX / speedAbs) * 1000;
+    return Math.max(base, minDelayFromDist);
+  }
+
   onTap(){
     if (this.isOver){ this.scene.restart(); return; }
     if (!this.started){
@@ -1411,7 +1435,7 @@ class GameScene extends Phaser.Scene {
 
       this.spawnPair(false);
       this.lastSpawnMs = this.time.now;
-      this.nextSpawnAt = this.time.now + this.curDelay;
+      this.nextSpawnAt = this.time.now + this._getSpawnDelay();
 
       this._maybeSwitchToHardMusic();
 
@@ -1432,7 +1456,7 @@ class GameScene extends Phaser.Scene {
         this.spawnPair(false);
         this.lastSpawnMs = this.time.now;
       }
-      this.nextSpawnAt = this.time.now + this.curDelay;
+      this.nextSpawnAt = this.time.now + this._getSpawnDelay();
     }
 
     if (this.started) this._forceVelocities();
@@ -1455,7 +1479,7 @@ class GameScene extends Phaser.Scene {
         const dy = c.y - this.player.y;
         const distSq = dx * dx + dy * dy;
 
-        const pickupRadius = 130; // rayon d’aimant, tu peux augmenter si tu veux
+        const pickupRadius = 130; // rayon d’aimant
 
         if (distSq <= pickupRadius * pickupRadius) {
           const cx = c.x;
@@ -1467,6 +1491,13 @@ class GameScene extends Phaser.Scene {
     });
 
     this.bots.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
+
+    // Nettoyage des paires de tuyaux (pour la réanimation diamant)
+    this.pipePairs = this.pipePairs.filter(pair =>
+      pair &&
+      pair.top && pair.bottom &&
+      pair.top.active && pair.bottom.active
+    );
 
     if (this.multiplierActive && this.bonusFollower && this.player.active){
       this.bonusFollower.x = this.player.x - this.player.displayWidth*0.9;
@@ -1495,8 +1526,14 @@ class GameScene extends Phaser.Scene {
 
     const displayW = img.width * scaleX;
     img.setImmovable(true).body.setAllowGravity(false);
-    img.body.setSize(displayW * PIPE_BODY_W, img.displayHeight, true);
-    img.body.setOffset((displayW - displayW*PIPE_BODY_W)/2, isTop ? img.displayHeight - img.body.height : 0);
+
+    // Hitbox légèrement plus large en Hard pour éviter les "passages" sur les bords
+    const isHard = this.game?._hardMode === true;
+    const bodyWFactor = isHard ? 1.02 : PIPE_BODY_W;
+    const bodyW = displayW * bodyWFactor;
+
+    img.body.setSize(bodyW, img.displayHeight, true);
+    img.body.setOffset((displayW - bodyW)/2, isTop ? img.displayHeight - img.body.height : 0);
   }
 
   // ========= Génération d’une paire =========
@@ -1539,6 +1576,9 @@ class GameScene extends Phaser.Scene {
 
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
+
+    // mémorise la paire pour la réanimation diamant
+    this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
     // centre réel du gap après redimensionnement
     const gapCenterY = (topImg.y + bottomImg.y) / 2;
@@ -1689,7 +1729,7 @@ class GameScene extends Phaser.Scene {
   spawnBorgyCoin(x, y, vx){
     const coin = this.physics.add.image(x, y, "borgy_coin")
       .setDepth(8)
-      .setScale(0.09) // taille VISUELLE du coin (tu peux l’augmenter si tu veux)
+      .setScale(0.09) // taille VISUELLE du coin
       .setImmovable(true);
 
     coin.body.setAllowGravity(false);
@@ -1785,13 +1825,48 @@ class GameScene extends Phaser.Scene {
     this.scoreText.setText("Score: " + this.score);
     updateQuestsFromEvent("score", this.score);
     if (!this.game._muted && this.sfxScore) this.sfxScore.play();
+
+    // Difficulté dynamique basée sur le score (mode normal uniquement)
+    if (!isHard) {
+      // VITESSE : à partir de 200, +10 (en valeur absolue) tous les 50 points
+      if (this.score >= 200) {
+        const extraScore = this.score - 200;
+        const newSpeedStep = Math.floor(extraScore / 50) + 1; // 200–249 => 1, 250–299 => 2, etc.
+        if (newSpeedStep > this.scoreSpeedStep) {
+          const deltaPerStep = -10; // plus rapide = plus négatif
+          const stepsToApply = newSpeedStep - this.scoreSpeedStep;
+          const delta = deltaPerStep * stepsToApply;
+          this.curSpeed = Math.max(DIFF.minSpeed, this.curSpeed + delta);
+          this.scoreSpeedStep = newSpeedStep;
+          this._forceVelocities();
+        }
+      }
+
+      // GAP : à partir de 200, on réduit légèrement la distance verticale tous les 50
+      const MIN_GAP_NORMAL = 140;
+      if (this.score >= 200) {
+        const extraScoreGap = this.score - 200;
+        const newGapStep = Math.floor(extraScoreGap / 50) + 1;
+        if (newGapStep > this.scoreGapStep) {
+          this.scoreGapStep = newGapStep;
+        }
+        const REDUCE_PER_STEP = 12;
+        const targetGap = Math.max(
+          MIN_GAP_NORMAL,
+          PROFILE.gap - REDUCE_PER_STEP * this.scoreGapStep
+        );
+        this.curGap = targetGap;
+      }
+    }
   }
 
   gameOver(){
     if (this.isOver) return;
 
+    // Pendant l'invincibilité (réanimation), on ignore les collisions
     if (this.isInvincible) return;
 
+    // Réanimation unique pour Borgy Diamant
     if (this.skinIsDiamond && this.canRevive) {
       this.canRevive = false;
       this._revivePlayer();
@@ -1801,6 +1876,29 @@ class GameScene extends Phaser.Scene {
     this._finalGameOver();
   }
 
+  // Trouve la paire de tuyaux la plus proche devant le joueur
+  _findNearestPipePairAhead(){
+    if (!this.pipePairs || !this.pipePairs.length || !this.player) return null;
+    const px = this.player.x || 0;
+    let best = null;
+    let bestDist = Infinity;
+
+    for (const pair of this.pipePairs){
+      if (!pair || !pair.top || !pair.bottom) continue;
+      if (!pair.top.active || !pair.bottom.active) continue;
+      const x = pair.top.x;
+      const d = x - px;
+      // On ne garde que les paires devant (ou très légèrement derrière)
+      if (d < -40) continue;
+      if (d < bestDist) {
+        bestDist = d;
+        best = pair;
+      }
+    }
+    return best;
+  }
+
+  // Réanimation Borgy Diamant : disparition puis réapparition dans le trou de la paire la plus proche + invincible 2s
   _revivePlayer(){
     if (!this.player || !this.player.body) {
       this._finalGameOver();
@@ -1810,34 +1908,74 @@ class GameScene extends Phaser.Scene {
     const W = this.scale.width;
     const H = this.scale.height;
 
-    const safeX = W * 0.18;
-    const centerY = H * ((PLAYFIELD_TOP_PCT + PLAYFIELD_BOT_PCT) / 2);
-    const safeTop = H * PLAYFIELD_TOP_PCT + 80;
-    const safeBottom = H * PLAYFIELD_BOT_PCT - 80;
-    const targetY = Phaser.Math.Clamp(this.player.y || centerY, safeTop, safeBottom);
+    const pair = this._findNearestPipePairAhead();
 
-    this.player.setVelocity(0, 0);
-    this.player.setAngle(0);
-    this.player.setPosition(safeX, targetY);
-
-    const txt = this.add.text(
-      this.player.x,
-      this.player.y - 60,
-      "Réanimation !",
-      { fontFamily:"monospace", fontSize:32, color:"#ffffff", stroke:"#000000", strokeThickness:6 }
-    ).setOrigin(0.5).setDepth(200);
-
-    this.tweens.add({
-      targets: txt,
-      y: txt.y - 40,
-      alpha: 0,
-      duration: 800,
-      ease: "Cubic.out",
-      onComplete: () => txt.destroy()
-    });
+    let targetX, targetY;
+    if (pair) {
+      targetX = pair.top.x;
+      targetY = (pair.top.y + pair.bottom.y) / 2;
+    } else {
+      // fallback : centre de la zone de jeu
+      targetX = W * 0.18;
+      targetY = H * ((PLAYFIELD_TOP_PCT + PLAYFIELD_BOT_PCT) / 2);
+    }
 
     this.isInvincible = true;
-    this.time.delayedCall(1500, () => { this.isInvincible = false; });
+
+    // Stop physique pendant la téléportation
+    this.player.body.enable = false;
+    this.player.setVelocity(0, 0);
+
+    // Petite animation de disparition
+    const startScaleX = this.player.scaleX;
+    const startScaleY = this.player.scaleY;
+
+    this.tweens.add({
+      targets: this.player,
+      alpha: 0,
+      scaleX: startScaleX * 0.7,
+      scaleY: startScaleY * 0.7,
+      duration: 200,
+      ease: "Cubic.in",
+      onComplete: () => {
+        // Téléportation dans le trou
+        this.player.setPosition(targetX, targetY);
+        this.player.setAngle(0);
+        this.player.body.enable = true;
+        this.player.setVelocity(0, 0);
+
+        // Pop visuel
+        this.tweens.add({
+          targets: this.player,
+          alpha: 1,
+          scaleX: startScaleX,
+          scaleY: startScaleY,
+          duration: 220,
+          ease: "Cubic.out"
+        });
+
+        const txt = this.add.text(
+          this.player.x,
+          this.player.y - 60,
+          "Réanimation !",
+          { fontFamily:"monospace", fontSize:32, color:"#ffffff", stroke:"#000000", strokeThickness:6 }
+        ).setOrigin(0.5).setDepth(200);
+
+        this.tweens.add({
+          targets: txt,
+          y: txt.y - 40,
+          alpha: 0,
+          duration: 800,
+          ease: "Cubic.out",
+          onComplete: () => txt.destroy()
+        });
+
+        // Invincibilité 2 secondes après la réapparition
+        this.time.delayedCall(2000, () => {
+          this.isInvincible = false;
+        });
+      }
+    });
   }
 
   _finalGameOver(){
@@ -1861,6 +1999,7 @@ class GameScene extends Phaser.Scene {
     this.bonuses.clear(true, true);
     this.borgyCoins.clear(true, true);
     this.bots.clear(true, true);
+    this.pipePairs = [];
     if (this.bonusFollower){
       this.bonusFollower.destroy();
       this.bonusFollower = null;
