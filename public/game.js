@@ -106,7 +106,7 @@ const DIFF = {
 const SPAWN_X_OFFSET = PIPE_W_DISPLAY * 0.6;
 
 // distance horizontale minimale entre deux paires de tuyaux
-const MIN_PAIR_DIST_PX = 320;
+const MIN_PAIR_DIST_PX = 360;
 
 /* ================== LEADERBOARD ================== */
 const API_BASE = "https://rickprimec137-flappyborgyv15.onrender.com";
