@@ -1518,88 +1518,93 @@ class GameScene extends Phaser.Scene {
       this.nextCoinAt += Phaser.Math.Between(3, 6);
     }
 
-// Robot SwissBorg décoratif mais mortel : 1 apparition toutes les 15 paires
-if (
-  this.started &&
-  this.pairsSpawned > 0 &&
-  this.pairsSpawned % 15 === 0
-) {
-  const botScale = 0.14;
-  const fromBottom = Phaser.Math.Between(0, 1) === 0;
+    // Robot SwissBorg décoratif mais mortel : 1 apparition toutes les 15 paires
+    if (
+      this.started &&
+      this.pairsSpawned > 0 &&
+      this.pairsSpawned % 15 === 0
+    ) {
+      const botScale   = 0.14;
+      const fromBottom = Phaser.Math.Between(0, 1) === 0;
 
- // --- tuyau du bas ---
-if (fromBottom) {
-  ...
-  const h = bot.displayHeight;
-  const yHidden = bottomImg.y + h * 0.6; // bien caché en bas
-  const yShown  = bottomImg.y;           // centre sur le bord -> moitié visible
+      // --- tuyau du bas ---
+      if (fromBottom) {
+        const bot = this.physics.add
+          .image(bottomImg.x, bottomImg.y, "sb_robot")
+          .setDepth(5)
+          .setScale(botScale)
+          .setImmovable(true);
 
-  bot.y = yHidden;
+        bot.body.setAllowGravity(false);
+        bot.body.setVelocityX(vx);
 
-  this.tweens.add({
-    targets: bot,
-    y: { from: yHidden, to: yShown },
-    duration: 900,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.inOut"
-  });
-}
-else {
-  ...
-  const h = bot.displayHeight;
-  const yHidden = topImg.y - h * 0.6; // bien caché en haut
-  const yShown  = topImg.y;           // centre sur le bord -> moitié visible
+        const bw = bot.displayWidth * 0.65;
+        const bh = bot.displayHeight * 0.9;
+        bot.body.setSize(bw, bh, true);
 
-  bot.y = yHidden;
+        this.bots.add(bot);
 
-  this.tweens.add({
-    targets: bot,
-    y: { from: yHidden, to: yShown },
-    duration: 900,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.inOut"
-  });
-}
-  // --- tuyau du haut (sprite inversé verticalement) ---
-else {
-  const bot = this.physics.add
-    .image(topImg.x, topImg.y, "sb_robot")
-    .setDepth(5)
-    .setScale(botScale)
-    .setFlipY(true)
-    .setImmovable(true);
-  bot.body.setAllowGravity(false);
-  bot.body.setVelocityX(vx);
+        const h = bot.displayHeight;
 
-  const bw = bot.displayWidth * 0.65;
-  const bh = bot.displayHeight * 0.9;
-  bot.body.setSize(bw, bh, true);
+        // caché dans le tuyau (en dessous du trou)
+        const yHidden = bottomImg.y + h * 0.6;
+        // visible : centre du robot sur le bord du tuyau => ~moitié visible
+        const yShown  = bottomImg.y;
 
-  this.bots.add(bot);
+        bot.y = yHidden;
 
-  const h = bot.displayHeight;
+        this.tweens.add({
+          targets: bot,
+          y: { from: yHidden, to: yShown },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.inOut"
+        });
+      }
 
-  // caché dans le tuyau (au-dessus du trou)
-  const yHidden = topImg.y - h * 0.6;
-  // visible : centre du robot pile sur le bord du tuyau => ~moitié visible
-  const yShown  = topImg.y;
+      // --- tuyau du haut (sprite inversé verticalement) ---
+      else {
+        const bot = this.physics.add
+          .image(topImg.x, topImg.y, "sb_robot")
+          .setDepth(5)
+          .setScale(botScale)
+          .setFlipY(true)
+          .setImmovable(true);
 
-  bot.y = yHidden;
+        bot.body.setAllowGravity(false);
+        bot.body.setVelocityX(vx);
 
-  this.tweens.add({
-    targets: bot,
-    y: { from: yHidden, to: yShown },
-    duration: 900,
-    yoyo: true,
-    repeat: -1,
-    ease: "Sine.inOut"
-  });
-}
+        const bw = bot.displayWidth * 0.65;
+        const bh = bot.displayHeight * 0.9;
+        bot.body.setSize(bw, bh, true);
 
+        this.bots.add(bot);
+
+        const h = bot.displayHeight;
+
+        // caché dans le tuyau (au-dessus du trou)
+        const yHidden = topImg.y - h * 0.6;
+        // visible : centre du robot sur le bord du tuyau => ~moitié visible
+        const yShown  = topImg.y;
+
+        bot.y = yHidden;
+
+        this.tweens.add({
+          targets: bot,
+          y: { from: yHidden, to: yShown },
+          duration: 900,
+          yoyo: true,
+          repeat: -1,
+          ease: "Sine.inOut"
+        });
+      }
+    }
+
+    // Mode Hard : tuyaux "portes" qui bougent
     if (this.game._hardMode === true) {
-      const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
+      const MIN_GAP_LOCAL = MIN_GAP;
+      const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP_LOCAL) / 2) - 2);
       const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
 
       if (amp > 0) {
