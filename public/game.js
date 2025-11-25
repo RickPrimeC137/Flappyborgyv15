@@ -1593,45 +1593,6 @@ const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
-// Décorations de tuyaux UNIQUEMENT en mode Noël
-if (this.isXmasMode) {
-  // ***** Neige sur tuyau du bas *****
-  const snow = this.physics.add.image(
-      bottomImg.x,
-      bottomImg.y,         // haut du tuyau bas (origin 0.5, 0)
-      "pipe_bottom_snow"
-    )
-    .setOrigin(0.5, 1)
-    .setDepth(bottomImg.depth + 0.1)
-    .setImmovable(true);
-
-  snow.body.setAllowGravity(false);
-  snow.body.setVelocityX(vx);
-
-  const snowScale = bottomImg.displayWidth / snow.width;
-  snow.setScale(snowScale);
-
-  this.pipeDecor.add(snow);
-
-  // ***** Verglas sur tuyau du haut *****
-  const ice = this.physics.add.image(
-      topImg.x,
-      topImg.y,            // bas du tuyau haut (origin 0.5, 1)
-      "pipe_top_ice"
-    )
-    .setOrigin(0.5, 0)
-    .setDepth(topImg.depth + 0.1)
-    .setImmovable(true);
-
-  ice.body.setAllowGravity(false);
-  ice.body.setVelocityX(vx);
-
-  const iceScale = topImg.displayWidth / ice.width;
-  ice.setScale(iceScale);
-
-  this.pipeDecor.add(ice);
-} // <= cette accolade ferme bien le if
-
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
     const gapCenterY = (topImg.y + bottomImg.y) / 2;
