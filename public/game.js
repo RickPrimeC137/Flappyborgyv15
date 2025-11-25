@@ -1208,21 +1208,21 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-   // Effet de neige si mode Noël
-if (isXmas && this.textures.exists("snow_flake")) {
-  const emitter = this.add.particles(0, 0, "snow_flake", {
-    x: { min: 0, max: W },
-    y: -10,
-    lifespan: 4000,
-    speedY: { min: 60, max: 120 },
-    scale: { start: 0.7, end: 0.3 },
-    quantity: 3,
-    frequency: 120,
-    angle: { min: 80, max: 100 }
-  });
+    // Effet de neige si mode Noël
+    if (isXmas && this.textures.exists("snow_flake")) {
+      const emitter = this.add.particles(0, 0, "snow_flake", {
+        x: { min: 0, max: W },
+        y: -10,
+        lifespan: 4000,
+        speedY: { min: 60, max: 120 },
+        scale: { start: 0.7, end: 0.3 },
+        quantity: 3,
+        frequency: 120,
+        angle: { min: 80, max: 100 }
+      });
 
-  emitter.setDepth(9);
-}
+      emitter.setDepth(9);
+    }
 
     // ===== Nuages haut / bas =====
     {
@@ -1590,43 +1590,51 @@ if (isXmas && this.textures.exists("snow_flake")) {
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
-  //-----------------------------------------------------
-//  DÉCORATIONS NOËL (neige bas + verglas haut)
-//-----------------------------------------------------
-if (this.isXmasMode &&
-    this.textures.exists("pipe_bottom_snow") &&
-    this.textures.exists("pipe_top_ice")) {
+    //-----------------------------------------------------
+    //  DÉCORATIONS NOËL (neige bas + verglas haut)
+    //-----------------------------------------------------
+    if (this.isXmasMode &&
+        this.textures.exists("pipe_bottom_snow") &&
+        this.textures.exists("pipe_top_ice")) {
 
-  // ***** Neige sur tuyau du bas *****
-  const snow = this.physics.add.image(
-      bottomImg.x,
-      bottomImg.y,         // haut du tuyau bas (origin 0.5, 0)
-      "pipe_bottom_snow"
-  )
-    .setOrigin(0.5, 1)
-    .setDepth(bottomImg.depth + 0.1)
-    .setImmovable(true);
+      // ***** Neige sur tuyau du bas *****
+      const snow = this.physics.add.image(
+          bottomImg.x,
+          bottomImg.y,         // haut du tuyau bas (origin 0.5, 0)
+          "pipe_bottom_snow"
+      )
+        .setOrigin(0.5, 1)
+        .setDepth(bottomImg.depth + 0.1)
+        .setImmovable(true);
 
-  snow.body.setAllowGravity(false);
-  snow.body.setVelocityX(vx);
-  snow.setScale(bottomImg.displayWidth / snow.width, snow.scaleY);
-  this.pipeDecor.add(snow);
+      snow.body.setAllowGravity(false);
+      snow.body.setVelocityX(vx);
 
-  // ***** Verglas sur tuyau du haut *****
-  const ice = this.physics.add.image(
-      topImg.x,
-      topImg.y,            // bas du tuyau haut (origin 0.5, 1)
-      "pipe_top_ice"
-  )
-    .setOrigin(0.5, 0)
-    .setDepth(topImg.depth + 0.1)
-    .setImmovable(true);
+      // PATCH : on garde le ratio propre de la texture
+      const snowScale = bottomImg.displayWidth / snow.width;
+      snow.setScale(snowScale);
 
-  ice.body.setAllowGravity(false);
-  ice.body.setVelocityX(vx);
-  ice.setScale(topImg.displayWidth / ice.width, ice.scaleY);
-  this.pipeDecor.add(ice);
-}
+      this.pipeDecor.add(snow);
+
+      // ***** Verglas sur tuyau du haut *****
+      const ice = this.physics.add.image(
+          topImg.x,
+          topImg.y,            // bas du tuyau haut (origin 0.5, 1)
+          "pipe_top_ice"
+      )
+        .setOrigin(0.5, 0)
+        .setDepth(topImg.depth + 0.1)
+        .setImmovable(true);
+
+      ice.body.setAllowGravity(false);
+      ice.body.setVelocityX(vx);
+
+      // PATCH : même logique, scale uniforme
+      const iceScale = topImg.displayWidth / ice.width;
+      ice.setScale(iceScale);
+
+      this.pipeDecor.add(ice);
+    }
 
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
