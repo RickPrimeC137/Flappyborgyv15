@@ -1590,44 +1590,41 @@ if (isXmas && this.textures.exists("snow_flake")) {
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
-    // Décorations Noël : neige en bas, verglas en haut
-    if (this.isXmasMode) {
-      // Neige sur le haut du tuyau du bas
-      const snow = this.physics.add.image(
+   //-----------------------------------------------------
+//  DÉCORATIONS NOËL (neige bas + verglas haut)
+//-----------------------------------------------------
+if (this.isXmasMode &&
+    this.textures.exists("pipe_bottom_snow") &&
+    this.textures.exists("pipe_top_ice")) {
+
+    // ***** Neige sur tuyau du bas *****
+    const snow = this.add.image(
         bottomImg.x,
-        bottomImg.y,
+        bottomImg.y,         // haut du tuyau bas (origin 0.5, 0)
         "pipe_bottom_snow"
-      )
-        .setOrigin(0.5, 1)
-        .setDepth(bottomImg.depth + 0.1)
-        .setImmovable(true);
+    )
+    .setOrigin(0.5, 1)
+    .setDepth(bottomImg.depth + 0.1);
 
-      snow.body.setAllowGravity(false);
-      snow.body.setVelocityX(vx);
+    // Adaptation à la largeur du tuyau
+    snow.setScale(bottomImg.displayWidth / snow.width);
 
-      const snowScaleX = bottomImg.displayWidth / snow.width;
-      snow.setScale(snowScaleX, snow.scaleY);
+    this.pipeDecor.add(snow);
 
-      this.pipeDecor.add(snow);
 
-      // Verglas léger sur le bas du tuyau du haut
-      const ice = this.physics.add.image(
+    // ***** Verglas sur tuyau du haut *****
+    const ice = this.add.image(
         topImg.x,
-        topImg.y,
+        topImg.y,            // bas du tuyau haut (origin 0.5, 1)
         "pipe_top_ice"
-      )
-        .setOrigin(0.5, 0)
-        .setDepth(topImg.depth + 0.1)
-        .setImmovable(true);
+    )
+    .setOrigin(0.5, 0)
+    .setDepth(topImg.depth + 0.1);
 
-      ice.body.setAllowGravity(false);
-      ice.body.setVelocityX(vx);
+    ice.setScale(topImg.displayWidth / ice.width);
 
-      const iceScaleX = topImg.displayWidth / ice.width;
-      ice.setScale(iceScaleX, ice.scaleY);
-
-      this.pipeDecor.add(ice);
-    }
+    this.pipeDecor.add(ice);
+}
 
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
