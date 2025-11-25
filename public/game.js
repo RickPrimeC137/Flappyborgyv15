@@ -1198,20 +1198,21 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Effet de neige si mode Noël
-    if (isXmas && this.textures.exists("snow_flake")) {
-      const particles = this.add.particles("snow_flake").setDepth(9);
-      particles.createEmitter({
-        x: { min: 0, max: W },
-        y: -10,
-        lifespan: 4000,
-        speedY: { min: 60, max: 120 },
-        scale: { start: 0.7, end: 0.3 },
-        quantity: 3,
-        frequency: 120,
-        angle: { min: 80, max: 100 }
-      });
-    }
+    // Effet de neige si mode Noël (API Phaser 3.60+)
+if (isXmas && this.textures.exists("snow_flake")) {
+  const emitter = this.add.particles(0, 0, "snow_flake", {
+    x:       { min: 0, max: W },
+    y:       -10,
+    lifespan:{ min: 3500, max: 4500 },
+    speedY:  { min: 60,  max: 120 },
+    scale:   { start: 0.7, end: 0.3 },
+    quantity: 3,
+    frequency: 120,
+    angle:   { min: 80, max: 100 }
+  });
+
+  emitter.setDepth(9);
+}
 
     // ===== Nuages haut / bas =====
     {
