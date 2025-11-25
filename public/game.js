@@ -1569,8 +1569,11 @@ class GameScene extends Phaser.Scene {
     const x  = W + SPAWN_X_OFFSET;
     const vx = this.started ? this.curSpeed : 0;
 
-    const topImg    = this.physics.add.image(x, 0, "pipe_top"   ).setDepth(6).setOrigin(0.5, 1);
-    const bottomImg = this.physics.add.image(x, 0, "pipe_bottom").setDepth(6).setOrigin(0.5, 0);
+   const topKey    = this.isXmasMode ? "pipe_top_ice"    : "pipe_top";
+const bottomKey = this.isXmasMode ? "pipe_bottom_snow": "pipe_bottom";
+
+const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
+const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0);
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
@@ -1589,13 +1592,6 @@ class GameScene extends Phaser.Scene {
 
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
-
-    //-----------------------------------------------------
-    //  DÉCORATIONS NOËL (neige bas + verglas haut)
-    //-----------------------------------------------------
-    if (this.isXmasMode &&
-        this.textures.exists("pipe_bottom_snow") &&
-        this.textures.exists("pipe_top_ice")) {
 
       // ***** Neige sur tuyau du bas *****
       const snow = this.physics.add.image(
