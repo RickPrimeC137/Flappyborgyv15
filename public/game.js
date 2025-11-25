@@ -1632,19 +1632,6 @@ if (this.isXmasMode) {
   this.pipeDecor.add(ice);
 } // <= cette accolade ferme bien le if
 
-        .setOrigin(0.5, 0)
-        .setDepth(topImg.depth + 0.1)
-        .setImmovable(true);
-
-      ice.body.setAllowGravity(false);
-      ice.body.setVelocityX(vx);
-
-      // PATCH : même logique, scale uniforme
-      const iceScale = topImg.displayWidth / ice.width;
-      ice.setScale(iceScale);
-
-      this.pipeDecor.add(ice);
-
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
     const gapCenterY = (topImg.y + bottomImg.y) / 2;
