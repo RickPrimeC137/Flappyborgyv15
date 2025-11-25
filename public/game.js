@@ -1630,7 +1630,6 @@ const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(
       ice.setScale(iceScale);
 
       this.pipeDecor.add(ice);
-    }
 
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
