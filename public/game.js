@@ -519,6 +519,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
+    // Décorations de tuyaux pour le mode Noël
+    this.load.image("pipe_bottom_snow", "pipe_bottom_snow.png");
+    this.load.image("pipe_top_ice",     "pipe_top_ice.png");
+
     // Skins joueur
     this.load.image("borgy_knight",   "borgy_knight.png");
     this.load.image("borgy_dragon",   "borgy_dragon.png");
@@ -537,7 +541,8 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy_coin", "borgy_coin.png");
 
     // Robot SwissBorg (accroché aux tuyaux)
-    this.load.image("sb_robot", "sb_robot.png");
+    this.load.image("sb_robot",      "sb_robot.png");
+    this.load.image("sb_robot_xmas","sb_robot_xmas.png"); // version Noël
 
     // Audio normal
     this.load.audio("bgm", "bgm.mp3");
@@ -932,7 +937,7 @@ class MenuScene extends Phaser.Scene {
         } else if (skin.id === "borgy_emeraude") {
           noteLabel = "Bonus Swissbord x3";
         } else if (skin.id === "borgy_diamant") {
-          noteLabel = "1vies supplémentaire";
+          noteLabel = "1 vie supplémentaire";
         }
 
         if (noteLabel) {
@@ -1155,6 +1160,7 @@ class GameScene extends Phaser.Scene {
     this.pipes = null; this.sensors = null;
     this.bonuses = null; this.borgyCoins = null;
     this.bots = null;
+    this.pipeDecor = null;
     this.nextSpawnAt = Infinity; this.lastSpawnMs = -1;
     this.curSpeed = PROFILE.pipeSpeed; this.curDelay = PROFILE.spawnDelay;
     this.curGap   = PROFILE.gap;
@@ -1179,6 +1185,8 @@ class GameScene extends Phaser.Scene {
     this.pipePairs = [];
     this.scoreSpeedStep = 0;
     this.scoreGapStep = 0;
+
+    this.isXmasMode = false;
   }
 
   create(){
@@ -1186,6 +1194,8 @@ class GameScene extends Phaser.Scene {
 
     const isHard  = this.game._hardMode === true;
     const isXmas  = this.game._xmasMode === true;
+
+    this.isXmasMode = isXmas;
 
     // priorité : Noël > Hard > Normal
     let keyWanted;
@@ -1198,21 +1208,20 @@ class GameScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
 
-    // Effet de neige si mode Noël (API Phaser 3.60+)
-if (isXmas && this.textures.exists("snow_flake")) {
-  const emitter = this.add.particles(0, 0, "snow_flake", {
-    x:       { min: 0, max: W },
-    y:       -10,
-    lifespan:{ min: 3500, max: 4500 },
-    speedY:  { min: 60,  max: 120 },
-    scale:   { start: 0.7, end: 0.3 },
-    quantity: 3,
-    frequency: 120,
-    angle:   { min: 80, max: 100 }
-  });
-
-  emitter.setDepth(9);
-}
+    // Effet de neige si mode Noël
+    if (isXmas && this.textures.exists("snow_flake")) {
+      const particles = this.add.particles("snow_flake").setDepth(9);
+      particles.createEmitter({
+        x: { min: 0, max: W },
+        y: -10,
+        lifespan: 4000,
+        speedY: { min: 60, max: 120 },
+        scale: { start: 0.7, end: 0.3 },
+        quantity: 3,
+        frequency: 120,
+        angle: { min: 80, max: 100 }
+      });
+    }
 
     // ===== Nuages haut / bas =====
     {
@@ -1284,6 +1293,7 @@ if (isXmas && this.textures.exists("snow_flake")) {
     this.bonuses    = this.physics.add.group();
     this.borgyCoins = this.physics.add.group();
     this.bots       = this.physics.add.group();
+    this.pipeDecor  = this.physics.add.group();
 
     this.inputZone = this.add.zone(0,0,W,H).setOrigin(0,0).setInteractive();
     this.inputZone.on("pointerdown", () => this.onTap());
@@ -1390,6 +1400,9 @@ if (isXmas && this.textures.exists("snow_flake")) {
     this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
     this.borgyCoins.children.iterate(c => { if (c?.body) c.body.setVelocityX(this.curSpeed); });
     this.bots.children.iterate(b => { if (b?.body) b.body.setVelocityX(this.curSpeed); });
+    if (this.pipeDecor) {
+      this.pipeDecor.children.iterate(d => { if (d?.body) d.body.setVelocityX(this.curSpeed); });
+    }
   }
 
   _maybeSwitchToHardMusic(){
@@ -1479,15 +1492,19 @@ if (isXmas && this.textures.exists("snow_flake")) {
         const pickupRadius = 130;
 
         if (distSq <= pickupRadius * pickupRadius) {
-          const cx = c.x;
-          const cy = c.y;
+          const cx2 = c.x;
+          const cy2 = c.y;
           c.disableBody(true, true);
-          this.onCollectBorgyCoin(cx, cy);
+          this.onCollectBorgyCoin(cx2, cy2);
         }
       }
     });
 
     this.bots.children.iterate(b => { if (b && b.active && b.x < -KILL_MARGIN) b.destroy(); });
+
+    if (this.pipeDecor) {
+      this.pipeDecor.children.iterate(d => { if (d && d.active && d.x < -KILL_MARGIN) d.destroy(); });
+    }
 
     this.pipePairs = this.pipePairs.filter(pair =>
       pair &&
@@ -1572,6 +1589,45 @@ if (isXmas && this.textures.exists("snow_flake")) {
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
+    // Décorations Noël : neige en bas, verglas en haut
+    if (this.isXmasMode) {
+      // Neige sur le haut du tuyau du bas
+      const snow = this.physics.add.image(
+        bottomImg.x,
+        bottomImg.y,
+        "pipe_bottom_snow"
+      )
+        .setOrigin(0.5, 1)
+        .setDepth(bottomImg.depth + 0.1)
+        .setImmovable(true);
+
+      snow.body.setAllowGravity(false);
+      snow.body.setVelocityX(vx);
+
+      const snowScaleX = bottomImg.displayWidth / snow.width;
+      snow.setScale(snowScaleX, snow.scaleY);
+
+      this.pipeDecor.add(snow);
+
+      // Verglas léger sur le bas du tuyau du haut
+      const ice = this.physics.add.image(
+        topImg.x,
+        topImg.y,
+        "pipe_top_ice"
+      )
+        .setOrigin(0.5, 0)
+        .setDepth(topImg.depth + 0.1)
+        .setImmovable(true);
+
+      ice.body.setAllowGravity(false);
+      ice.body.setVelocityX(vx);
+
+      const iceScaleX = topImg.displayWidth / ice.width;
+      ice.setScale(iceScaleX, ice.scaleY);
+
+      this.pipeDecor.add(ice);
+    }
+
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
     const gapCenterY = (topImg.y + bottomImg.y) / 2;
@@ -1613,10 +1669,13 @@ if (isXmas && this.textures.exists("snow_flake")) {
       const botScale = 0.14;
       const fromBottom = Phaser.Math.Between(0, 1) === 0;
 
+      // version Noël ou normale
+      const botKey = this.isXmasMode ? "sb_robot_xmas" : "sb_robot";
+
       // --- tuyau du bas ---
       if (fromBottom) {
         const bot = this.physics.add
-          .image(bottomImg.x, bottomImg.y, "sb_robot")
+          .image(bottomImg.x, bottomImg.y, botKey)
           .setDepth(5)
           .setScale(botScale)
           .setImmovable(true);
@@ -1648,7 +1707,7 @@ if (isXmas && this.textures.exists("snow_flake")) {
       // --- tuyau du haut (sprite inversé verticalement) ---
       else {
         const bot = this.physics.add
-          .image(topImg.x, topImg.y, "sb_robot")
+          .image(topImg.x, topImg.y, botKey)
           .setDepth(5)
           .setScale(botScale)
           .setFlipY(true)
@@ -1981,6 +2040,7 @@ if (isXmas && this.textures.exists("snow_flake")) {
     this.bonuses.clear(true, true);
     this.borgyCoins.clear(true, true);
     this.bots.clear(true, true);
+    if (this.pipeDecor) this.pipeDecor.clear(true, true);
     this.pipePairs = [];
     if (this.bonusFollower){
       this.bonusFollower.destroy();
