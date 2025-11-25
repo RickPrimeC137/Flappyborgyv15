@@ -25,6 +25,8 @@ const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les sk
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
+const BG_XMAS_KEY  = "bg_noel";    // assets/bg_noel.png
+
 const PLAYFIELD_TOP_PCT = 0.15;
 const PLAYFIELD_BOT_PCT = 0.90;
 const PIPE_RIM_MAX_PCT  = 0.80;
@@ -57,6 +59,9 @@ const CLOUD_EXTRA_SCALE_X     = 1.25; // un peu plus large que l’écran pour �
 /* ===== Popup bienvenue (flag) ===== */
 const WELCOME_POPUP_KEY = "flappy_borgy_welcome_seen_v1"; // (stockage si besoin)
 let welcomeShownThisSession = false; // flag session
+
+/* ===== Mode Noël ===== */
+const XMAS_MODE_KEY = "flappy_borgy_xmas_mode_v1";
 
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
@@ -301,6 +306,7 @@ const SKINS_DEF = [
   { id: "borgy_gold",     key: "borgy_gold",      name: "Borgy Gold",       price: 2000, ownedByDefault: false },
   { id: "borgy_emeraude", key: "borgy_emeraude",  name: "Borgy Émeraude",   price: 2000, ownedByDefault: false },
   { id: "borgy_diamant",  key: "borgy_diamant",   name: "Borgy Diamant",    price: 2000, ownedByDefault: false }
+  // NB : le skin Noël "borgy_xmas" n'est PAS dans le shop, il est automatique en mode Noël
 ];
 
 function loadSkinState(){
@@ -492,9 +498,17 @@ class PreloadScene extends Phaser.Scene {
     const W = this.scale.width, H = this.scale.height;
     this.load.setPath("assets");
 
+    // petite texture de flocon pour le mode Noël
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(4, 4, 4);
+    g.generateTexture("snow_flake", 8, 8);
+    g.destroy();
+
     // Fonds
     this.load.image(BG_KEY,      "bg_mountains.jpg");
     this.load.image(BG_HARD_KEY, "bg_volcano.png");
+    this.load.image(BG_XMAS_KEY, "bg_noel.png");   // fond Noël
 
     // Nuages bande haut / bas
     this.load.image("cloud_top",    "cloud_top.png");
@@ -514,6 +528,9 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy_gold",     "borgy_gold.png");
     this.load.image("borgy_emeraude", "borgy_emeraude.png");
     this.load.image("borgy_diamant",  "borgy_diamant.png");
+
+    // Skin Noël (image que tu as envoyée)
+    this.load.image("borgy_xmas", "borgy_xmas.png");
 
     // Bonus visuels
     this.load.image("bonus_sb",   "sb_token_user.png");
@@ -556,6 +573,51 @@ class MenuScene extends Phaser.Scene {
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
 
     ensureBgm(this);
+
+    // --- init flag Noël depuis localStorage ---
+    if (typeof this.game._xmasMode === "undefined") {
+      try {
+        this.game._xmasMode = JSON.parse(localStorage.getItem(XMAS_MODE_KEY) || "false");
+      } catch {
+        this.game._xmasMode = false;
+      }
+    }
+
+    // --- bouton rond Noël en haut à gauche ---
+    const xmasBtnRadius = 30;
+    const xmasBtn = this.add.circle(
+      30 + xmasBtnRadius,
+      30 + xmasBtnRadius,
+      xmasBtnRadius,
+      this.game._xmasMode ? 0x15803d : 0x0f766e,
+      0.96
+    ).setDepth(60).setInteractive({ useHandCursor: true });
+
+    const xmasIcon = this.add.text(
+      xmasBtn.x,
+      xmasBtn.y,
+      "🎄",
+      { fontFamily: "monospace", fontSize: 26, color: "#ffffff" }
+    ).setOrigin(0.5).setDepth(61);
+
+    const refreshXmasBtn = () => {
+      xmasBtn.setFillStyle(this.game._xmasMode ? 0x15803d : 0x0f766e, 0.96);
+      xmasIcon.setAlpha(this.game._xmasMode ? 1 : 0.8);
+    };
+    refreshXmasBtn();
+
+    xmasBtn.on("pointerdown", () => {
+      this.game._xmasMode = !this.game._xmasMode;
+      localStorage.setItem(XMAS_MODE_KEY, JSON.stringify(this.game._xmasMode));
+      refreshXmasBtn();
+      this.tweens.add({
+        targets: [xmasBtn, xmasIcon],
+        scaleX: 1.1,
+        scaleY: 1.1,
+        yoyo: true,
+        duration: 90
+      });
+    });
 
     const muteBtn = this.add.text(W - 70, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
       .setOrigin(0.5).setDepth(50).setInteractive({useHandCursor:true});
@@ -712,7 +774,7 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
-  // *** SHOP avec bouton Fermer un peu plus bas ***
+  // *** SHOP avec bouton Fermer ***
   showShop(){
     const W = this.scale.width;
     const H = this.scale.height;
@@ -891,7 +953,6 @@ class MenuScene extends Phaser.Scene {
 
     refreshButtons();
 
-    // bouton Fermer légèrement plus bas (0.82 au lieu de 0.78)
     const close = this.add.text(W/2, H*0.82, "Fermer", {
       fontFamily: "monospace",
       fontSize: 40,
@@ -1123,12 +1184,34 @@ class GameScene extends Phaser.Scene {
   create(){
     const W = this.scale.width, H = this.scale.height;
 
-    const isHard = this.game._hardMode === true;
-    const keyWanted = isHard ? BG_HARD_KEY : BG_KEY;
+    const isHard  = this.game._hardMode === true;
+    const isXmas  = this.game._xmasMode === true;
+
+    // priorité : Noël > Hard > Normal
+    let keyWanted;
+    if (isXmas)      keyWanted = BG_XMAS_KEY;
+    else if (isHard) keyWanted = BG_HARD_KEY;
+    else             keyWanted = BG_KEY;
+
     const hasKey = this.textures.exists(keyWanted);
     const bg = this.add.image(W/2, H/2, hasKey ? keyWanted : BG_KEY).setDepth(-10);
     bg.setScale(Math.max(W/bg.width, H/bg.height)).setScrollFactor(0);
     this.cameras.main.roundPixels = true;
+
+    // Effet de neige si mode Noël
+    if (isXmas && this.textures.exists("snow_flake")) {
+      const particles = this.add.particles("snow_flake").setDepth(9);
+      particles.createEmitter({
+        x: { min: 0, max: W },
+        y: -10,
+        lifespan: 4000,
+        speedY: { min: 60, max: 120 },
+        scale: { start: 0.7, end: 0.3 },
+        quantity: 3,
+        frequency: 120,
+        angle: { min: 80, max: 100 }
+      });
+    }
 
     // ===== Nuages haut / bas =====
     {
@@ -1216,11 +1299,17 @@ class GameScene extends Phaser.Scene {
       this.debugTxt = this.add.text(16, 64, "", { fontFamily:"monospace", fontSize: 16, color: "#bff" }).setDepth(20);
     }
 
-    const skinKey = getSelectedSkinKey();
+    // Sélection du skin + override Noël gratuit
+    let skinKey = getSelectedSkinKey();
+    if (isXmas && this.textures.exists("borgy_xmas")) {
+      skinKey = "borgy_xmas"; // skin Noël utilisé uniquement en mode Noël, gratuit
+    }
+
     this.skinIsGold = (skinKey === "borgy_gold");
     this.skinIsEmerald = (skinKey === "borgy_emeraude");
     this.skinIsDiamond = (skinKey === "borgy_diamant");
     this.canRevive = this.skinIsDiamond;
+
     const finalScale = computeSkinScale(this.textures, skinKey);
 
     this.player = this.physics.add.sprite(
@@ -1519,12 +1608,8 @@ class GameScene extends Phaser.Scene {
     }
 
     // Robot SwissBorg décoratif mais mortel : 1 apparition toutes les 15 paires
-    if (
-      this.started &&
-      this.pairsSpawned > 0 &&
-      this.pairsSpawned % 15 === 0
-    ) {
-      const botScale   = 0.14;
+    if (this.started && this.pairsSpawned > 0 && this.pairsSpawned % 15 === 0) {
+      const botScale = 0.14;
       const fromBottom = Phaser.Math.Between(0, 1) === 0;
 
       // --- tuyau du bas ---
@@ -1545,11 +1630,8 @@ class GameScene extends Phaser.Scene {
         this.bots.add(bot);
 
         const h = bot.displayHeight;
-
-        // caché dans le tuyau (en dessous du trou)
-        const yHidden = bottomImg.y + h * 0.6;
-        // visible : centre du robot sur le bord du tuyau => ~moitié visible
-        const yShown  = bottomImg.y;
+        const yHidden = bottomImg.y + h * 0.6; // bien caché dans le tuyau
+        const yShown  = bottomImg.y;           // centre sur le bord -> moitié visible
 
         bot.y = yHidden;
 
@@ -1562,7 +1644,6 @@ class GameScene extends Phaser.Scene {
           ease: "Sine.inOut"
         });
       }
-
       // --- tuyau du haut (sprite inversé verticalement) ---
       else {
         const bot = this.physics.add
@@ -1582,11 +1663,8 @@ class GameScene extends Phaser.Scene {
         this.bots.add(bot);
 
         const h = bot.displayHeight;
-
-        // caché dans le tuyau (au-dessus du trou)
-        const yHidden = topImg.y - h * 0.6;
-        // visible : centre du robot sur le bord du tuyau => ~moitié visible
-        const yShown  = topImg.y;
+        const yHidden = topImg.y - h * 0.6; // caché au-dessus du trou
+        const yShown  = topImg.y;           // centre sur le bord -> moitié visible
 
         bot.y = yHidden;
 
@@ -1601,10 +1679,8 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // Mode Hard : tuyaux "portes" qui bougent
     if (this.game._hardMode === true) {
-      const MIN_GAP_LOCAL = MIN_GAP;
-      const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP_LOCAL) / 2) - 2);
+      const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
       const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
 
       if (amp > 0) {
