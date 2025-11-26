@@ -299,13 +299,13 @@ const SKINS_STORAGE_KEY = "flappy_borgy_skins_v1";
 const SKINS_DEF = [
   { id: "borgy_default",  key: "borgy",           name: "Borgy Classique",  price: 0,    ownedByDefault: true  },
   { id: "borgy_knight",   key: "borgy_knight",    name: "Borgy Chevalier",  price: 1000, ownedByDefault: false },
-  { id: "borgy_dragon",   key: "borgy_dragon",    name: "Borgy Dragon",     price: 1000, ownedByDefault: false },
-  { id: "borgy_space",    key: "borgy_space",     name: "Borgy Astronaute", price: 1000, ownedByDefault: false },
-  { id: "borgy_cyber",    key: "borgy_cyber",     name: "Borgy Cyber",      price: 1000, ownedByDefault: false },
-  { id: "borgy_cowboy",   key: "borgy_cowboy",    name: "Borgy Cow-boy",    price: 1000, ownedByDefault: false },
-  { id: "borgy_gold",     key: "borgy_gold",      name: "Borgy Gold",       price: 2000, ownedByDefault: false },
-  { id: "borgy_emeraude", key: "borgy_emeraude",  name: "Borgy Émeraude",   price: 2000, ownedByDefault: false },
-  { id: "borgy_diamant",  key: "borgy_diamant",   name: "Borgy Diamant",    price: 2000, ownedByDefault: false }
+  { id: "borgy_dragon",   key: "borgy_dragon",    name: "Borgy Dragon",     price: 1500, ownedByDefault: false },
+  { id: "borgy_space",    key: "borgy_space",     name: "Borgy Astronaute", price: 2000, ownedByDefault: false },
+  { id: "borgy_cyber",    key: "borgy_cyber",     name: "Borgy Cyber",      price: 2500, ownedByDefault: false },
+  { id: "borgy_cowboy",   key: "borgy_cowboy",    name: "Borgy Cow-boy",    price: 3000, ownedByDefault: false },
+  { id: "borgy_gold",     key: "borgy_gold",      name: "Borgy Gold",       price: 10000, ownedByDefault: false },
+  { id: "borgy_emeraude", key: "borgy_emeraude",  name: "Borgy Émeraude",   price: 15000, ownedByDefault: false },
+  { id: "borgy_diamant",  key: "borgy_diamant",   name: "Borgy Diamant",    price: 20000, ownedByDefault: false }
   // NB : le skin Noël "borgy_xmas" n'est PAS dans le shop, il est automatique en mode Noël
 ];
 
@@ -588,22 +588,34 @@ class MenuScene extends Phaser.Scene {
       }
     }
 
-    // --- bouton rond Noël en haut à gauche ---
-    const xmasBtnRadius = 30;
-    const xmasBtn = this.add.circle(
-      30 + xmasBtnRadius,
-      30 + xmasBtnRadius,
-      xmasBtnRadius,
-      this.game._xmasMode ? 0x15803d : 0x0f766e,
-      0.96
-    ).setDepth(60).setInteractive({ useHandCursor: true });
+// --- bouton rond Noël en haut à gauche ---
+// plus gros radius
+const xmasBtnRadius = 48;
+const xmasMargin = 32; // marge au bord de l’écran
 
-    const xmasIcon = this.add.text(
-      xmasBtn.x,
-      xmasBtn.y,
-      "🎄",
-      { fontFamily: "monospace", fontSize: 26, color: "#ffffff" }
-    ).setOrigin(0.5).setDepth(61);
+const xmasBtn = this.add.circle(
+  xmasMargin + xmasBtnRadius,
+  xmasMargin + xmasBtnRadius,
+  xmasBtnRadius,
+  this.game._xmasMode ? 0x15803d : 0x0f766e,
+  0.96
+)
+  .setDepth(60)
+  .setInteractive({ useHandCursor: true });
+
+// icône plus grande au centre du cercle
+const xmasIcon = this.add.text(
+  xmasBtn.x,
+  xmasBtn.y,
+  "🎄",
+  {
+    fontFamily: "monospace",
+    fontSize: 40,  // au lieu de 26
+    color: "#ffffff"
+  }
+)
+  .setOrigin(0.5)
+  .setDepth(61);
 
     const refreshXmasBtn = () => {
       xmasBtn.setFillStyle(this.game._xmasMode ? 0x15803d : 0x0f766e, 0.96);
@@ -1784,30 +1796,40 @@ const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(
     });
   }
 
-  onCollectBorgyCoin(x, y){
-    const gain = this.skinIsGold ? 5 : 1;
-    this.borgyCoinCount += gain;
-    saveBorgyCoins(this.borgyCoinCount);
-    if (this.borgyCoinText){
-      this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
-    }
+ onCollectBorgyCoin(x, y){
+  const isHard = this.game._hardMode === true;
+  let gain;
 
-    if (!this.game._muted && this.sfxCoin){
-      this.sfxCoin.play();
-    }
-
-    const floatTxt = this.add.text(x, y, `+${gain}`, {
-      fontFamily:"monospace", fontSize:32, color:"#ffffaa", stroke:"#000000", strokeThickness:4
-    }).setDepth(30).setOrigin(0.5);
-    this.tweens.add({
-      targets: floatTxt,
-      y: y - 60,
-      alpha: 0,
-      duration: 700,
-      ease: "Cubic.out",
-      onComplete: () => floatTxt.destroy()
-    });
+  if (this.skinIsGold) {
+    // le skin or reste à x5, même en Hard
+    gain = 5;
+  } else {
+    // sinon : x1 en normal, x2 en Hard
+    gain = isHard ? 2 : 1;
   }
+
+  this.borgyCoinCount += gain;
+  saveBorgyCoins(this.borgyCoinCount);
+  if (this.borgyCoinText){
+    this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
+  }
+
+  if (!this.game._muted && this.sfxCoin){
+    this.sfxCoin.play();
+  }
+
+  const floatTxt = this.add.text(x, y, `+${gain}`, {
+    fontFamily:"monospace", fontSize:32, color:"#ffffaa", stroke:"#000000", strokeThickness:4
+  }).setDepth(30).setOrigin(0.5);
+  this.tweens.add({
+    targets: floatTxt,
+    y: y - 60,
+    alpha: 0,
+    duration: 700,
+    ease: "Cubic.out",
+    onComplete: () => floatTxt.destroy()
+  });
+}
 
   activateMultiplier(){
     this.multiplierActive = true;
@@ -2070,7 +2092,7 @@ window.addEventListener("load", () => {
     parent: "game-root",
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } },
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: true } },
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
     fps: { target: 60, min: 30, forceSetTimeOut: true }
