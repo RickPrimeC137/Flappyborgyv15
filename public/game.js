@@ -1570,6 +1570,7 @@ const offsetY = isTop
   : 0;                          // étend vers le bas
 
 img.body.setOffset((displayW - bodyW) / 2, offsetY);
+}
 
   // ========= Génération d’une paire =========
   spawnPair(silentFirst){
