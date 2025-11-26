@@ -1548,18 +1548,28 @@ class GameScene extends Phaser.Scene {
       : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
     img.setScale(scaleX, targetH / img.height);
-    img.y = rimY;
+img.y = rimY;
 
-    const displayW = img.width * scaleX;
-    img.setImmovable(true).body.setAllowGravity(false);
+const displayW = img.width * scaleX;
+img.setImmovable(true).body.setAllowGravity(false);
 
-    const isHard = this.game?._hardMode === true;
-    const bodyWFactor = isHard ? 1.02 : PIPE_BODY_W;
-    const bodyW = displayW * bodyWFactor;
+const isHard = this.game?._hardMode === true;
+const bodyWFactor = isHard ? 1.02 : PIPE_BODY_W;
+const bodyW = displayW * bodyWFactor;
 
-    img.body.setSize(bodyW, img.displayHeight, true);
-    img.body.setOffset((displayW - bodyW)/2, isTop ? img.displayHeight - img.body.height : 0);
-  }
+// ➜ on agrandit la hitbox pour qu’elle dépasse un peu du sprite
+const extraH = 24; // essaie 16 / 24 / 32 selon ce que tu veux
+const bodyH  = img.displayHeight + extraH;
+
+img.body.setSize(bodyW, bodyH, true);
+
+// pour le tuyau du haut on pousse la hitbox vers le haut,
+// pour celui du bas vers le bas
+const offsetY = isTop
+  ? img.displayHeight - bodyH   // décale vers le haut
+  : 0;                          // étend vers le bas
+
+img.body.setOffset((displayW - bodyW) / 2, offsetY);
 
   // ========= Génération d’une paire =========
   spawnPair(silentFirst){
