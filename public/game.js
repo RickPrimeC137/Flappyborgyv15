@@ -1557,17 +1557,15 @@ const isHard = this.game?._hardMode === true;
 const bodyWFactor = isHard ? 1.02 : PIPE_BODY_W;
 const bodyW = displayW * bodyWFactor;
 
-// ➜ on agrandit la hitbox pour qu’elle dépasse un peu du sprite
-const extraH = 24; // essaie 16 / 24 / 32 selon ce que tu veux
+// → on agrandit la hitbox pour qu’elle dépasse un peu du sprite
+const extraH = 24;                      // essaie 16 / 24 / 32 selon ce que tu veux
 const bodyH  = img.displayHeight + extraH;
 
 img.body.setSize(bodyW, bodyH, true);
 
-// pour le tuyau du haut on pousse la hitbox vers le haut,
-// pour celui du bas vers le bas
-const offsetY = isTop
-  ? img.displayHeight - bodyH   // décale vers le haut
-  : 0;                          // étend vers le bas
+// tuyau du haut : déborde vers le bas
+// tuyau du bas  : déborde vers le haut
+const offsetY = isTop ? 0 : -extraH;
 
 img.body.setOffset((displayW - bodyW) / 2, offsetY);
 }
