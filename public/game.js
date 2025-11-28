@@ -1548,28 +1548,20 @@ class GameScene extends Phaser.Scene {
     ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
     : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
+  // on met le sprite à la bonne taille
   img.setScale(scaleX, targetH / img.height);
   img.y = rimY;
 
-  // === HITBOX ===
+  // === BODY : rectangle qui recouvre TOUT le tuyau affiché ===
   const displayW = img.displayWidth;
   const displayH = img.displayHeight;
 
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  const extraTop    = 80;  // haut → descend dans le trou
-  const extraBottom = 40;  // bas  → monte dans le trou
-
-  if (isTop) {
-    // couvre TOUT le tuyau du haut + descend de extraTop dans le trou
-    img.body.setSize(displayW, displayH + extraTop, false);
-    img.body.setOffset(0, 0);          // ⚠️ pas de -extraTop
-  } else {
-    // couvre TOUT le tuyau du bas + monte de extraBottom dans le trou
-    img.body.setSize(displayW, displayH + extraBottom, false);
-    img.body.setOffset(0, -extraBottom); // ⚠️ ici on remonte la hitbox
-  }
+  // hitbox = sprite complet
+  img.body.setSize(displayW, displayH, true);
+  img.body.setOffset(0, 0);
 }
 
   // ========= Génération d’une paire =========
