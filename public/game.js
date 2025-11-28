@@ -1541,7 +1541,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  _resizePipeToRim(img, isTop, rimY, scaleX) {
+ _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
   // Hauteur visuelle du sprite (avec overscan) jusqu’au bord du trou
@@ -1553,29 +1553,41 @@ class GameScene extends Phaser.Scene {
   img.setScale(scaleX, targetH / img.height);
   img.y = rimY;
 
-  // === HITBOX ===
+  // === dimensions affichées après le scale ===
   const displayW = img.displayWidth;
   const displayH = img.displayHeight;
 
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-    if (isTop) {
-    // On veut que la hitbox soit seulement sur le BAS du tuyau
-    // (genre les 40% du bas, collés à la base du pipe)
-    const bodyHeight = displayH * 0.4; // tu peux tester 0.3 / 0.5 etc.
+  if (isTop) {
+    // =======================
+    //       TUYAU DU HAUT
+    // =======================
 
+    // On veut que la hitbox soit collée à la BASE du tuyau (au niveau du trou)
+    // et seulement sur une bande en bas du sprite (par ex 40 % de la hauteur).
+    const bodyHeight = displayH * 0.5;  // teste 0.3 / 0.5 si tu veux
+
+    // largeur = largeur du tuyau, hauteur = bande du bas
     img.body.setSize(displayW, bodyHeight, false);
 
-    // très important : on colle le BAS de la hitbox au BAS du sprite
-    // (origine du sprite en bas, donc offsetY = displayH - bodyHeight)
-    img.body.setOffset(0, displayH - bodyHeight);
+    // on colle le BAS de la hitbox au BAS du sprite :
+    // offsetY = displayH - bodyHeight
+    img.body.setOffset(20, displayH - bodyHeight);
 
   } else {
-    // pipe du bas : tu peux garder exactement ton code d'avant
-    const extraBottom = 40;
-    img.body.setSize(displayW, displayH + extraBottom, false);
-    img.body.setOffset(0, -extraBottom);
+    // =======================
+    //       TUYAU DU BAS
+    // =======================
+
+    // Ici on garde une hitbox qui remonte un peu dans le trou
+    const extendIntoGap = 40;          // combien ça remonte dans le gap
+    const bodyHeight    = displayH + extendIntoGap;
+
+    img.body.setSize(displayW, bodyHeight, false);
+    img.body.setOffset(0, -extendIntoGap);
+    // => le haut de la hitbox remonte de 40px au-dessus du bord du tuyau
   }
 }
 
