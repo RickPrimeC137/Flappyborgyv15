@@ -1541,7 +1541,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-     _resizePipeToRim(img, isTop, rimY, scaleX) {
+    _resizePipeToRim(img, isTop, rimY, scaleX) {
     const H = this.scale.height;
 
     // 1) on ajuste la hauteur du sprite pour que son bord arrive à rimY
@@ -1552,7 +1552,7 @@ class GameScene extends Phaser.Scene {
     img.setScale(scaleX, targetH / img.height);
     img.y = rimY;
 
-    // 2) même hitbox pour tuyau haut et bas
+    // 2) même hitbox pour tuyau haut et bas (symétrique autour du sprite)
     const displayW = img.displayWidth;
     const displayH = img.displayHeight;
 
@@ -1560,20 +1560,19 @@ class GameScene extends Phaser.Scene {
     img.body.setAllowGravity(false);
 
     const isHard = this.game?._hardMode === true;
-    const bodyWFactor = isHard ? 1.02 : PIPE_BODY_W;
-    const bodyW = displayW * bodyWFactor;
+    const bodyW  = displayW * (isHard ? 1.02 : PIPE_BODY_W);
 
-    const extra = 40;                 // marge qui dépasse en haut ET en bas
-    const bodyH = displayH + extra;   // même hauteur pour tous
+    const extra  = 40;                 // marge qui dépasse un peu dans le trou
+    const bodyH  = displayH + extra;   // même hauteur pour tous
 
-    // on centre la hitbox sur le sprite
-    img.body.setSize(bodyW, bodyH, true);
+    // on ne centre pas auto, on gère nous-mêmes l’offset
+    img.body.setSize(bodyW, bodyH, false);
 
     const offsetX = (displayW - bodyW) / 2;
-    const offsetY = -extra / 2;       // dépasse moitié au-dessus, moitié en dessous
+    const offsetY = -extra / 2;        // moitié au-dessus, moitié en dessous
 
     img.body.setOffset(offsetX, offsetY);
-  }
+  } 
 
   // ========= Génération d’une paire =========
   spawnPair(silentFirst){
