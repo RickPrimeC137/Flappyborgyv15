@@ -1563,7 +1563,7 @@ class GameScene extends Phaser.Scene {
   if (isTop) {
     // ----- PIPE DU HAUT -----
     // On veut que le BAS de la hitbox colle à la base du pipe (côté trou)
-    const extendIntoGap = 0; // mets 10–20 si tu veux que ça descende un peu dans le trou
+    const extendIntoGap = 20; // mets 10–20 si tu veux que ça descende un peu dans le trou
 
     const bodyHeight = displayH + extendIntoGap;
     img.body.setSize(displayW, bodyHeight, false);
@@ -1575,7 +1575,7 @@ class GameScene extends Phaser.Scene {
   } else {
     // ----- PIPE DU BAS -----
     // Hitbox qui remonte un peu dans le trou
-    const extendIntoGap = 40;
+    const extendIntoGap = 20;
 
     const bodyHeight = displayH + extendIntoGap;
     img.body.setSize(displayW, bodyHeight, false);
