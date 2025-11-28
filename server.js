@@ -6,6 +6,34 @@ import cors from "cors";
 import crypto from "crypto";
 import { createClient } from "@supabase/supabase-js";
 
+/*
+  IMPORTANT SUPABASE
+  ------------------
+  Tu dois avoir 2 tables :
+
+  1) scores  (all-time, comme avant)
+     create table public.scores (
+       user_id   text      not null,
+       name      text      not null,
+       best      integer   not null,
+       mode      text      not null, -- 'normal' | 'hard'
+       updated_at timestamptz not null default now(),
+       primary key (user_id, mode)
+     );
+
+  2) scores_periodic  (semaine + mois)
+     create table public.scores_periodic (
+       user_id     text      not null,
+       name        text      not null,
+       best        integer   not null,
+       mode        text      not null, -- 'normal' | 'hard'
+       period_type text      not null, -- 'week' | 'month'
+       period_key  text      not null, -- ex: '2025-W09' ou '2025-03'
+       updated_at  timestamptz not null default now(),
+       primary key (user_id, mode, period_type, period_key)
+     );
+*/
+
 /* ---------- ENV ---------- */
 const PORT = process.env.PORT || 8080;
 const BOT_TOKEN = process.env.BOT_TOKEN;                         // token BotFather
@@ -71,8 +99,13 @@ function verifyInitData(initDataRaw, botToken) {
     .sort()
     .join("\n");
 
-  const secretKey = crypto.createHmac("sha256", "WebAppData").update(botToken).digest();
-  const hmac = crypto.createHmac("sha256", secretKey).update(dataCheck).digest("hex");
+  const secretKey = crypto.createHmac("sha256", "WebAppData")
+    .update(botToken)
+    .digest();
+  const hmac = crypto.createHmac("sha256", secretKey)
+    .update(dataCheck)
+    .digest("hex");
+
   if (hmac !== hash) return null;
 
   try {
@@ -85,17 +118,102 @@ function verifyInitData(initDataRaw, botToken) {
 
 function sanitizeName(s) {
   if (!s) return "Player";
-  return String(s).replace(/[\u0000-\u001F\u007F]/g, "").slice(0, 32);
+  return String(s)
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .slice(0, 32);
 }
 
 function normMode(m) {
   return typeof m === "string" && m.toLowerCase() === "hard" ? "hard" : "normal";
 }
 
+/* ---- Périodes (semaine / mois) ---- */
+function currentWeekKey() {
+  const d = new Date();
+  const year = d.getUTCFullYear();
+
+  const start = new Date(Date.UTC(year, 0, 1));
+  const dayOfYear = Math.floor((d - start) / 86400000) + 1;
+  const week = Math.ceil(dayOfYear / 7); // approx ISO
+
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
+function currentMonthKey() {
+  const d = new Date();
+  const year = d.getUTCFullYear();
+  const month = String(d.getUTCMonth() + 1).padStart(2, "0");
+  return `${year}-${month}`;
+}
+
+// Met à jour les scores semaine + mois dans scores_periodic
+async function upsertPeriodicScore({ uid, name, val, mode }) {
+  const now = new Date().toISOString();
+
+  const periods = [
+    { type: "week",  key: currentWeekKey()  },
+    { type: "month", key: currentMonthKey() },
+  ];
+
+  for (const p of periods) {
+    try {
+      const { data: row, error: selErr } = await supabase
+        .from("scores_periodic")
+        .select("best")
+        .eq("user_id", uid)
+        .eq("mode", mode)
+        .eq("period_type", p.type)
+        .eq("period_key", p.key)
+        .maybeSingle();
+
+      if (selErr) {
+        console.error("[DB] periodic select error", selErr);
+        continue;
+      }
+
+      if (!row) {
+        const { error: insErr } = await supabase.from("scores_periodic").insert({
+          user_id: uid,
+          name,
+          best: val,
+          mode,
+          period_type: p.type,
+          period_key: p.key,
+          updated_at: now,
+        });
+        if (insErr) console.error("[DB] periodic insert error", insErr);
+      } else if (val > row.best) {
+        const { error: updErr } = await supabase
+          .from("scores_periodic")
+          .update({ best: val, name, updated_at: now })
+          .eq("user_id", uid)
+          .eq("mode", mode)
+          .eq("period_type", p.type)
+          .eq("period_key", p.key);
+        if (updErr) console.error("[DB] periodic update error", updErr);
+      } else {
+        // on rafraîchit quand même le name/updated_at
+        const { error: updNameErr } = await supabase
+          .from("scores_periodic")
+          .update({ name, updated_at: now })
+          .eq("user_id", uid)
+          .eq("mode", mode)
+          .eq("period_type", p.type)
+          .eq("period_key", p.key);
+        if (updNameErr) console.error("[DB] periodic update name warn", updNameErr);
+      }
+    } catch (e) {
+      console.error("[DB] periodic upsert exception", e);
+    }
+  }
+}
+
 /* ---------- Routes ---------- */
 
 // Health & root
-app.get("/", (_req, res) => res.json({ ok: true, service: "flappyborgy-leaderboard" }));
+app.get("/", (_req, res) =>
+  res.json({ ok: true, service: "flappyborgy-leaderboard" })
+);
 app.get("/api/health", (_req, res) => res.json({ ok: true }));
 
 // POST /api/score  { score:number, initData:string, mode?: "hard"|"normal" }
@@ -115,11 +233,15 @@ app.post("/api/score", async (req, res) => {
     const uid = String(user.id);
     const name =
       (user.username && "@" + user.username) ||
-      sanitizeName([user.first_name, user.last_name].filter(Boolean).join(" ")) ||
+      sanitizeName(
+        [user.first_name, user.last_name].filter(Boolean).join(" ")
+      ) ||
       "Player";
-    const val = Math.floor(score);
 
-    // Lecture (PK composite user_id + mode)
+    const val = Math.floor(score);
+    const nowIso = new Date().toISOString();
+
+    // --- TABLE scores (all-time) ---
     const { data: row, error: selErr } = await supabase
       .from("scores")
       .select("best")
@@ -138,7 +260,7 @@ app.post("/api/score", async (req, res) => {
         name,
         best: val,
         mode, // enum public.game_mode ('normal'|'hard')
-        // updated_at = default now()
+        updated_at: nowIso,
       });
       if (insErr) {
         console.error("[DB] insert error", insErr);
@@ -148,7 +270,7 @@ app.post("/api/score", async (req, res) => {
     } else if (val > row.best) {
       const { error: updErr } = await supabase
         .from("scores")
-        .update({ best: val, name, updated_at: new Date().toISOString() })
+        .update({ best: val, name, updated_at: nowIso })
         .eq("user_id", uid)
         .eq("mode", mode);
       if (updErr) {
@@ -160,12 +282,15 @@ app.post("/api/score", async (req, res) => {
       // rafraîchir name/updated_at (optionnel)
       const { error: updNameErr } = await supabase
         .from("scores")
-        .update({ name, updated_at: new Date().toISOString() })
+        .update({ name, updated_at: nowIso })
         .eq("user_id", uid)
         .eq("mode", mode);
       if (updNameErr) console.warn("[DB] update name warn", updNameErr);
       console.log(`[SCORE][KEEP] uid=${uid} mode=${mode} best stays`);
     }
+
+    // --- TABLE scores_periodic (week + month) ---
+    await upsertPeriodicScore({ uid, name, val, mode });
 
     return res.json({ ok: true });
   } catch (e) {
@@ -174,41 +299,62 @@ app.post("/api/score", async (req, res) => {
   }
 });
 
-// GET /api/leaderboard?limit=10&page=1&mode=hard|normal
-// Pagination : 10 scores par page, page 1, 2, 3, ...
+// GET /api/leaderboard?limit=10&page=1&mode=hard|normal&scope=all|week|month
 app.get("/api/leaderboard", async (req, res) => {
   try {
-    const limitRaw = Number(req.query.limit) || 10;
-    const limit = Math.min(100, Math.max(1, limitRaw));
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const page  = Math.max(1, Number(req.query.page) || 1);
+    const mode  = normMode(req.query.mode); // défaut: normal
+    const scope = (req.query.scope || "all").toLowerCase();      // all | week | month
 
-    const pageRaw = Number(req.query.page) || 1;
-    const page = Math.max(1, pageRaw);
+    const from = (page - 1) * limit;
+    const to   = from + limit - 1;
 
-    const mode = normMode(req.query.mode); // défaut: normal
+    let query;
+    if (scope === "week" || scope === "month") {
+      const period_type = scope;
+      const period_key  = scope === "week" ? currentWeekKey() : currentMonthKey();
 
-    const offset = (page - 1) * limit;
-    const to = offset + limit - 1;
+      query = supabase
+        .from("scores_periodic")
+        .select("user_id,name,best,updated_at,mode", { count: "exact" })
+        .eq("mode", mode)
+        .eq("period_type", period_type)
+        .eq("period_key", period_key)
+        .order("best", { ascending: false })
+        .order("updated_at", { ascending: true })
+        .range(from, to);
+    } else {
+      // all-time
+      query = supabase
+        .from("scores")
+        .select("user_id,name,best,updated_at,mode", { count: "exact" })
+        .eq("mode", mode)
+        .order("best", { ascending: false })
+        .order("updated_at", { ascending: true })
+        .range(from, to);
+    }
 
-    const { data, error, count } = await supabase
-      .from("scores")
-      .select("user_id,name,best,updated_at,mode", { count: "exact" })
-      .eq("mode", mode)
-      .order("best", { ascending: false })
-      .order("updated_at", { ascending: true })
-      .range(offset, to);
+    const { data, error, count } = await query;
 
     if (error) {
       console.error("[DB] leaderboard error", error);
       return res.status(500).json({ ok: false, error: "db" });
     }
 
-    return res.json({
+    const total = count ?? 0;
+    const pageSize = limit;
+    const pageCount =
+      pageSize > 0 ? Math.max(1, Math.ceil(total / pageSize)) : 1;
+
+    res.json({
       ok: true,
-      mode,
+      list: data || [],
       page,
-      limit,
-      totalPlayers: typeof count === "number" ? count : null,
-      list: data || []
+      pageSize,
+      total,
+      pageCount,
+      scope,
     });
   } catch (e) {
     console.error("GET /api/leaderboard error", e);
@@ -216,7 +362,7 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
-// GET /api/me?initData=...&mode=hard|normal
+// GET /api/me?initData=...&mode=hard|normal   (all-time, comme avant)
 app.get("/api/me", async (req, res) => {
   try {
     const user = verifyInitData(req.query.initData, BOT_TOKEN);
