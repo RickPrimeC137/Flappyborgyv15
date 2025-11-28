@@ -1349,18 +1349,22 @@ this.player = this.physics.add.sprite(
 // === hitbox rectangulaire autour de Borgy ===
 this.player.body.setAllowGravity(false);
 
-// On part de la hitbox actuelle (centrée)
-// et on la réduit un peu
 const body = this.player.body;
-const bodyW = body.width * 0.90;
-const bodyH = body.height * 0.96;
 
-// `true` => on recentre automatiquement la hitbox sur le sprite
+// on rétrécit la box
+const bodyW = body.width  * 0.70;  // largeur : plus serrée (museau / ailes)
+const bodyH = body.height * 0.80;  // hauteur : pattes + bonnet
+
+// on recentre
 body.setSize(bodyW, bodyH, true);
 
-// si tu veux la descendre un poil vers le ventre, tu peux rajouter :
-body.setOffset(body.offset.x, body.offset.y + body.height * 0.02);
+// puis on la décale un peu vers le museau et les pattes
+const shiftX = body.width  * 0.08; // vers la droite (museau)
+const shiftY = body.height * 0.06; // vers le bas (pattes)
 
+body.setOffset(body.offset.x + shiftX, body.offset.y + shiftY);
+
+// gravity à 0 au début (elle sera activée au premier saut)
 this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
