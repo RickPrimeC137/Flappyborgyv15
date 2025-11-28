@@ -1541,10 +1541,9 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-   _resizePipeToRim(img, isTop, rimY, scaleX) {
+  _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
-  // 1) on ajuste la hauteur visuelle pour que le bord arrive à rimY
   const targetH = isTop
     ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
     : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
@@ -1552,29 +1551,24 @@ class GameScene extends Phaser.Scene {
   img.setScale(scaleX, targetH / img.height);
   img.y = rimY;
 
-  // 2) hitbox
+  // === HITBOX ===
   const displayW = img.displayWidth;
   const displayH = img.displayHeight;
 
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  const isHard = this.game?._hardMode === true;
-  const bodyW  = displayW * (isHard ? 1.02 : PIPE_BODY_W);
-
-  const extraTop    = 180; // combien la hitbox dépasse vers le BAS pour le tuyau du haut
-  const extraBottom = 40; // combien elle dépasse vers le HAUT pour le tuyau du bas
-
-  const offsetX = (displayW - bodyW) / 2;
+  const extraTop    = 80;  // haut → descend dans le trou
+  const extraBottom = 40;  // bas  → monte dans le trou
 
   if (isTop) {
-    // tuyau du haut : hitbox descend dans le trou
-    img.body.setSize(bodyW, displayH + extraTop, false);
-    img.body.setOffset(offsetX, 0);          // NE PAS remonter la box
+    // couvre TOUT le tuyau du haut + descend de extraTop dans le trou
+    img.body.setSize(displayW, displayH + extraTop, false);
+    img.body.setOffset(0, 0);          // ⚠️ pas de -extraTop
   } else {
-    // tuyau du bas : hitbox remonte un peu dans le trou
-    img.body.setSize(bodyW, displayH + extraBottom, false);
-    img.body.setOffset(offsetX, -extraBottom);
+    // couvre TOUT le tuyau du bas + monte de extraBottom dans le trou
+    img.body.setSize(displayW, displayH + extraBottom, false);
+    img.body.setOffset(0, -extraBottom); // ⚠️ ici on remonte la hitbox
   }
 }
 
