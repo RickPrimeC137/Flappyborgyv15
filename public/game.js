@@ -129,9 +129,16 @@ async function postScore(score, isHard=false){
     });
   }catch(e){ console.warn("score post error", e); }
 }
-async function fetchLeaderboard(limit = 10, isHard = false) {
+
+// ⚠️ VERSION PAGINÉE
+async function fetchLeaderboard(limit = 10, isHard = false, page = 1) {
   try {
-    const url = `${API_BASE}/api/leaderboard?limit=${limit}${isHard ? "&mode=hard" : ""}&_=${Date.now()}`;
+    const url =
+      `${API_BASE}/api/leaderboard?limit=${limit}` +
+      `&page=${page}` +
+      (isHard ? "&mode=hard" : "") +
+      `&_=${Date.now()}`; // anti-cache
+
     const r = await fetch(url, { cache: "no-store" });
     if (!r.ok) { console.warn("lb status", r.status); return []; }
     const j = await r.json().catch(() => null);
@@ -659,11 +666,13 @@ const xmasIcon = this.add.text(
     }).setOrigin(0.5);
 
     this.makeBtn(W/2, H*0.30, "Jouer",       () => this.scene.start("game"));
-    this.makeBtn(W/2, H*0.38, "Leaderboard", async () => {
+
+    // ⚠️ BOUTON LEADERBOARD → PAGINÉ
+    this.makeBtn(W/2, H*0.38, "Leaderboard", () => {
       const isHard = this.game._hardMode === true;
-      const list = await fetchLeaderboard(10, isHard);
-      this.showLeaderboard(list, isHard);
+      this.showLeaderboard(isHard);
     });
+
     this.makeBtn(W/2, H*0.46, "Quêtes 🔥",   () => this.showQuests());
     this.makeBtn(W/2, H*0.54, "Borgy Coins Shop", () => this.showShop());
     this.makeBtn(W/2, H*0.62, "🗳️ Voter pour Borgy", () => {
@@ -726,28 +735,171 @@ const xmasIcon = this.add.text(
     return t;
   }
 
-  showLeaderboard(list, isHard = false){
-    const W = this.scale.width, H = this.scale.height; const depth = 500;
-    const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
+  // ⚠️ VERSION PAGINÉE DU LEADERBOARD DANS LE MENU
+  showLeaderboard(isHard = false) {
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 500;
+
+    const elements = [];
+    const rows = [];
+    let currentPage = 1;
+
+    const panel = this.add
+      .rectangle(W / 2, H * 0.5, W * 0.78, H * 0.6, 0x0a2a2f, 0.92)
+      .setDepth(depth);
+    elements.push(panel);
+
     const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
-    const title = this.add.text(W/2, H*0.22, titleText, { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
-      .setOrigin(0.5).setDepth(depth+1);
-    const colX = W*0.23, startY = H*0.30, lineH = 56;
-    list.slice(0,10).forEach((row, i) => {
-      const y = startY + i*lineH;
-      this.add.text(colX, y, String(i+1).padStart(2,"0")+".", {fontFamily:"monospace", fontSize:36, color:"#bff"})
-        .setDepth(depth+1).setOrigin(0,0.5);
-      this.add.text(colX+70, y, row.name || "Player", {fontFamily:"monospace", fontSize:36, color:"#fff"})
-        .setDepth(depth+1).setOrigin(0,0.5);
-      this.add.text(W*0.72, y, String(row.best), {fontFamily:"monospace", fontSize:36, color:"#cffff1"})
-        .setDepth(depth+1).setOrigin(1,0.5);
-    });
-    const close = this.add.text(W/2, H*0.82, "Fermer", { fontFamily:"monospace", fontSize:44, color:"#fff",
-      backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8} })
-      .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
-      .forEach(o => o?.destroy());
+    const title = this.add
+      .text(W / 2, H * 0.18, titleText, {
+        fontFamily: "Georgia,serif",
+        fontSize: 60,
+        color: "#ffffff",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(title);
+
+    const pageLabel = this.add
+      .text(W / 2, H * 0.24, "Page 1", {
+        fontFamily: "monospace",
+        fontSize: 24,
+        color: "#cffff1",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(pageLabel);
+
+    const colX = W * 0.23;
+    const startY = H * 0.30;
+    const lineH = 56;
+
+    const close = this.add
+      .text(W / 2, H * 0.82, "Fermer", {
+        fontFamily: "monospace",
+        fontSize: 44,
+        color: "#fff",
+        backgroundColor: "#0db187",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(close);
+
+    const prevBtn = this.add
+      .text(W * 0.28, H * 0.82, "◀", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(prevBtn);
+
+    const nextBtn = this.add
+      .text(W * 0.72, H * 0.82, "▶", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(nextBtn);
+
+    const destroyAll = () => {
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      elements.forEach((el) => {
+        try { el.destroy(); } catch (e) {}
+      });
+    };
+
     close.on("pointerdown", destroyAll);
+
+    const refreshButtonsState = (listLength) => {
+      if (currentPage <= 1) {
+        prevBtn.disableInteractive();
+        prevBtn.setAlpha(0.4);
+      } else {
+        prevBtn.setInteractive({ useHandCursor: true });
+        prevBtn.setAlpha(1);
+      }
+
+      if (listLength < 10) {
+        nextBtn.disableInteractive();
+        nextBtn.setAlpha(0.4);
+      } else {
+        nextBtn.setInteractive({ useHandCursor: true });
+        nextBtn.setAlpha(1);
+      }
+    };
+
+    const loadPage = async (page) => {
+      const list = await fetchLeaderboard(10, isHard, page);
+
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      rows.length = 0;
+
+      currentPage = page;
+      pageLabel.setText(`Page ${page}`);
+
+      list.slice(0, 10).forEach((row, i) => {
+        const y = startY + i * lineH;
+
+        const rankTxt = this.add
+          .text(
+            colX,
+            y,
+            String((page - 1) * 10 + i + 1).padStart(2, "0") + ".",
+            { fontFamily: "monospace", fontSize: 36, color: "#bff" }
+          )
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const nameTxt = this.add
+          .text(colX + 70, y, row.name || "Player", {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#fff",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const scoreTxt = this.add
+          .text(W * 0.72, y, String(row.best), {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#cffff1",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(1, 0.5);
+
+        rows.push(rankTxt, nameTxt, scoreTxt);
+      });
+
+      refreshButtonsState(list.length);
+    };
+
+    prevBtn.on("pointerdown", () => {
+      if (currentPage > 1) loadPage(currentPage - 1);
+    });
+
+    nextBtn.on("pointerdown", () => {
+      loadPage(currentPage + 1);
+    });
+
+    loadPage(1);
   }
 
   showQuests(){
@@ -1335,6 +1487,7 @@ class GameScene extends Phaser.Scene {
     this.canRevive = this.skinIsDiamond;
 
     const finalScale = computeSkinScale(this.textures, skinKey);
+
 // Applique une hitbox "standard Borgy" à n'importe quel skin
 function applyStandardBorgyHitbox(sprite, textures, skinKey) {
   try {
@@ -2125,33 +2278,177 @@ const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(
     });
 
     const isHard = this.game._hardMode === true;
-    postScore(this.score, isHard).then(() =>
-      fetchLeaderboard(10, isHard).then(list => { if (list?.length) this.showLeaderboard(list, isHard); })
-    );
+    // ⚠️ AFFICHAGE LEADERBOARD PAGINÉ APRÈS ENREGISTREMENT
+    postScore(this.score, isHard).then(() => {
+      this.showLeaderboard(isHard);
+    });
   }
 
-  showLeaderboard(list, isHard = false){
-    const W = this.scale.width, H = this.scale.height; const depth = 300;
-    const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
+  // ⚠️ VERSION PAGINÉE DU LEADERBOARD DANS LA GAME SCENE
+  showLeaderboard(isHard = false){
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 300;
+
+    const elements = [];
+    const rows = [];
+    let currentPage = 1;
+
+    const panel = this.add
+      .rectangle(W / 2, H * 0.5, W * 0.78, H * 0.6, 0x0a2a2f, 0.92)
+      .setDepth(depth);
+    elements.push(panel);
+
     const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
-    const title = this.add.text(W/2, H*0.22, titleText, { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
-      .setOrigin(0.5).setDepth(depth+1);
-    const colX = W*0.23, startY = H*0.30, lineH = 56;
-    list.slice(0,10).forEach((row, i) => {
-      const y = startY + i*lineH;
-      this.add.text(colX, y, String(i+1).padStart(2,"0")+".", {fontFamily:"monospace", fontSize:36, color:"#bff"})
-        .setDepth(depth+1).setOrigin(0,0.5);
-      this.add.text(colX+70, y, row.name || "Player", {fontFamily:"monospace", fontSize:36, color:"#fff"})
-        .setDepth(depth+1).setOrigin(0,0.5);
-      this.add.text(W*0.72, y, String(row.best), {fontFamily:"monospace", fontSize:36, color:"#cffff1"})
-        .setDepth(depth+1).setOrigin(1,0.5);
-    });
-    const close = this.add.text(W/2, H*0.82, "Fermer",
-      { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8} })
-      .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
-      .forEach(o => o?.destroy());
+    const title = this.add
+      .text(W / 2, H * 0.18, titleText, {
+        fontFamily: "Georgia,serif",
+        fontSize: 60,
+        color: "#ffffff",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(title);
+
+    const pageLabel = this.add
+      .text(W / 2, H * 0.24, "Page 1", {
+        fontFamily: "monospace",
+        fontSize: 24,
+        color: "#cffff1",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(pageLabel);
+
+    const colX = W * 0.23;
+    const startY = H * 0.30;
+    const lineH = 56;
+
+    const close = this.add
+      .text(W / 2, H * 0.82, "Fermer", {
+        fontFamily: "monospace",
+        fontSize: 44,
+        color: "#fff",
+        backgroundColor: "#0db187",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(close);
+
+    const prevBtn = this.add
+      .text(W * 0.28, H * 0.82, "◀", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(prevBtn);
+
+    const nextBtn = this.add
+      .text(W * 0.72, H * 0.82, "▶", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(nextBtn);
+
+    const destroyAll = () => {
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      elements.forEach((el) => {
+        try { el.destroy(); } catch (e) {}
+      });
+    };
+
     close.on("pointerdown", destroyAll);
+
+    const refreshButtonsState = (listLength) => {
+      if (currentPage <= 1) {
+        prevBtn.disableInteractive();
+        prevBtn.setAlpha(0.4);
+      } else {
+        prevBtn.setInteractive({ useHandCursor: true });
+        prevBtn.setAlpha(1);
+      }
+
+      if (listLength < 10) {
+        nextBtn.disableInteractive();
+        nextBtn.setAlpha(0.4);
+      } else {
+        nextBtn.setInteractive({ useHandCursor: true });
+        nextBtn.setAlpha(1);
+      }
+    };
+
+    const loadPage = async (page) => {
+      const list = await fetchLeaderboard(10, isHard, page);
+
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      rows.length = 0;
+
+      currentPage = page;
+      pageLabel.setText(`Page ${page}`);
+
+      list.slice(0, 10).forEach((row, i) => {
+        const y = startY + i * lineH;
+
+        const rankTxt = this.add
+          .text(
+            colX,
+            y,
+            String((page - 1) * 10 + i + 1).padStart(2, "0") + ".",
+            { fontFamily: "monospace", fontSize: 36, color: "#bff" }
+          )
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const nameTxt = this.add
+          .text(colX + 70, y, row.name || "Player", {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#fff",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const scoreTxt = this.add
+          .text(W * 0.72, y, String(row.best), {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#cffff1",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(1, 0.5);
+
+        rows.push(rankTxt, nameTxt, scoreTxt);
+      });
+
+      refreshButtonsState(list.length);
+    };
+
+    prevBtn.on("pointerdown", () => {
+      if (currentPage > 1) loadPage(currentPage - 1);
+    });
+
+    nextBtn.on("pointerdown", () => {
+      loadPage(currentPage + 1);
+    });
+
+    loadPage(1);
   }
 }
 
