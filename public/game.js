@@ -1541,34 +1541,45 @@ class GameScene extends Phaser.Scene {
     }
   }
 
- _resizePipeToRim(img, isTop, rimY, scaleX) {
+  _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
-  // hauteur totale du tuyau pour aller jusqu’au bord de l’écran + overscan
+  // 1) on scale le sprite pour qu’il ait la bonne hauteur visuelle
   const targetH = isTop
-    ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
-    : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
+    ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))          // du haut jusqu'au bord du trou
+    : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));   // du bord du trou jusqu'en bas
 
-  // on scale le sprite à la bonne hauteur
   img.setScale(scaleX, targetH / img.height);
 
-  const displayW = img.displayWidth;
+  const displayW = img.displayWidth;   // ≃ PIPE_W_DISPLAY
   const displayH = img.displayHeight;
 
+  // 2) on positionne le sprite : bord du tuyau EXACTEMENT sur rimY
+  if (isTop) {
+    // bas du sprite sur rimY
+    img.y = rimY - displayH / 2;
+  } else {
+    // haut du sprite sur rimY
+    img.y = rimY + displayH / 2;
+  }
+
+  // 3) HITBOX RECTANGULAIRE QUI FAIT TOUT LE TUYAU
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  // === HITBOX = tout le sprite, centrée sur l’origine ===
-  img.body.setSize(displayW, displayH, false);           // pas de recentrage auto
-  img.body.setOffset(-displayW / 2, -displayH / 2);      // body centré sur l’origine du sprite
+  // grande hauteur de hitbox pour être sûr qu'on couvre tout le tuyau
+  const bodyH = H + PIPE_OVERSCAN * 2;
+  const bodyW = displayW; // toute la largeur du tuyau
 
-  // on positionne le sprite pour que le bord du tuyau soit exactement sur rimY
   if (isTop) {
-    // tuyau du haut : bas du sprite sur rimY
-    img.y = rimY - displayH / 2;
+    // on veut que le bas de la hitbox soit sur rimY
+    const offsetY = displayH - bodyH; // négatif : la hitbox remonte au-dessus du sprite
+    img.body.setSize(bodyW, bodyH, false);
+    img.body.setOffset(-bodyW / 2, offsetY);
   } else {
-    // tuyau du bas : haut du sprite sur rimY
-    img.y = rimY + displayH / 2;
+    // tuyau du bas : le haut de la hitbox est sur rimY
+    img.body.setSize(bodyW, bodyH, false);
+    img.body.setOffset(-bodyW / 2, 0);
   }
 }
 
