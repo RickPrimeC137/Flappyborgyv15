@@ -29,7 +29,7 @@ const BG_XMAS_KEY  = "bg_noel";    // assets/bg_noel.png
 
 const PLAYFIELD_TOP_PCT = 0.20;
 const PLAYFIELD_BOT_PCT = 0.92;
-const PIPE_RIM_MAX_PCT  = 0.80;
+const PIPE_RIM_MAX_PCT  = 0.75;
 
 const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
