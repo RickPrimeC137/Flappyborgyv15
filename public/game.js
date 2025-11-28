@@ -1336,16 +1336,27 @@ class GameScene extends Phaser.Scene {
 
     const finalScale = computeSkinScale(this.textures, skinKey);
 
-   this.player.body.setAllowGravity(false);
+// === création du joueur ===
+this.player = this.physics.add.sprite(
+  W * 0.18,
+  H * ((PLAYFIELD_TOP_PCT + PLAYFIELD_BOT_PCT) / 2),
+  skinKey
+)
+  .setScale(finalScale)
+  .setDepth(10)
+  .setCollideWorldBounds(true);
+
+// === hitbox rectangulaire autour de Borgy ===
+this.player.body.setAllowGravity(false);
 
 const pw = this.player.displayWidth;
 const ph = this.player.displayHeight;
 
-// Hitbox qui entoure quasiment tout Borgy (95% de la taille)
+// Hitbox qui entoure presque tout Borgy (95%)
 const bodyW = pw * 0.95;
 const bodyH = ph * 0.95;
 
-// On centre la hitbox dans le sprite
+// Centrée sur le sprite
 this.player.body
   .setSize(bodyW, bodyH, false)
   .setOffset((pw - bodyW) / 2, (ph - bodyH) / 2);
