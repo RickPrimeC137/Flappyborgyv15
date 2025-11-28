@@ -174,26 +174,42 @@ app.post("/api/score", async (req, res) => {
   }
 });
 
-// GET /api/leaderboard?limit=10&mode=hard|normal
+// GET /api/leaderboard?limit=10&page=1&mode=hard|normal
+// Pagination : 10 scores par page, page 1, 2, 3, ...
 app.get("/api/leaderboard", async (req, res) => {
   try {
-    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 10));
+    const limitRaw = Number(req.query.limit) || 10;
+    const limit = Math.min(100, Math.max(1, limitRaw));
+
+    const pageRaw = Number(req.query.page) || 1;
+    const page = Math.max(1, pageRaw);
+
     const mode = normMode(req.query.mode); // défaut: normal
 
-    const { data, error } = await supabase
+    const offset = (page - 1) * limit;
+    const to = offset + limit - 1;
+
+    const { data, error, count } = await supabase
       .from("scores")
-      .select("user_id,name,best,updated_at,mode")
+      .select("user_id,name,best,updated_at,mode", { count: "exact" })
       .eq("mode", mode)
       .order("best", { ascending: false })
       .order("updated_at", { ascending: true })
-      .limit(limit);
+      .range(offset, to);
 
     if (error) {
       console.error("[DB] leaderboard error", error);
       return res.status(500).json({ ok: false, error: "db" });
     }
 
-    res.json({ ok: true, list: data || [] });
+    return res.json({
+      ok: true,
+      mode,
+      page,
+      limit,
+      totalPlayers: typeof count === "number" ? count : null,
+      list: data || []
+    });
   } catch (e) {
     console.error("GET /api/leaderboard error", e);
     res.status(500).json({ ok: false, error: "server" });
