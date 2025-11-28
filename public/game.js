@@ -317,6 +317,13 @@ const SKINS_DEF = [
   // NB : le skin Noël "borgy_xmas" n'est PAS dans le shop, il est automatique en mode Noël
 ];
 
+// À ajouter juste sous la constante SKINS_STORAGE_KEY ou sous SKINS_DEF
+function saveSkinState(data){
+  try {
+    localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data));
+  } catch(e){}
+}
+
 function loadSkinState(){
   try{
     const raw = localStorage.getItem(SKINS_STORAGE_KEY);
