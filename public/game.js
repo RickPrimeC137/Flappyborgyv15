@@ -454,6 +454,45 @@ function getSelectedSkinKey(){
   return skin && skin.key ? skin.key : "borgy";
 }
 
+// ===== Utils hitbox / échelle des skins =====
+function getVisibleBounds(img){
+  // ici on simplifie : on prend tout le sprite
+  if (!img || !img.width || !img.height) return null;
+  return { x: 0, y: 0, w: img.width, h: img.height };
+}
+
+// Calcule un scale pour que tous les skins aient à peu près
+// la même hauteur que le Borgy de base (key "borgy")
+function computeSkinScale(textures, skinKey){
+  try {
+    const baseTex = textures.get("borgy");
+    const skinTex = textures.get(skinKey);
+    if (!baseTex || !skinTex) return PLAYER_SCALE;
+
+    const baseImg = baseTex.getSourceImage
+      ? baseTex.getSourceImage()
+      : baseTex.source[0]?.image;
+    const skinImg = skinTex.getSourceImage
+      ? skinTex.getSourceImage()
+      : skinTex.source[0]?.image;
+
+    if (!baseImg || !skinImg) return PLAYER_SCALE;
+
+    const baseH = baseImg.height || 1;
+    const skinH = skinImg.height || 1;
+
+    // On veut que la hauteur du skin soit comparable à celle du Borgy
+    const targetWorldHeight = PLAYER_SCALE * baseH;
+    const scale = targetWorldHeight / skinH;
+
+    if (!Number.isFinite(scale) || scale <= 0.01) return PLAYER_SCALE;
+    return scale;
+  } catch (e) {
+    console.warn("computeSkinScale error", e);
+    return PLAYER_SCALE;
+  }
+}
+
 /* ================== PRELOAD ================== */
 class PreloadScene extends Phaser.Scene {
   constructor(){ super("preload"); }
