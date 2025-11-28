@@ -1567,7 +1567,7 @@ class GameScene extends Phaser.Scene {
 
     // On veut que la hitbox soit collée à la BASE du tuyau (au niveau du trou)
     // et seulement sur une bande en bas du sprite (par ex 40 % de la hauteur).
-    const bodyHeight = displayH * 0.5;  // teste 0.3 / 0.5 si tu veux
+    const bodyHeight = displayH * 0.2;  // teste 0.3 / 0.5 si tu veux
 
     // largeur = largeur du tuyau, hauteur = bande du bas
     img.body.setSize(displayW, bodyHeight, false);
