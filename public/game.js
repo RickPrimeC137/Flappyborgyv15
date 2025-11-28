@@ -1349,17 +1349,17 @@ this.player = this.physics.add.sprite(
 // === hitbox rectangulaire autour de Borgy ===
 this.player.body.setAllowGravity(false);
 
-const pw = this.player.displayWidth;
-const ph = this.player.displayHeight;
+// On part de la hitbox actuelle (centrée)
+// et on la réduit un peu
+const body = this.player.body;
+const bodyW = body.width * 0.95;
+const bodyH = body.height * 0.95;
 
-// Hitbox qui entoure presque tout Borgy (95%)
-const bodyW = pw * 0.95;
-const bodyH = ph * 0.95;
+// `true` => on recentre automatiquement la hitbox sur le sprite
+body.setSize(bodyW, bodyH, true);
 
-// Centrée sur le sprite
-this.player.body
-  .setSize(bodyW, bodyH, false)
-  .setOffset((pw - bodyW) / 2, (ph - bodyH) / 2);
+// si tu veux la descendre un poil vers le ventre, tu peux rajouter :
+// body.setOffset(body.offset.x, body.offset.y + body.height * 0.02);
 
 this.player.setGravityY(0);
 
