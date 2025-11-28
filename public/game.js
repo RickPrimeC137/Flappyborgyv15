@@ -1604,7 +1604,7 @@ const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(
     let yTopRim0    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
     let yBottomRim0 = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
-    this._resizePipeToRim(topImg, true,  yTopRim0,    scaleXt);
+    this._resizePipeToRim(topImg, true,  yTopRim0 + 2,    scaleXt);
     this._resizePipeToRim(bottomImg, false, yBottomRim0, scaleXb);
 
     topImg.body.setVelocityX(vx);
