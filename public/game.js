@@ -1349,17 +1349,21 @@ this.player = this.physics.add.sprite(
 // === hitbox rectangulaire autour de Borgy (réduite de ~40%) ===
 this.player.body.setAllowGravity(false);
 
-const body  = this.player.body;
+const body = this.player.body;
 
-// on garde ~60% de la taille d’origine (=> hitbox 40% plus petite)
-const bodyW = body.width  * 0.60;
-const bodyH = body.height * 0.60;
+// taille d’origine du body (celle que Phaser met automatiquement)
+const baseW = body.width;
+const baseH = body.height;
+
+// on garde ~60% de la taille => hitbox 40% plus petite
+const bodyW = baseW * 0.60;
+const bodyH = baseH * 0.60;
 
 // true => Phaser recentre la hitbox sur le sprite
 body.setSize(bodyW, bodyH, true);
 
-// on la descend un tout petit peu pour bien couvrir les pattes
-body.setOffset(body.offset.x, body.offset.y + body.height * 0.04);
+// petit décalage vers le bas pour couvrir les pattes
+body.setOffset(body.offset.x, body.offset.y + baseH * 0.04);
 
 this.player.setGravityY(0);
 
