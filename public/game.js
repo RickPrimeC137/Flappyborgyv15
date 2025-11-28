@@ -1544,10 +1544,12 @@ class GameScene extends Phaser.Scene {
   _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
+  // Hauteur visuelle du sprite (avec overscan) jusqu’au bord du trou
   const targetH = isTop
     ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
     : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
+  // On scale le sprite pour qu’il remplisse visuellement jusqu’au rim
   img.setScale(scaleX, targetH / img.height);
   img.y = rimY;
 
@@ -1558,17 +1560,26 @@ class GameScene extends Phaser.Scene {
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  const extraTop    = 80;  // haut → descend dans le trou
-  const extraBottom = 40;  // bas  → monte dans le trou
-
   if (isTop) {
-    // couvre TOUT le tuyau du haut + descend de extraTop dans le trou
-    img.body.setSize(displayW, displayH + extraTop, false);
-    img.body.setOffset(0, 0);          // ⚠️ pas de -extraTop
+    // ----- PIPE DU HAUT -----
+    // On veut que le BAS de la hitbox colle à la base du pipe (côté trou)
+    const extendIntoGap = 0; // mets 10–20 si tu veux que ça descende un peu dans le trou
+
+    const bodyHeight = displayH + extendIntoGap;
+    img.body.setSize(displayW, bodyHeight, false);
+
+    // important : on aligne le bas du body sur le bas du sprite
+    // offsetY = displayH - bodyHeight
+    img.body.setOffset(0, displayH - bodyHeight);
+
   } else {
-    // couvre TOUT le tuyau du bas + monte de extraBottom dans le trou
-    img.body.setSize(displayW, displayH + extraBottom, false);
-    img.body.setOffset(0, -extraBottom); // ⚠️ ici on remonte la hitbox
+    // ----- PIPE DU BAS -----
+    // Hitbox qui remonte un peu dans le trou
+    const extendIntoGap = 40;
+
+    const bodyHeight = displayH + extendIntoGap;
+    img.body.setSize(displayW, bodyHeight, false);
+    img.body.setOffset(0, -extendIntoGap);
   }
 }
 
