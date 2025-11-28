@@ -1346,21 +1346,22 @@ this.player = this.physics.add.sprite(
   .setDepth(10)
   .setCollideWorldBounds(true);
 
-// === hitbox rectangulaire autour de Borgy ===
+// === hitbox rectangulaire autour de Borgy (réduite de ~40%) ===
 this.player.body.setAllowGravity(false);
 
-const body = this.player.body;
+const body  = this.player.body;
 
-// on rétrécit la box
-const bodyW = body.width  * 0.70;  // largeur : plus serrée (museau / ailes)
-const bodyH = body.height * 0.80;  // hauteur : pattes + bonnet
+// on garde ~60% de la taille d’origine (=> hitbox 40% plus petite)
+const bodyW = body.width  * 0.60;
+const bodyH = body.height * 0.60;
 
-// on recentre
+// true => Phaser recentre la hitbox sur le sprite
 body.setSize(bodyW, bodyH, true);
 
-// puis on la décale un peu vers le museau et les pattes
-const shiftX = body.width  * 0.08; // vers la droite (museau)
-const shiftY = body.height * 0.02; // vers le bas (pattes)
+// on la descend un tout petit peu pour bien couvrir les pattes
+body.setOffset(body.offset.x, body.offset.y + body.height * 0.04);
+
+this.player.setGravityY(0);
 
 body.setOffset(body.offset.x + shiftX, body.offset.y + shiftY);
 
