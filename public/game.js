@@ -1540,8 +1540,8 @@ class GameScene extends Phaser.Scene {
       this.debugTxt.setText(`speed:${this.curSpeed}  delay:${this.curDelay}  next:${Math.max(0, Math.ceil(this.nextSpawnAt - this.time.now))}ms`);
     }
   }
-
- _resizePipeToRim(img, isTop, rimY, scaleX) {
+  
+  _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
   // Hauteur visuelle du sprite (avec overscan) jusqu’au bord du trou
@@ -1549,7 +1549,7 @@ class GameScene extends Phaser.Scene {
     ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
     : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
-  // On scale le sprite pour qu’il remplisse visuellement jusqu’au rim
+  // On scale le sprite pour qu’il remplisse visuellement le tuyau
   img.setScale(scaleX, targetH / img.height);
   img.y = rimY;
 
@@ -1560,35 +1560,10 @@ class GameScene extends Phaser.Scene {
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  if (isTop) {
-    // =======================
-    //       TUYAU DU HAUT
-    // =======================
-
-    // On veut que la hitbox soit collée à la BASE du tuyau (au niveau du trou)
-    // et seulement sur une bande en bas du sprite (par ex 40 % de la hauteur).
-    const bodyHeight = displayH * 0.2;  // teste 0.3 / 0.5 si tu veux
-
-    // largeur = largeur du tuyau, hauteur = bande du bas
-    img.body.setSize(displayW, bodyHeight, false);
-
-    // on colle le BAS de la hitbox au BAS du sprite :
-    // offsetY = displayH - bodyHeight
-    img.body.setOffset(20, displayH - bodyHeight);
-
-  } else {
-    // =======================
-    //       TUYAU DU BAS
-    // =======================
-
-    // Ici on garde une hitbox qui remonte un peu dans le trou
-    const extendIntoGap = 40;          // combien ça remonte dans le gap
-    const bodyHeight    = displayH + extendIntoGap;
-
-    img.body.setSize(displayW, bodyHeight, false);
-    img.body.setOffset(0, -extendIntoGap);
-    // => le haut de la hitbox remonte de 40px au-dessus du bord du tuyau
-  }
+  // ⬇️⬇️⬇️ IMPORTANT : même chose pour HAUT et BAS ⬇️⬇️⬇️
+  // Hitbox = TOUT le sprite du tuyau
+  img.body.setSize(displayW, displayH, false);
+  img.body.setOffset(0, 0);
 }
 
   // ========= Génération d’une paire =========
