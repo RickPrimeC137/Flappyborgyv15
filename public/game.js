@@ -1562,8 +1562,8 @@ class GameScene extends Phaser.Scene {
   const isHard = this.game?._hardMode === true;
   const bodyW  = displayW * (isHard ? 1.02 : PIPE_BODY_W);
 
-  const extraTop    = 100; // combien la hitbox dépasse vers le BAS pour le tuyau du haut
-  const extraBottom = 60; // combien elle dépasse vers le HAUT pour le tuyau du bas
+  const extraTop    = 80; // combien la hitbox dépasse vers le BAS pour le tuyau du haut
+  const extraBottom = 80; // combien elle dépasse vers le HAUT pour le tuyau du bas
 
   const offsetX = (displayW - bodyW) / 2;
 
