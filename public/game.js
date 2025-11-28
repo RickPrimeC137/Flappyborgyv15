@@ -1559,9 +1559,16 @@ class GameScene extends Phaser.Scene {
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  // hitbox = sprite complet
-  img.body.setSize(displayW, displayH, true);
-  img.body.setOffset(0, 0);
+  // on n'utilise PAS "true" ici : on gère l'offset à la main
+  img.body.setSize(displayW, displayH, false);
+
+  if (isTop) {
+    // origin = (0.5, 1) -> le sprite va de (-W/2, -H) à (+W/2, 0)
+    img.body.setOffset(-displayW / 2, -displayH);
+  } else {
+    // origin = (0.5, 0) -> le sprite va de (-W/2, 0) à (+W/2, +H)
+    img.body.setOffset(-displayW / 2, 0);
+  }
 }
 
   // ========= Génération d’une paire =========
