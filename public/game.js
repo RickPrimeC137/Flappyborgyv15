@@ -1544,32 +1544,35 @@ class GameScene extends Phaser.Scene {
  _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
-  // Hauteur visuelle du tuyau pour aller jusqu'au bord de l'écran + overscan
+  // Hauteur totale du sprite pour couvrir tout l’écran + un overscan
   const targetH = isTop
-    ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))          // tuyau du haut : du sommet jusqu'au bord du trou
-    : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));   // tuyau du bas : du bord du trou jusqu'en bas
+    ? (rimY + PIPE_OVERSCAN)           // du bord supérieur de l’écran jusqu’au bord du trou
+    : (H - rimY + PIPE_OVERSCAN);     // du bord du trou jusqu’en bas de l’écran
 
-  // 1) on scale le sprite
-  img.setScale(scaleX, targetH / img.height);
+  // Scale du sprite
+  const sx = scaleX;
+  const sy = targetH / img.height;
+
+  img.setScale(sx, sy);
+  img.setOrigin(0.5, 0.5);
 
   const displayW = img.displayWidth;
   const displayH = img.displayHeight;
 
-  // 2) on place le sprite pour que le bord du tuyau soit EXACTEMENT sur rimY
+  // === HITBOX : grand rectangle qui couvre TOUT le sprite ===
+  img.body.setAllowGravity(false);
+  img.body.setImmovable(true);
+  img.body.setSize(displayW, displayH, false);      // pas de recentrage auto
+  img.body.setOffset(-displayW / 2, -displayH / 2); // centré sur l’origine du sprite
+
+  // On positionne le sprite pour que le bord du tuyau soit exactement sur rimY
   if (isTop) {
-    // bas du sprite sur rimY
+    // tuyau du haut : bas du sprite sur rimY
     img.y = rimY - displayH / 2;
   } else {
-    // haut du sprite sur rimY
+    // tuyau du bas : haut du sprite sur rimY
     img.y = rimY + displayH / 2;
   }
-
-  // 3) HITBOX = tout le tuyau (rectangle plein)
-  img.setImmovable(true);
-  img.body.setAllowGravity(false);
-
-  img.body.setSize(displayW, displayH, false);      // taille = taille affichée
-  img.body.setOffset(-displayW / 2, -displayH / 2); // hitbox centrée sur l'origine
 }
 
   // ========= Génération d’une paire =========
