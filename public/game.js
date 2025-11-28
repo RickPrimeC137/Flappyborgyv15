@@ -1560,26 +1560,22 @@ class GameScene extends Phaser.Scene {
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  if (isTop) {
-    // ----- PIPE DU HAUT -----
-    // On veut que le BAS de la hitbox colle à la base du pipe (côté trou)
-    const extendIntoGap = 10; // mets 10–20 si tu veux que ça descende un peu dans le trou
+    if (isTop) {
+    // On veut que la hitbox soit seulement sur le BAS du tuyau
+    // (genre les 40% du bas, collés à la base du pipe)
+    const bodyHeight = displayH * 0.4; // tu peux tester 0.3 / 0.5 etc.
 
-    const bodyHeight = displayH + extendIntoGap;
     img.body.setSize(displayW, bodyHeight, false);
 
-    // important : on aligne le bas du body sur le bas du sprite
-    // offsetY = displayH - bodyHeight
+    // très important : on colle le BAS de la hitbox au BAS du sprite
+    // (origine du sprite en bas, donc offsetY = displayH - bodyHeight)
     img.body.setOffset(0, displayH - bodyHeight);
 
   } else {
-    // ----- PIPE DU BAS -----
-    // Hitbox qui remonte un peu dans le trou
-    const extendIntoGap = 40;
-
-    const bodyHeight = displayH + extendIntoGap;
-    img.body.setSize(displayW, bodyHeight, false);
-    img.body.setOffset(0, -extendIntoGap);
+    // pipe du bas : tu peux garder exactement ton code d'avant
+    const extraBottom = 40;
+    img.body.setSize(displayW, displayH + extraBottom, false);
+    img.body.setOffset(0, -extraBottom);
   }
 }
 
