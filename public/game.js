@@ -27,8 +27,8 @@ const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
 const BG_XMAS_KEY  = "bg_noel";    // assets/bg_noel.png
 
-const PLAYFIELD_TOP_PCT = 0.15;
-const PLAYFIELD_BOT_PCT = 0.90;
+const PLAYFIELD_TOP_PCT = 0.18;
+const PLAYFIELD_BOT_PCT = 0.88;
 const PIPE_RIM_MAX_PCT  = 0.80;
 
 const PIPE_OVERSCAN = 160;
