@@ -1541,33 +1541,34 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  _resizePipeToRim(img, isTop, rimY, scaleX) {
+ _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
+  // hauteur totale du tuyau pour aller jusqu’au bord de l’écran + overscan
   const targetH = isTop
     ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
     : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
-  // on met le sprite à la bonne taille
+  // on scale le sprite à la bonne hauteur
   img.setScale(scaleX, targetH / img.height);
-  img.y = rimY;
 
-  // === BODY : rectangle qui recouvre TOUT le tuyau affiché ===
   const displayW = img.displayWidth;
   const displayH = img.displayHeight;
 
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  // on n'utilise PAS "true" ici : on gère l'offset à la main
-  img.body.setSize(displayW, displayH, false);
+  // === HITBOX = tout le sprite, centrée sur l’origine ===
+  img.body.setSize(displayW, displayH, false);           // pas de recentrage auto
+  img.body.setOffset(-displayW / 2, -displayH / 2);      // body centré sur l’origine du sprite
 
+  // on positionne le sprite pour que le bord du tuyau soit exactement sur rimY
   if (isTop) {
-    // origin = (0.5, 1) -> le sprite va de (-W/2, -H) à (+W/2, 0)
-    img.body.setOffset(-displayW / 2, -displayH);
+    // tuyau du haut : bas du sprite sur rimY
+    img.y = rimY - displayH / 2;
   } else {
-    // origin = (0.5, 0) -> le sprite va de (-W/2, 0) à (+W/2, +H)
-    img.body.setOffset(-displayW / 2, 0);
+    // tuyau du bas : haut du sprite sur rimY
+    img.y = rimY + displayH / 2;
   }
 }
 
@@ -1594,8 +1595,8 @@ class GameScene extends Phaser.Scene {
    const topKey    = this.isXmasMode ? "pipe_top_ice"    : "pipe_top";
 const bottomKey = this.isXmasMode ? "pipe_bottom_snow": "pipe_bottom";
 
-const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
-const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0);
+const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 0.5);
+const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0.5);
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
