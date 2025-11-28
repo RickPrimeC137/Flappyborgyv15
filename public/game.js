@@ -29,7 +29,7 @@ const BG_XMAS_KEY  = "bg_noel";    // assets/bg_noel.png
 
 const PLAYFIELD_TOP_PCT = 0.20;
 const PLAYFIELD_BOT_PCT = 0.92;
-const PIPE_RIM_MAX_PCT  = 0.80;
+const PIPE_RIM_MAX_PCT  = 0.75;
 
 const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
@@ -130,31 +130,23 @@ async function postScore(score, isHard=false){
   }catch(e){ console.warn("score post error", e); }
 }
 
-// ✅ Nouvelle version : pagination + scope (all / week / month)
-async function fetchLeaderboard(page = 1, limit = 10, isHard = false, scope = "all") {
+// ⚠️ VERSION PAGINÉE + SCOPE (global / semaine / mois)
+async function fetchLeaderboard(limit = 10, isHard = false, page = 1, scope = "all") {
   try {
     const url =
-      `${API_BASE}/api/leaderboard` +
-      `?page=${page}` +
-      `&limit=${limit}` +
-      (isHard ? "&mode=hard" : "") +
+      `${API_BASE}/api/leaderboard?limit=${limit}` +
+      `&page=${page}` +
       `&scope=${encodeURIComponent(scope)}` +
-      `&_=${Date.now()}`;
+      (isHard ? "&mode=hard" : "") +
+      `&_=${Date.now()}`; // anti-cache
 
     const r = await fetch(url, { cache: "no-store" });
-    if (!r.ok) {
-      console.warn("lb status", r.status);
-      return { ok: false, list: [], page, pageSize: limit, total: 0, pageCount: 1, scope };
-    }
+    if (!r.ok) { console.warn("lb status", r.status); return []; }
     const j = await r.json().catch(() => null);
-    if (!j?.ok) {
-      return { ok: false, list: [], page, pageSize: limit, total: 0, pageCount: 1, scope };
-    }
-    // j = { ok, list, page, pageSize, total, pageCount, scope }
-    return j;
+    return j?.ok ? j.list : [];
   } catch (e) {
     console.warn("lb fetch error", e);
-    return { ok: false, list: [], page, pageSize: limit, total: 0, pageCount: 1, scope };
+    return [];
   }
 }
 
@@ -604,34 +596,32 @@ class MenuScene extends Phaser.Scene {
       }
     }
 
-// --- bouton rond Noël en haut à gauche ---
-// plus gros radius
-const xmasBtnRadius = 48;
-const xmasMargin = 32; // marge au bord de l’écran
+    // --- bouton rond Noël en haut à gauche ---
+    const xmasBtnRadius = 48;
+    const xmasMargin = 32; // marge au bord de l’écran
 
-const xmasBtn = this.add.circle(
-  xmasMargin + xmasBtnRadius,
-  xmasMargin + xmasBtnRadius,
-  xmasBtnRadius,
-  this.game._xmasMode ? 0x15803d : 0x0f766e,
-  0.96
-)
-  .setDepth(60)
-  .setInteractive({ useHandCursor: true });
+    const xmasBtn = this.add.circle(
+      xmasMargin + xmasBtnRadius,
+      xmasMargin + xmasBtnRadius,
+      xmasBtnRadius,
+      this.game._xmasMode ? 0x15803d : 0x0f766e,
+      0.96
+    )
+      .setDepth(60)
+      .setInteractive({ useHandCursor: true });
 
-// icône plus grande au centre du cercle
-const xmasIcon = this.add.text(
-  xmasBtn.x,
-  xmasBtn.y,
-  "🎄",
-  {
-    fontFamily: "monospace",
-    fontSize: 40,
-    color: "#ffffff"
-  }
-)
-  .setOrigin(0.5)
-  .setDepth(61);
+    const xmasIcon = this.add.text(
+      xmasBtn.x,
+      xmasBtn.y,
+      "🎄",
+      {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#ffffff"
+      }
+    )
+      .setOrigin(0.5)
+      .setDepth(61);
 
     const refreshXmasBtn = () => {
       xmasBtn.setFillStyle(this.game._xmasMode ? 0x15803d : 0x0f766e, 0.96);
@@ -676,18 +666,10 @@ const xmasIcon = this.add.text(
 
     this.makeBtn(W/2, H*0.30, "Jouer",       () => this.scene.start("game"));
 
-    // --- état local leaderboard : scope + pages mémorisées ---
-    this._lbScope = this._lbScope || "all"; // all | week | month
-    this._lbPage  = this._lbPage  || {};    // clé: "mode:scope" => page
-
-    this.makeBtn(W/2, H*0.38, "Leaderboard", async () => {
+    // ⚠️ BOUTON LEADERBOARD → PAGINÉ + Scope
+    this.makeBtn(W/2, H*0.38, "Leaderboard", () => {
       const isHard = this.game._hardMode === true;
-      const scope  = this._lbScope || "all";
-      const key    = `${isHard ? "hard" : "normal"}:${scope}`;
-      const page   = this._lbPage[key] || 1;
-
-      const resp   = await fetchLeaderboard(page, 10, isHard, scope);
-      this.showLeaderboard(resp, isHard);
+      this.showLeaderboard(isHard);
     });
 
     this.makeBtn(W/2, H*0.46, "Quêtes 🔥",   () => this.showQuests());
@@ -752,173 +734,228 @@ const xmasIcon = this.add.text(
     return t;
   }
 
-  // === Leaderboard avec pagination + scope (global / semaine / mois) ===
-  showLeaderboard(resp, isHard = false){
-    const { list, page, pageCount, scope } = resp;
-    const W = this.scale.width, H = this.scale.height;
+  // ⚠️ VERSION PAGINÉE + SCOPE DU LEADERBOARD DANS LE MENU
+  showLeaderboard(isHard = false) {
+    const W = this.scale.width;
+    const H = this.scale.height;
     const depth = 500;
 
     const elements = [];
+    const rows = [];
+    let currentPage = 1;
+    let currentScope = "all"; // "all" | "week" | "month"
 
-    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.45)
-      .setDepth(depth)
-      .setInteractive();
-    elements.push(overlay);
-
-    const panel = this.add.rectangle(W/2, H*0.5, W*0.80, H*0.62, 0x0a2a2f, 0.94)
-      .setDepth(depth+1);
+    const panel = this.add
+      .rectangle(W / 2, H * 0.5, W * 0.78, H * 0.6, 0x0a2a2f, 0.92)
+      .setDepth(depth);
     elements.push(panel);
 
     const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
-    const title = this.add.text(
-      W/2, H*0.22,
-      titleText,
-      { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" }
-    ).setOrigin(0.5).setDepth(depth+2);
+    const title = this.add
+      .text(W / 2, H * 0.18, titleText, {
+        fontFamily: "Georgia,serif",
+        fontSize: 60,
+        color: "#ffffff",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
     elements.push(title);
 
-    // --- boutons de scope ---
-    const scopes = [
-      { id: "all",   label: "Global"  },
-      { id: "week",  label: "Semaine" },
-      { id: "month", label: "Mois"    }
-    ];
-
-    const scopeY = H * 0.28;
-    const scopeX0 = W * 0.20;
-    const scopeDX = W * 0.20;
-
-    scopes.forEach((sc, idx) => {
-      const isActive = (sc.id === scope);
-      const btn = this.add.text(
-        scopeX0 + scopeDX * idx,
-        scopeY,
-        sc.label,
-        {
-          fontFamily:"monospace",
-          fontSize:24,
-          color:"#ffffff",
-          backgroundColor: isActive ? "#16a34a" : "#0b7285",
-          padding:{ left:14, right:14, top:6, bottom:6 }
-        }
-      ).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor:true });
-      elements.push(btn);
-
-      btn.on("pointerdown", async () => {
-        const newScope = sc.id;
-        const modeKey  = isHard ? "hard" : "normal";
-        const key      = `${modeKey}:${newScope}`;
-        this._lbScope  = newScope;
-        this._lbPage   = this._lbPage || {};
-        this._lbPage[key] = 1;
-
-        destroyAll();
-        const resp2 = await fetchLeaderboard(1, 10, isHard, newScope);
-        this.showLeaderboard(resp2, isHard);
-      });
-    });
-
-    const colX   = W*0.23;
-    const startY = H*0.34;
-    const lineH  = 52;
-
-    (list || []).slice(0,10).forEach((row, i) => {
-      const y = startY + i * lineH;
-      const rank = (page - 1) * 10 + (i + 1);
-
-      const tRank = this.add.text(
-        colX, y,
-        String(rank).padStart(2,"0")+".",
-        { fontFamily:"monospace", fontSize:32, color:"#bff" }
-      ).setDepth(depth+2).setOrigin(0,0.5);
-      elements.push(tRank);
-
-      const tName = this.add.text(
-        colX + 70, y,
-        row.name || "Player",
-        { fontFamily:"monospace", fontSize:32, color:"#fff" }
-      ).setDepth(depth+2).setOrigin(0,0.5);
-      elements.push(tName);
-
-      const tScore = this.add.text(
-        W*0.75, y,
-        String(row.best),
-        { fontFamily:"monospace", fontSize:32, color:"#cffff1" }
-      ).setDepth(depth+2).setOrigin(1,0.5);
-      elements.push(tScore);
-    });
-
-    const pageLabel = this.add.text(
-      W/2, H*0.74,
-      `Page ${page} / ${pageCount}`,
-      { fontFamily:"monospace", fontSize:26, color:"#ffffff" }
-    ).setOrigin(0.5).setDepth(depth+2);
+    const pageLabel = this.add
+      .text(W / 2, H * 0.24, "Page 1", {
+        fontFamily: "monospace",
+        fontSize: 24,
+        color: "#cffff1",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
     elements.push(pageLabel);
 
-    const btnPrev = this.add.text(
-      W*0.30, H*0.80,
-      "◀ Préc.",
-      {
-        fontFamily:"monospace", fontSize:30, color:"#fff",
-        backgroundColor:"#0db187",
-        padding:{left:18,right:18,top:8,bottom:8}
-      }
-    ).setOrigin(0.5).setDepth(depth+2).setInteractive({useHandCursor:true});
-    elements.push(btnPrev);
+    // Boutons scope : Global / Semaine / Mois
+    const scopeY = H * 0.28;
 
-    const btnNext = this.add.text(
-      W*0.70, H*0.80,
-      "Suiv. ▶",
-      {
-        fontFamily:"monospace", fontSize:30, color:"#fff",
-        backgroundColor:"#0db187",
-        padding:{left:18,right:18,top:8,bottom:8}
-      }
-    ).setOrigin(0.5).setDepth(depth+2).setInteractive({useHandCursor:true});
-    elements.push(btnNext);
+    const btnGlobal = this.add.text(W * 0.30, scopeY, "Global", {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0db187",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnGlobal);
 
-    const close = this.add.text(
-      W/2, H*0.86,
-      "Fermer",
-      {
-        fontFamily:"monospace", fontSize:34, color:"#fff",
-        backgroundColor:"#0a8ea1",
-        padding:{left:22,right:22,top:8,bottom:8}
-      }
-    ).setOrigin(0.5).setDepth(depth+2).setInteractive({useHandCursor:true});
+    const btnWeek = this.add.text(W * 0.50, scopeY, "Semaine", {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0a4d8a",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnWeek);
+
+    const btnMonth = this.add.text(W * 0.70, scopeY, "Mois", {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0a4d8a",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnMonth);
+
+    const refreshScopeButtons = () => {
+      const onColor  = "#0db187";
+      const offColor = "#0a4d8a";
+
+      btnGlobal.setBackgroundColor(currentScope === "all"   ? onColor : offColor);
+      btnWeek.setBackgroundColor(  currentScope === "week"  ? onColor : offColor);
+      btnMonth.setBackgroundColor( currentScope === "month" ? onColor : offColor);
+    };
+    refreshScopeButtons();
+
+    const colX = W * 0.23;
+    const startY = H * 0.34;
+    const lineH = 56;
+
+    const close = this.add
+      .text(W / 2, H * 0.82, "Fermer", {
+        fontFamily: "monospace",
+        fontSize: 44,
+        color: "#fff",
+        backgroundColor: "#0db187",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
     elements.push(close);
 
+    const prevBtn = this.add
+      .text(W * 0.28, H * 0.82, "◀", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(prevBtn);
+
+    const nextBtn = this.add
+      .text(W * 0.72, H * 0.82, "▶", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(nextBtn);
+
     const destroyAll = () => {
-      elements.forEach(o => { try { o.destroy(); } catch(e){} });
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      elements.forEach((el) => {
+        try { el.destroy(); } catch (e) {}
+      });
     };
 
     close.on("pointerdown", destroyAll);
-    overlay.on("pointerdown", destroyAll);
 
-    const setPageOnScene = (p) => {
-      const modeKey = isHard ? "hard" : "normal";
-      const key     = `${modeKey}:${scope}`;
-      this._lbPage  = this._lbPage || {};
-      this._lbPage[key] = p;
-      this._lbScope = scope;
+    const refreshButtonsState = (listLength) => {
+      if (currentPage <= 1) {
+        prevBtn.disableInteractive();
+        prevBtn.setAlpha(0.4);
+      } else {
+        prevBtn.setInteractive({ useHandCursor: true });
+        prevBtn.setAlpha(1);
+      }
+
+      if (listLength < 10) {
+        nextBtn.disableInteractive();
+        nextBtn.setAlpha(0.4);
+      } else {
+        nextBtn.setInteractive({ useHandCursor: true });
+        nextBtn.setAlpha(1);
+      }
     };
-    setPageOnScene(page);
 
-    btnPrev.on("pointerdown", async () => {
-      if (page <= 1) return;
-      const newPage = page - 1;
-      destroyAll();
-      const resp2 = await fetchLeaderboard(newPage, 10, isHard, scope);
-      this.showLeaderboard(resp2, isHard);
+    const loadPage = async (page) => {
+      const list = await fetchLeaderboard(10, isHard, page, currentScope);
+
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      rows.length = 0;
+
+      currentPage = page;
+      pageLabel.setText(`Page ${page}`);
+
+      list.slice(0, 10).forEach((row, i) => {
+        const y = startY + i * lineH;
+
+        const rankTxt = this.add
+          .text(
+            colX,
+            y,
+            String((page - 1) * 10 + i + 1).padStart(2, "0") + ".",
+            { fontFamily: "monospace", fontSize: 36, color: "#bff" }
+          )
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const nameTxt = this.add
+          .text(colX + 70, y, row.name || "Player", {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#fff",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const scoreTxt = this.add
+          .text(W * 0.72, y, String(row.best), {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#cffff1",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(1, 0.5);
+
+        rows.push(rankTxt, nameTxt, scoreTxt);
+      });
+
+      refreshButtonsState(list.length);
+    };
+
+    prevBtn.on("pointerdown", () => {
+      if (currentPage > 1) loadPage(currentPage - 1);
     });
 
-    btnNext.on("pointerdown", async () => {
-      if (page >= pageCount) return;
-      const newPage = page + 1;
-      destroyAll();
-      const resp2 = await fetchLeaderboard(newPage, 10, isHard, scope);
-      this.showLeaderboard(resp2, isHard);
+    nextBtn.on("pointerdown", () => {
+      loadPage(currentPage + 1);
     });
+
+    btnGlobal.on("pointerdown", () => {
+      currentScope = "all";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+    btnWeek.on("pointerdown", () => {
+      currentScope = "week";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+    btnMonth.on("pointerdown", () => {
+      currentScope = "month";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+
+    loadPage(1);
   }
 
   showQuests(){
@@ -1561,8 +1598,11 @@ class GameScene extends Phaser.Scene {
       .setDepth(10)
       .setCollideWorldBounds(true);
 
+    // === hitbox STANDARD basée sur borgy_ingame ===
     this.player.body.setAllowGravity(false);
     applyStandardBorgyHitbox(this.player, this.textures, skinKey);
+
+    // la gravité sera activée au premier saut (onTap)
     this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
@@ -1906,8 +1946,7 @@ class GameScene extends Phaser.Scene {
           repeat: -1,
           ease: "Sine.inOut"
         });
-      }
-      else {
+      } else {
         const bot = this.physics.add
           .image(topImg.x, topImg.y, botKey)
           .setDepth(5)
@@ -2279,36 +2318,233 @@ class GameScene extends Phaser.Scene {
     });
 
     const isHard = this.game._hardMode === true;
-    // 👉 ici on affiche juste le top 10 global (scope=all, page=1), sans pagination
-    postScore(this.score, isHard).then(() =>
-      fetchLeaderboard(1, 10, isHard, "all").then(resp => {
-        if (resp?.list?.length) this.showLeaderboard(resp.list, isHard);
-      })
-    );
+    // ⚠️ AFFICHAGE LEADERBOARD PAGINÉ APRÈS ENREGISTREMENT
+    postScore(this.score, isHard).then(() => {
+      this.showLeaderboard(isHard);
+    });
   }
 
-  showLeaderboard(list, isHard = false){
-    const W = this.scale.width, H = this.scale.height; const depth = 300;
-    const panel = this.add.rectangle(W/2, H*0.5, W*0.78, H*0.6, 0x0a2a2f, 0.92).setDepth(depth);
+  // ⚠️ VERSION PAGINÉE + SCOPE DU LEADERBOARD DANS LA GAME SCENE
+  showLeaderboard(isHard = false){
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 300;
+
+    const elements = [];
+    const rows = [];
+    let currentPage = 1;
+    let currentScope = "all"; // "all" | "week" | "month"
+
+    const panel = this.add
+      .rectangle(W / 2, H * 0.5, W * 0.78, H * 0.6, 0x0a2a2f, 0.92)
+      .setDepth(depth);
+    elements.push(panel);
+
     const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
-    const title = this.add.text(W/2, H*0.22, titleText, { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
-      .setOrigin(0.5).setDepth(depth+1);
-    const colX = W*0.23, startY = H*0.30, lineH = 56;
-    list.slice(0,10).forEach((row, i) => {
-      const y = startY + i*lineH;
-      this.add.text(colX, y, String(i+1).padStart(2,"0")+".", {fontFamily:"monospace", fontSize:36, color:"#bff"})
-        .setDepth(depth+1).setOrigin(0,0.5);
-      this.add.text(colX+70, y, row.name || "Player", {fontFamily:"monospace", fontSize:36, color:"#fff"})
-        .setDepth(depth+1).setOrigin(0,0.5);
-      this.add.text(W*0.72, y, String(row.best), {fontFamily:"monospace", fontSize:36, color:"#cffff1"})
-        .setDepth(depth+1).setOrigin(1,0.5);
-    });
-    const close = this.add.text(W/2, H*0.82, "Fermer",
-      { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:8,bottom:8} })
-      .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
-    const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
-      .forEach(o => o?.destroy());
+    const title = this.add
+      .text(W / 2, H * 0.18, titleText, {
+        fontFamily: "Georgia,serif",
+        fontSize: 60,
+        color: "#ffffff",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(title);
+
+    const pageLabel = this.add
+      .text(W / 2, H * 0.24, "Page 1", {
+        fontFamily: "monospace",
+        fontSize: 24,
+        color: "#cffff1",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(pageLabel);
+
+    const scopeY = H * 0.28;
+
+    const btnGlobal = this.add.text(W * 0.30, scopeY, "Global", {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0db187",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnGlobal);
+
+    const btnWeek = this.add.text(W * 0.50, scopeY, "Semaine", {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0a4d8a",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnWeek);
+
+    const btnMonth = this.add.text(W * 0.70, scopeY, "Mois", {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0a4d8a",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnMonth);
+
+    const refreshScopeButtons = () => {
+      const onColor  = "#0db187";
+      const offColor = "#0a4d8a";
+
+      btnGlobal.setBackgroundColor(currentScope === "all"   ? onColor : offColor);
+      btnWeek.setBackgroundColor(  currentScope === "week"  ? onColor : offColor);
+      btnMonth.setBackgroundColor( currentScope === "month" ? onColor : offColor);
+    };
+    refreshScopeButtons();
+
+    const colX = W * 0.23;
+    const startY = H * 0.34;
+    const lineH = 56;
+
+    const close = this.add
+      .text(W / 2, H * 0.82, "Fermer", {
+        fontFamily: "monospace",
+        fontSize: 44,
+        color: "#fff",
+        backgroundColor: "#0db187",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(close);
+
+    const prevBtn = this.add
+      .text(W * 0.28, H * 0.82, "◀", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(prevBtn);
+
+    const nextBtn = this.add
+      .text(W * 0.72, H * 0.82, "▶", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(nextBtn);
+
+    const destroyAll = () => {
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      elements.forEach((el) => {
+        try { el.destroy(); } catch (e) {}
+      });
+    };
+
     close.on("pointerdown", destroyAll);
+
+    const refreshButtonsState = (listLength) => {
+      if (currentPage <= 1) {
+        prevBtn.disableInteractive();
+        prevBtn.setAlpha(0.4);
+      } else {
+        prevBtn.setInteractive({ useHandCursor: true });
+        prevBtn.setAlpha(1);
+      }
+
+      if (listLength < 10) {
+        nextBtn.disableInteractive();
+        nextBtn.setAlpha(0.4);
+      } else {
+        nextBtn.setInteractive({ useHandCursor: true });
+        nextBtn.setAlpha(1);
+      }
+    };
+
+    const loadPage = async (page) => {
+      const list = await fetchLeaderboard(10, isHard, page, currentScope);
+
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      rows.length = 0;
+
+      currentPage = page;
+      pageLabel.setText(`Page ${page}`);
+
+      list.slice(0, 10).forEach((row, i) => {
+        const y = startY + i * lineH;
+
+        const rankTxt = this.add
+          .text(
+            colX,
+            y,
+            String((page - 1) * 10 + i + 1).padStart(2, "0") + ".",
+            { fontFamily: "monospace", fontSize: 36, color: "#bff" }
+          )
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const nameTxt = this.add
+          .text(colX + 70, y, row.name || "Player", {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#fff",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const scoreTxt = this.add
+          .text(W * 0.72, y, String(row.best), {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#cffff1",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(1, 0.5);
+
+        rows.push(rankTxt, nameTxt, scoreTxt);
+      });
+
+      refreshButtonsState(list.length);
+    };
+
+    prevBtn.on("pointerdown", () => {
+      if (currentPage > 1) loadPage(currentPage - 1);
+    });
+
+    nextBtn.on("pointerdown", () => {
+      loadPage(currentPage + 1);
+    });
+
+    btnGlobal.on("pointerdown", () => {
+      currentScope = "all";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+    btnWeek.on("pointerdown", () => {
+      currentScope = "week";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+    btnMonth.on("pointerdown", () => {
+      currentScope = "month";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+
+    loadPage(1);
   }
 }
 
@@ -2318,9 +2554,9 @@ window.addEventListener("load", () => {
     parent: "game-root",
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } },
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } }, // debug false = plus de hitbox visibles
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
-    fps: { target: 60, min: 30, forceSetTimeOut: true }
+    fps: { target: 60, min: 30, forceSetTimeOut: false }
   });
 });
