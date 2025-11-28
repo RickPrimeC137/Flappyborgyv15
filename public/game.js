@@ -1352,14 +1352,14 @@ this.player.body.setAllowGravity(false);
 // On part de la hitbox actuelle (centrée)
 // et on la réduit un peu
 const body = this.player.body;
-const bodyW = body.width * 0.95;
-const bodyH = body.height * 0.95;
+const bodyW = body.width * 0.75;
+const bodyH = body.height * 0.80;
 
 // `true` => on recentre automatiquement la hitbox sur le sprite
 body.setSize(bodyW, bodyH, true);
 
 // si tu veux la descendre un poil vers le ventre, tu peux rajouter :
-// body.setOffset(body.offset.x, body.offset.y + body.height * 0.02);
+body.setOffset(body.offset.x, body.offset.y + body.height * 0.04);
 
 this.player.setGravityY(0);
 
