@@ -530,19 +530,19 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy_cyber",    "borgy_cyber.png");
     this.load.image("borgy_cowboy",   "borgy_cowboy.png");
     this.load.image("borgy_gold",     "borgy_gold.png");
-    this.load.image("borgy_emeraude","borgy_emeraude.png");
-    this.load.image("borgy_diamant", "borgy_diamant.png");
+    this.load.image("borgy_emeraude", "borgy_emeraude.png");
+    this.load.image("borgy_diamant",  "borgy_diamant.png");
 
-    // Skin Noël
+    // Skin Noël (image que tu as envoyée)
     this.load.image("borgy_xmas", "borgy_xmas.png");
 
     // Bonus visuels
     this.load.image("bonus_sb",   "sb_token_user.png");
     this.load.image("borgy_coin", "borgy_coin.png");
 
-    // Robot SwissBorg
-    this.load.image("sb_robot",       "sb_robot.png");
-    this.load.image("sb_robot_xmas",  "sb_robot_xmas.png");
+    // Robot SwissBorg (accroché aux tuyaux)
+    this.load.image("sb_robot",      "sb_robot.png");
+    this.load.image("sb_robot_xmas","sb_robot_xmas.png"); // version Noël
 
     // Audio normal
     this.load.audio("bgm", "bgm.mp3");
@@ -588,32 +588,34 @@ class MenuScene extends Phaser.Scene {
       }
     }
 
-    // --- bouton rond Noël en haut à gauche ---
-    const xmasBtnRadius = 48;
-    const xmasMargin = 32;
+// --- bouton rond Noël en haut à gauche ---
+// plus gros radius
+const xmasBtnRadius = 48;
+const xmasMargin = 32; // marge au bord de l’écran
 
-    const xmasBtn = this.add.circle(
-      xmasMargin + xmasBtnRadius,
-      xmasMargin + xmasBtnRadius,
-      xmasBtnRadius,
-      this.game._xmasMode ? 0x15803d : 0x0f766e,
-      0.96
-    )
-      .setDepth(60)
-      .setInteractive({ useHandCursor: true });
+const xmasBtn = this.add.circle(
+  xmasMargin + xmasBtnRadius,
+  xmasMargin + xmasBtnRadius,
+  xmasBtnRadius,
+  this.game._xmasMode ? 0x15803d : 0x0f766e,
+  0.96
+)
+  .setDepth(60)
+  .setInteractive({ useHandCursor: true });
 
-    const xmasIcon = this.add.text(
-      xmasBtn.x,
-      xmasBtn.y,
-      "🎄",
-      {
-        fontFamily: "monospace",
-        fontSize: 40,
-        color: "#ffffff"
-      }
-    )
-      .setOrigin(0.5)
-      .setDepth(61);
+// icône plus grande au centre du cercle
+const xmasIcon = this.add.text(
+  xmasBtn.x,
+  xmasBtn.y,
+  "🎄",
+  {
+    fontFamily: "monospace",
+    fontSize: 40,  // au lieu de 26
+    color: "#ffffff"
+  }
+)
+  .setOrigin(0.5)
+  .setDepth(61);
 
     const refreshXmasBtn = () => {
       xmasBtn.setFillStyle(this.game._xmasMode ? 0x15803d : 0x0f766e, 0.96);
@@ -985,7 +987,7 @@ class MenuScene extends Phaser.Scene {
     overlay.on("pointerdown", destroyAll);
   }
 
-  // === Popup de bienvenue ===
+  // === Popup de bienvenue centré & lisible ===
   showWelcomePopup(){
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1321,10 +1323,10 @@ class GameScene extends Phaser.Scene {
       this.debugTxt = this.add.text(16, 64, "", { fontFamily:"monospace", fontSize: 16, color: "#bff" }).setDepth(20);
     }
 
-    // Sélection du skin + override Noël
+    // Sélection du skin + override Noël gratuit
     let skinKey = getSelectedSkinKey();
     if (isXmas && this.textures.exists("borgy_xmas")) {
-      skinKey = "borgy_xmas";
+      skinKey = "borgy_xmas"; // skin Noël utilisé uniquement en mode Noël, gratuit
     }
 
     this.skinIsGold = (skinKey === "borgy_gold");
@@ -1539,34 +1541,36 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ====== Redimensionnement du sprite de tuyau + grosse hitbox ======
   _resizePipeToRim(img, isTop, rimY, scaleX) {
-    const H = this.scale.height;
+  const H = this.scale.height;
 
-    const targetH = isTop
-      ? (rimY + PIPE_OVERSCAN)
-      : (H - rimY + PIPE_OVERSCAN);
+  const targetH = isTop
+    ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
+    : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
-    const sx = scaleX;
-    const sy = targetH / img.height;
+  img.setScale(scaleX, targetH / img.height);
+  img.y = rimY;
 
-    img.setScale(sx, sy);
-    img.setOrigin(0.5, 0.5);
+  // === HITBOX ===
+  const displayW = img.displayWidth;
+  const displayH = img.displayHeight;
 
-    const displayW = img.displayWidth;
-    const displayH = img.displayHeight;
+  img.setImmovable(true);
+  img.body.setAllowGravity(false);
 
-    img.body.setAllowGravity(false);
-    img.body.setImmovable(true);
-    img.body.setSize(displayW, displayH, false);
-    img.body.setOffset(-displayW / 2, -displayH / 2);
+  const extraTop    = 80;  // haut → descend dans le trou
+  const extraBottom = 40;  // bas  → monte dans le trou
 
-    if (isTop) {
-      img.y = rimY - displayH / 2;    // bas du tuyau sur rimY
-    } else {
-      img.y = rimY + displayH / 2;    // haut du tuyau sur rimY
-    }
+  if (isTop) {
+    // couvre TOUT le tuyau du haut + descend de extraTop dans le trou
+    img.body.setSize(displayW, displayH + extraTop, false);
+    img.body.setOffset(0, 0);          // ⚠️ pas de -extraTop
+  } else {
+    // couvre TOUT le tuyau du bas + monte de extraBottom dans le trou
+    img.body.setSize(displayW, displayH + extraBottom, false);
+    img.body.setOffset(0, -extraBottom); // ⚠️ ici on remonte la hitbox
   }
+}
 
   // ========= Génération d’une paire =========
   spawnPair(silentFirst){
@@ -1578,61 +1582,46 @@ class GameScene extends Phaser.Scene {
 
     const playable = Math.max(40, BOT_BAND - TOP_BAND);
     const MIN_GAP = 90;
-    const GAP = Math.round(
-      Phaser.Math.Clamp(this.curGap ?? PROFILE.gap, MIN_GAP, playable - 40)
-    );
+    const GAP = Math.round(Phaser.Math.Clamp(this.curGap ?? PROFILE.gap, MIN_GAP, playable - 40));
 
-    // position verticale du centre du trou
     let minY = TOP_BAND + Math.floor(GAP/2);
     let maxY = Math.min(BOT_BAND - Math.floor(GAP/2), RIM_LIMIT - Math.floor(GAP/2) + PAD);
-    if (maxY < minY) {
-      const c = Math.round((TOP_BAND + BOT_BAND)/2);
-      minY = maxY = c;
-    }
+    if (maxY < minY) { const c = Math.round((TOP_BAND + BOT_BAND)/2); minY = maxY = c; }
     const gapY = Phaser.Math.Between(minY, maxY);
 
     const x  = W + SPAWN_X_OFFSET;
     const vx = this.started ? this.curSpeed : 0;
 
-    const topKey    = this.isXmasMode ? "pipe_top_ice"     : "pipe_top";
-    const bottomKey = this.isXmasMode ? "pipe_bottom_snow" : "pipe_bottom";
+   const topKey    = this.isXmasMode ? "pipe_top_ice"    : "pipe_top";
+const bottomKey = this.isXmasMode ? "pipe_bottom_snow": "pipe_bottom";
 
-    const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 0.5);
-    const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0.5);
+const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
+const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0);
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
 
-    // bords du trou
-    let yTopRim0    = Math.round(gapY - GAP / 2);
-    let yBottomRim0 = Math.round(gapY + GAP / 2);
+    let yTopRim0    = Math.round(gapY - GAP/2 + (PAD - JOINT_OVERLAP));
+    let yBottomRim0 = Math.round(gapY + GAP/2 - (PAD - JOINT_OVERLAP));
 
-    // redimensionne le sprite + hitbox pour toucher l’écran + overscan
-    this._resizePipeToRim(topImg,    true,  yTopRim0,    scaleXt);
+    this._resizePipeToRim(topImg, true,  yTopRim0,    scaleXt);
     this._resizePipeToRim(bottomImg, false, yBottomRim0, scaleXb);
 
     topImg.body.setVelocityX(vx);
     bottomImg.body.setVelocityX(vx);
 
-    if (this.game._hardMode === true) {
-      topImg.setTint(0x6d1f12);
-      bottomImg.setTint(0x6d1f12);
-    } else {
-      topImg.clearTint();
-      bottomImg.clearTint();
-    }
+    if (this.game._hardMode === true) { topImg.setTint(0x6d1f12); bottomImg.setTint(0x6d1f12); }
+    else { topImg.clearTint(); bottomImg.clearTint(); }
 
     this.pipes.add(topImg);
     this.pipes.add(bottomImg);
 
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
 
-    // centre du gap
-    const gapCenterY = gapY;
+    const gapCenterY = (topImg.y + bottomImg.y) / 2;
 
-    // ====== SENSOR SCORE ======
-    const sensorX = x + (PIPE_W_DISPLAY * PIPE_BODY_W) / 2 + 6;
-    const sensor = this.add.rectangle(sensorX, H * 0.5, 8, H, 0x000000, 0);
+    const sensorX = x + (PIPE_W_DISPLAY*PIPE_BODY_W)/2 + 6;
+    const sensor = this.add.rectangle(sensorX, H*0.5, 8, H, 0x000000, 0);
     sensor.setVisible(false);
     this.physics.add.existing(sensor, false);
     sensor.body.setAllowGravity(false);
@@ -1663,17 +1652,19 @@ class GameScene extends Phaser.Scene {
       this.nextCoinAt += Phaser.Math.Between(3, 6);
     }
 
-    // === ROBOT SwissBorg (identique dans l’esprit, propre) ===
-    if (Phaser.Math.Between(0, 99) < 30) { // ~30% des paires
+    // Robot SwissBorg décoratif mais mortel : 1 apparition toutes les 15 paires
+    if (this.started && this.pairsSpawned > 0 && this.pairsSpawned % 15 === 0) {
+      const botScale = 0.14;
       const fromBottom = Phaser.Math.Between(0, 1) === 0;
-      const botKey     = this.isXmasMode ? "sb_robot_xmas" : "sb_robot";
-      const botScale   = 0.55;
 
+      // version Noël ou normale
+      const botKey = this.isXmasMode ? "sb_robot_xmas" : "sb_robot";
+
+      // --- tuyau du bas ---
       if (fromBottom) {
-        // --- robot accroché au tuyau du bas ---
         const bot = this.physics.add
           .image(bottomImg.x, bottomImg.y, botKey)
-          .setDepth(7)
+          .setDepth(5)
           .setScale(botScale)
           .setImmovable(true);
 
@@ -1687,8 +1678,8 @@ class GameScene extends Phaser.Scene {
         this.bots.add(bot);
 
         const h = bot.displayHeight;
-        const yHidden = bottomImg.y + h * 0.6; // caché sous le trou
-        const yShown  = bottomImg.y;           // sort au niveau du bord
+        const yHidden = bottomImg.y + h * 0.6; // bien caché dans le tuyau
+        const yShown  = bottomImg.y;           // centre sur le bord -> moitié visible
 
         bot.y = yHidden;
 
@@ -1700,11 +1691,12 @@ class GameScene extends Phaser.Scene {
           repeat: -1,
           ease: "Sine.inOut"
         });
-      } else {
-        // --- robot accroché au tuyau du haut (sprite inversé verticalement) ---
+      }
+      // --- tuyau du haut (sprite inversé verticalement) ---
+      else {
         const bot = this.physics.add
           .image(topImg.x, topImg.y, botKey)
-          .setDepth(7)
+          .setDepth(5)
           .setScale(botScale)
           .setFlipY(true)
           .setImmovable(true);
@@ -1720,7 +1712,7 @@ class GameScene extends Phaser.Scene {
 
         const h = bot.displayHeight;
         const yHidden = topImg.y - h * 0.6; // caché au-dessus du trou
-        const yShown  = topImg.y;           // sort au niveau du bord
+        const yShown  = topImg.y;           // centre sur le bord -> moitié visible
 
         bot.y = yHidden;
 
@@ -1735,7 +1727,6 @@ class GameScene extends Phaser.Scene {
       }
     }
 
-    // PORTES MOUVANTES EN HARD (on utilise yTopRim0 / yBottomRim0)
     if (this.game._hardMode === true) {
       const maxClose = Math.max(0, Math.floor((GAP - MIN_GAP) / 2) - 2);
       const amp = Math.min(HARD_DOOR_AMPLITUDE_PX, maxClose);
@@ -1753,11 +1744,10 @@ class GameScene extends Phaser.Scene {
             const d = driver.delta;
             const newTop    = yTopRim0    + d;
             const newBottom = yBottomRim0 - d;
-
             const topClamped    = Phaser.Math.Clamp(newTop,    TOP_BAND + 10, RIM_LIMIT - 10);
             const bottomClamped = Phaser.Math.Clamp(newBottom, TOP_BAND + 10, BOT_BAND  - 10);
 
-            this._resizePipeToRim(topImg,    true,  topClamped,    scaleXt);
+            this._resizePipeToRim(topImg, true,  topClamped,    scaleXt);
             this._resizePipeToRim(bottomImg, false, bottomClamped, scaleXb);
 
             topImg.body.setVelocityX(this.curSpeed);
@@ -1817,40 +1807,40 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  onCollectBorgyCoin(x, y){
-    const isHard = this.game._hardMode === true;
-    let gain;
+ onCollectBorgyCoin(x, y){
+  const isHard = this.game._hardMode === true;
+  let gain;
 
-    if (this.skinIsGold) {
-      // le skin or reste à x5, même en Hard
-      gain = 5;
-    } else {
-      // sinon : x1 en normal, x2 en Hard
-      gain = isHard ? 2 : 1;
-    }
-
-    this.borgyCoinCount += gain;
-    saveBorgyCoins(this.borgyCoinCount);
-    if (this.borgyCoinText){
-      this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
-    }
-
-    if (!this.game._muted && this.sfxCoin){
-      this.sfxCoin.play();
-    }
-
-    const floatTxt = this.add.text(x, y, `+${gain}`, {
-      fontFamily:"monospace", fontSize:32, color:"#ffffaa", stroke:"#000000", strokeThickness:4
-    }).setDepth(30).setOrigin(0.5);
-    this.tweens.add({
-      targets: floatTxt,
-      y: y - 60,
-      alpha: 0,
-      duration: 700,
-      ease: "Cubic.out",
-      onComplete: () => floatTxt.destroy()
-    });
+  if (this.skinIsGold) {
+    // le skin or reste à x5, même en Hard
+    gain = 5;
+  } else {
+    // sinon : x1 en normal, x2 en Hard
+    gain = isHard ? 2 : 1;
   }
+
+  this.borgyCoinCount += gain;
+  saveBorgyCoins(this.borgyCoinCount);
+  if (this.borgyCoinText){
+    this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
+  }
+
+  if (!this.game._muted && this.sfxCoin){
+    this.sfxCoin.play();
+  }
+
+  const floatTxt = this.add.text(x, y, `+${gain}`, {
+    fontFamily:"monospace", fontSize:32, color:"#ffffaa", stroke:"#000000", strokeThickness:4
+  }).setDepth(30).setOrigin(0.5);
+  this.tweens.add({
+    targets: floatTxt,
+    y: y - 60,
+    alpha: 0,
+    duration: 700,
+    ease: "Cubic.out",
+    onComplete: () => floatTxt.destroy()
+  });
+}
 
   activateMultiplier(){
     this.multiplierActive = true;
