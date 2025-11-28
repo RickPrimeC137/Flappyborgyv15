@@ -1335,6 +1335,59 @@ class GameScene extends Phaser.Scene {
     this.canRevive = this.skinIsDiamond;
 
     const finalScale = computeSkinScale(this.textures, skinKey);
+// Applique une hitbox "standard Borgy" à n'importe quel skin
+function applyStandardBorgyHitbox(sprite, textures, skinKey) {
+  try {
+    if (!sprite || !sprite.body) return;
+
+    // On prend l'image du skin courant
+    const tex = textures.get(skinKey);
+    if (!tex) return;
+    const img = tex.getSourceImage?.();
+    if (!img) return;
+
+    // Rectangle visible (sans transparence) dans la texture
+    const bounds = getVisibleBounds(img);
+    if (!bounds) return;
+
+    // Échelle actuelle du sprite (calc par computeSkinScale)
+    const s = sprite.scaleX || 1;
+
+    // Réglages "calibrés" sur borgy_ingame :
+    // - on garde ~60% de la largeur/hauteur
+    // - on descend un peu la hitbox pour bien couvrir les pattes
+    const shrinkX    = 0.60;  // garde 60% de la largeur visible  (=> ~40% en moins)
+    const shrinkY    = 0.60;  // garde 60% de la hauteur visible
+    const downFactor = 0.06;  // décale la box vers le bas (en % de la hauteur visible)
+
+    // Dimensions visibles du sprite dans le MONDE
+    const visW = bounds.w * s;
+    const visH = bounds.h * s;
+
+    // Taille de la hitbox dans le MONDE
+    const boxW_world = visW * shrinkX;
+    const boxH_world = visH * shrinkY;
+
+    // Position de la hitbox dans le MONDE (relativement à la zone utile)
+    const boxX_world = (bounds.x * s) + (visW - boxW_world) / 2;
+    const boxY_world = (bounds.y * s) + (visH - boxH_world) / 2 + visH * downFactor;
+
+    // Phaser Arcade attend des tailles / offsets dans l'espace NON SCALED
+    const invScaleX = 1 / (sprite.scaleX || 1);
+    const invScaleY = 1 / (sprite.scaleY || 1);
+
+    const boxW_local = boxW_world * invScaleX;
+    const boxH_local = boxH_world * invScaleY;
+    const boxX_local = boxX_world * invScaleX;
+    const boxY_local = boxY_world * invScaleY;
+
+    sprite.body.setSize(boxW_local, boxH_local, false);
+    sprite.body.setOffset(boxX_local, boxY_local);
+
+  } catch (e) {
+    console.warn("applyStandardBorgyHitbox error", e);
+  }
+}
 
 // === création du joueur ===
 this.player = this.physics.add.sprite(
@@ -1346,25 +1399,11 @@ this.player = this.physics.add.sprite(
   .setDepth(10)
   .setCollideWorldBounds(true);
 
-// === hitbox rectangulaire autour de Borgy (réduite de ~40%) ===
+// === hitbox STANDARD basée sur borgy_ingame ===
 this.player.body.setAllowGravity(false);
+applyStandardBorgyHitbox(this.player, this.textures, skinKey);
 
-const body = this.player.body;
-
-// taille d’origine du body (celle que Phaser met automatiquement)
-const baseW = body.width;
-const baseH = body.height;
-
-// on garde ~60% de la taille => hitbox 40% plus petite
-const bodyW = baseW * 0.60;
-const bodyH = baseH * 0.60;
-
-// true => Phaser recentre la hitbox sur le sprite
-body.setSize(bodyW, bodyH, true);
-
-// petit décalage vers le bas pour couvrir les pattes
-body.setOffset(body.offset.x, body.offset.y + baseH * 0.04);
-
+// la gravité sera activée au premier saut (onTap)
 this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
