@@ -1544,16 +1544,13 @@ class GameScene extends Phaser.Scene {
   _resizePipeToRim(img, isTop, rimY, scaleX) {
   const H = this.scale.height;
 
-  // Hauteur cible du tuyau (en pixels écran)
   const targetH = isTop
     ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
     : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
 
-  // On part des dimensions brutes de la texture (non-scalée)
   const texW = img.width;
   const texH = img.height;
 
-  // Scale du sprite pour qu'il fasse bien targetH de haut
   const scaleY = targetH / texH;
   img.setScale(scaleX, scaleY);
   img.y = rimY;
@@ -1561,11 +1558,19 @@ class GameScene extends Phaser.Scene {
   img.setImmovable(true);
   img.body.setAllowGravity(false);
 
-  // 💥 Hitbox = TOUTE la texture
-  // Phaser appliquera le scale du sprite au body,
-  // donc en monde réel la hitbox fera bien targetH de haut.
-  img.body.setSize(texW, texH, false);
-  img.body.setOffset(0, 0);
+  const MOUTH_PCT = 0.20;
+  const mouthTexH = texH * MOUTH_PCT;
+  const halfMouth = mouthTexH * 0.5;
+
+  if (isTop) {
+    const bodyHeight = texH - halfMouth;
+    img.body.setSize(texW, bodyHeight, false);
+    img.body.setOffset(0, 0);
+  } else {
+    const bodyHeight = texH - halfMouth;
+    img.body.setSize(texW, bodyHeight, false);
+    img.body.setOffset(0, halfMouth);
+  }
 }
 
   // ========= Génération d’une paire =========
