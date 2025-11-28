@@ -324,6 +324,23 @@ function loadSkinState(){
       const data = JSON.parse(raw);
       if (data && Array.isArray(data.skins) && data.skins.length){
 
+        // === MIGRATION : synchroniser les prix / noms / keys avec SKINS_DEF ===
+        const defById = {};
+        SKINS_DEF.forEach(def => {
+          defById[def.id] = def;
+        });
+
+        // On met à jour chaque skin existant avec les nouvelles valeurs
+        data.skins.forEach(s => {
+          const def = defById[s.id];
+          if (!def) return;
+          s.price = def.price;   // nouveau prix (1000, 1500, ..., 10000, 15000, 20000)
+          s.key   = def.key;     // au cas où tu changes un jour la key
+          s.name  = def.name;    // idem pour le nom affiché
+          // !! On NE TOUCHE PAS à owned / selected pour ne pas retirer de skins déjà achetés
+        });
+
+        // Ajouter les skins manquants (si tu en ajoutes plus tard dans SKINS_DEF)
         const existingIds = new Set(data.skins.map(s => s.id));
         SKINS_DEF.forEach(def => {
           if (!existingIds.has(def.id)) {
@@ -338,6 +355,7 @@ function loadSkinState(){
           }
         });
 
+        // Si le skin sélectionné n'est plus valide, on retombe sur un skin owned
         if (!data.selectedId || !data.skins.some(s => s.id === data.selectedId && s.owned)) {
           const fallback = data.skins.find(s => s.owned) || data.skins[0];
           if (fallback) {
@@ -346,12 +364,14 @@ function loadSkinState(){
         }
         data.skins.forEach(s => { s.selected = (s.id === data.selectedId); });
 
+        // On sauvegarde l'état "migré" pour de bon
         saveSkinState(data);
         return data;
       }
     }
   }catch(e){}
 
+  // Si pas de données ou erreur => init par défaut avec les nouveaux prix
   const skins = SKINS_DEF.map(s => ({
     id: s.id,
     key: s.key,
@@ -364,30 +384,6 @@ function loadSkinState(){
   const first = skins.find(s => s.id === selectedId);
   if (first) first.selected = true;
   const data = { skins, selectedId };
-  saveSkinState(data);
-  return data;
-}
-
-function saveSkinState(data){
-  try {
-    localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data));
-  } catch(e){}
-}
-
-function getSelectedSkinKey(){
-  const data = loadSkinState();
-  const found = data.skins.find(s => s.id === data.selectedId && s.owned);
-  if (found) return found.key;
-  const def = SKINS_DEF[0];
-  return def ? def.key : "borgy";
-}
-
-function selectSkin(id){
-  const data = loadSkinState();
-  const skin = data.skins.find(s => s.id === id && s.owned);
-  if (!skin) return data;
-  data.selectedId = id;
-  data.skins.forEach(s => { s.selected = (s.id === id); });
   saveSkinState(data);
   return data;
 }
