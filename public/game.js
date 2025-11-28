@@ -2461,6 +2461,6 @@ window.addEventListener("load", () => {
     physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: true } },
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
-    fps: { target: 60, min: 30, forceSetTimeOut: true }
+    fps: { target: 60, min: 30, forceSetTimeOut: false }
   });
 });
