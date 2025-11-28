@@ -1360,7 +1360,7 @@ body.setSize(bodyW, bodyH, true);
 
 // puis on la décale un peu vers le museau et les pattes
 const shiftX = body.width  * 0.08; // vers la droite (museau)
-const shiftY = body.height * 0.06; // vers le bas (pattes)
+const shiftY = body.height * 0.02; // vers le bas (pattes)
 
 body.setOffset(body.offset.x + shiftX, body.offset.y + shiftY);
 
