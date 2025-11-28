@@ -1541,10 +1541,10 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  _resizePipeToRim(img, isTop, rimY, scaleX) {
+   _resizePipeToRim(img, isTop, rimY, scaleX) {
     const H = this.scale.height;
 
-    // 1) on redimensionne le tuyau pour que son bord arrive à rimY
+    // 1) on ajuste la hauteur du sprite pour que son bord arrive à rimY
     const targetH = isTop
       ? Math.max(20, Math.ceil(rimY + PIPE_OVERSCAN))
       : Math.max(20, Math.ceil((H - rimY) + PIPE_OVERSCAN));
@@ -1552,7 +1552,7 @@ class GameScene extends Phaser.Scene {
     img.setScale(scaleX, targetH / img.height);
     img.y = rimY;
 
-    // 2) on configure la hitbox (même logique pour haut et bas)
+    // 2) hitbox
     const displayW = img.displayWidth;
     const displayH = img.displayHeight;
 
@@ -1560,19 +1560,21 @@ class GameScene extends Phaser.Scene {
     img.body.setAllowGravity(false);
 
     const isHard = this.game?._hardMode === true;
-    const bodyWFactor = isHard ? 1.02 : PIPE_BODY_W;
-    const bodyW = displayW * bodyWFactor;
+    const bodyW  = displayW * (isHard ? 1.02 : PIPE_BODY_W);
 
-    // hitbox un peu plus grande en hauteur, symétrique
-    const extraH = 24;                 // tu peux tester 16 / 24 / 32
-    const bodyH  = displayH + extraH;
-
-    img.body.setSize(bodyW, bodyH, true);
+    const extra = 40; // augmente si tu veux que ça déborde plus
 
     const offsetX = (displayW - bodyW) / 2;
-    const offsetY = -extraH / 2;       // dépasse un peu en haut ET en bas
 
-    img.body.setOffset(offsetX, offsetY);
+    if (isTop) {
+      // tuyau du haut : hitbox couvre tout le tuyau et déborde vers le trou
+      img.body.setSize(bodyW, displayH + extra, false);
+      img.body.setOffset(offsetX, -extra);
+    } else {
+      // tuyau du bas : pareil mais vers le bas
+      img.body.setSize(bodyW, displayH + extra, false);
+      img.body.setOffset(offsetX, 0);
+    }
   }
 
   // ========= Génération d’une paire =========
