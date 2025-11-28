@@ -1367,11 +1367,6 @@ body.setOffset(body.offset.x, body.offset.y + baseH * 0.04);
 
 this.player.setGravityY(0);
 
-body.setOffset(body.offset.x + shiftX, body.offset.y + shiftY);
-
-// gravity à 0 au début (elle sera activée au premier saut)
-this.player.setGravityY(0);
-
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
     this.sfxScore    = this.sound.add("sfx_score",    { volume: 0.6 });
     this.sfxCoin     = this.sound.add("sfx_coin",     { volume: 0.7 });
