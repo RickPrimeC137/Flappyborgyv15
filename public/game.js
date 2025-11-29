@@ -22,7 +22,7 @@ const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les skins
-const PIPE_HITBOX_W = 0.4; // 1 = largeur complète du sprite, 0.8 = plus serré
+const PIPE_HITBOX_W = 0.6; // 1 = largeur complète du sprite, 0.8 = plus serré
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
@@ -63,6 +63,91 @@ let welcomeShownThisSession = false; // flag session
 
 /* ===== Mode Noël ===== */
 const XMAS_MODE_KEY = "flappy_borgy_xmas_mode_v1";
+
+/* ================== Langues EN / FR ================== */
+const LANG_STORAGE_KEY = "flappy_borgy_lang_v1";
+const SUPPORTED_LANGS  = ["fr", "en"];
+
+const I18N = {
+  fr: {
+    MENU_PLAY: "Jouer",
+    MENU_LEADERBOARD: "Leaderboard",
+    MENU_QUESTS: "Quêtes 🔥",
+    MENU_SHOP: "Borgy Coins Shop",
+    MENU_VOTE: "🗳️ Voter pour Borgy",
+    MENU_BUY:  "Buy Borgy",
+    MENU_HARD_ON:  "Mode Hard : ON",
+    MENU_HARD_OFF: "Mode Hard : OFF",
+
+    WELCOME_TITLE: "Bienvenue dans le jeu Flappy-Borgy !!!",
+    WELCOME_L1: "L'objectif est de passer entre les tuyaux pour faire des points\net battre le record ;",
+    WELCOME_L2: "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC.\n  Si tu es sur mobile, un pouce suffit mais je te conseille les deux ;)",
+    WELCOME_L3: "- Récupère des Borgy Coins pour acheter des skins.",
+    WELCOME_L4: "- Des quêtes évolutives et journalières sont disponibles\n  (elles s'adaptent le lendemain en fonction de ton score).",
+    WELCOME_L5: "- Le logo bonus vert apparaît de temps en temps et double le score\n  pendant un temps limité.",
+    WELCOME_L6: "- Attention au robot vert qui sort des tuyaux.",
+    WELCOME_L7: "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton\n  Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés\n  dans ce mode).",
+    WELCOME_END: "Voilà, fais-toi plaisir et LFG BORGY <3\n\nFait par un fan dévoué corps et âme à la team BORGY <3",
+    WELCOME_OK:  "OK, c'est parti !",
+
+    LANG_BTN_FR: "FR",
+    LANG_BTN_EN: "EN"
+  },
+  en: {
+    MENU_PLAY: "Play",
+    MENU_LEADERBOARD: "Leaderboard",
+    MENU_QUESTS: "Quests 🔥",
+    MENU_SHOP: "Borgy Coins Shop",
+    MENU_VOTE: "🗳️ Vote for Borgy",
+    MENU_BUY:  "Buy Borgy",
+    MENU_HARD_ON:  "Hard Mode : ON",
+    MENU_HARD_OFF: "Hard Mode : OFF",
+
+    WELCOME_TITLE: "Welcome to Flappy-Borgy !!!",
+    WELCOME_L1: "The goal is to fly between the pipes to score points\nand beat the high score;",
+    WELCOME_L2: "- Use SPACE or mouse click if you're on Telegram PC.\n  On mobile, one thumb is enough but two are safer ;)",
+    WELCOME_L3: "- Collect Borgy Coins to buy skins.",
+    WELCOME_L4: "- You have daily and evolving quests\n  (they adapt the next day depending on your score).",
+    WELCOME_L5: "- The green bonus logo appears sometimes and doubles your score\n  for a limited time.",
+    WELCOME_L6: "- Beware of the green robot coming out of the pipes.",
+    WELCOME_L7: "- If you're a degen, try Hard mode: toggle Hard Mode ON/OFF,\n  then press Play (Borgy Coins are doubled in this mode).",
+    WELCOME_END: "Enjoy and LFG BORGY <3\n\nMade by a fan fully dedicated to the BORGY team <3",
+    WELCOME_OK:  "OK, let's go!",
+
+    LANG_BTN_FR: "FR",
+    LANG_BTN_EN: "EN"
+  }
+};
+
+function loadLang(){
+  try{
+    const v = localStorage.getItem(LANG_STORAGE_KEY);
+    if (SUPPORTED_LANGS.includes(v)) return v;
+  }catch(e){}
+  return "fr";
+}
+
+function saveLang(lang){
+  try{ localStorage.setItem(LANG_STORAGE_KEY, lang); }catch(e){}
+}
+
+function currentLang(){
+  if (!window._flappyLang){
+    window._flappyLang = loadLang();
+  }
+  return window._flappyLang;
+}
+
+function setLang(lang){
+  if (!SUPPORTED_LANGS.includes(lang)) return;
+  window._flappyLang = lang;
+  saveLang(lang);
+}
+
+function t(key){
+  const lang = currentLang();
+  return (I18N[lang] && I18N[lang][key]) || (I18N["fr"][key] || key);
+}
 
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
@@ -131,7 +216,7 @@ async function postScore(score, isHard=false){
   }catch(e){ console.warn("score post error", e); }
 }
 
-// ⚠️ VERSION PAGINÉE + SCOPE (global / semaine / mois)
+// VERSION PAGINÉE + SCOPE (global / semaine / mois)
 async function fetchLeaderboard(limit = 10, isHard = false, page = 1, scope = "all") {
   try {
     const url =
@@ -597,6 +682,35 @@ class MenuScene extends Phaser.Scene {
       }
     }
 
+    // Initialise la langue au démarrage
+    currentLang();
+
+    // === bouton langue EN/FR en haut à droite ===
+    const langCode = currentLang(); // "fr" ou "en"
+    const langLabel = (langCode === "fr") ? "EN" : "FR";
+
+    const langBtn = this.add.text(
+      W - 150,
+      30,
+      langLabel,
+      {
+        fontFamily: "monospace",
+        fontSize: 26,
+        color: "#ffffff",
+        backgroundColor: "#0f766e",
+        padding: { left: 10, right: 10, top: 4, bottom: 4 }
+      }
+    )
+    .setOrigin(0.5)
+    .setDepth(60)
+    .setInteractive({ useHandCursor: true });
+
+    langBtn.on("pointerdown", () => {
+      const next = (currentLang() === "fr") ? "en" : "fr";
+      setLang(next);
+      this.scene.restart(); // recharge le menu dans la nouvelle langue
+    });
+
     // --- bouton rond Noël en haut à gauche ---
     const xmasBtnRadius = 48;
     const xmasMargin = 32; // marge au bord de l’écran
@@ -643,7 +757,7 @@ class MenuScene extends Phaser.Scene {
       });
     });
 
-    const muteBtn = this.add.text(W - 70, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
+    const muteBtn = this.add.text(W - 60, 30, "🔊", { fontFamily:"monospace", fontSize:42, color:"#fff" })
       .setOrigin(0.5).setDepth(50).setInteractive({useHandCursor:true});
     if (typeof this.game._muted === "undefined") this.game._muted = false;
     else { muteBtn.setText(this.game._muted ? "🔇" : "🔊"); this.game._bgm?.setMute(this.game._muted); }
@@ -665,17 +779,17 @@ class MenuScene extends Phaser.Scene {
       color:"#0b4a44"
     }).setOrigin(0.5);
 
-    this.makeBtn(W/2, H*0.30, "Jouer",       () => this.scene.start("game"));
+    this.makeBtn(W/2, H*0.30, t("MENU_PLAY"),       () => this.scene.start("game"));
 
-    // ⚠️ BOUTON LEADERBOARD → PAGINÉ + Scope
-    this.makeBtn(W/2, H*0.38, "Leaderboard", () => {
+    // BOUTON LEADERBOARD → PAGINÉ + Scope
+    this.makeBtn(W/2, H*0.38, t("MENU_LEADERBOARD"), () => {
       const isHard = this.game._hardMode === true;
       this.showLeaderboard(isHard);
     });
 
-    this.makeBtn(W/2, H*0.46, "Quêtes 🔥",   () => this.showQuests());
-    this.makeBtn(W/2, H*0.54, "Borgy Coins Shop", () => this.showShop());
-    this.makeBtn(W/2, H*0.62, "🗳️ Voter pour Borgy", () => {
+    this.makeBtn(W/2, H*0.46, t("MENU_QUESTS"),   () => this.showQuests());
+    this.makeBtn(W/2, H*0.54, t("MENU_SHOP"), () => this.showShop());
+    this.makeBtn(W/2, H*0.62, t("MENU_VOTE"), () => {
       const url = "https://lewk.com/vote/BorGY4ub2Fz4RLboGxnuxWdZts7EKhUTB624AFmfCgX";
       if (window.Telegram?.WebApp?.openLink) {
         window.Telegram.WebApp.openLink(url);
@@ -683,7 +797,7 @@ class MenuScene extends Phaser.Scene {
         window.open(url, "_blank");
       }
     });
-    this.makeBtn(W/2, H*0.70, "Buy Borgy", () => {
+    this.makeBtn(W/2, H*0.70, t("MENU_BUY"), () => {
       const url = "https://borgysol.com/";
       if (window.Telegram?.WebApp?.openLink) {
         window.Telegram.WebApp.openLink(url);
@@ -699,11 +813,11 @@ class MenuScene extends Phaser.Scene {
     const hardBtn = this.makeBtn(
       W/2,
       H*0.78,
-      this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF",
+      this.game._hardMode ? t("MENU_HARD_ON") : t("MENU_HARD_OFF"),
       () => {
         this.game._hardMode = !this.game._hardMode;
         localStorage.setItem("flappy_borgy_hard", JSON.stringify(this.game._hardMode));
-        hardBtn.setText(this.game._hardMode ? "Mode Hard : ON" : "Mode Hard : OFF");
+        hardBtn.setText(this.game._hardMode ? t("MENU_HARD_ON") : t("MENU_HARD_OFF"));
         hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
       }
     );
@@ -720,7 +834,7 @@ class MenuScene extends Phaser.Scene {
   }
 
   makeBtn(x,y,label,cb){
-    const t = this.add.text(x,y,label,{
+    const ttxt = this.add.text(x,y,label,{
       fontFamily:"monospace",
       fontSize:34,
       color:"#fff",
@@ -729,13 +843,13 @@ class MenuScene extends Phaser.Scene {
     })
       .setOrigin(0.5)
       .setInteractive({useHandCursor:true});
-    t.on("pointerover", ()=> t.setBackgroundColor("#0f8e78"));
-    t.on("pointerout",  ()=> t.setBackgroundColor("#12a38a"));
-    t.on("pointerdown", cb);
-    return t;
+    ttxt.on("pointerover", ()=> ttxt.setBackgroundColor("#0f8e78"));
+    ttxt.on("pointerout",  ()=> ttxt.setBackgroundColor("#12a38a"));
+    ttxt.on("pointerdown", cb);
+    return ttxt;
   }
 
-  // ⚠️ VERSION PAGINÉE + SCOPE DU LEADERBOARD DANS LE MENU
+  // LEADERBOARD paginé dans le menu
   showLeaderboard(isHard = false) {
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1000,7 +1114,7 @@ class MenuScene extends Phaser.Scene {
     close.on("pointerdown", destroyAll);
   }
 
-  // *** SHOP avec bouton Fermer ***
+  // SHOP avec bouton Fermer
   showShop(){
     const W = this.scale.width;
     const H = this.scale.height;
@@ -1232,10 +1346,39 @@ class MenuScene extends Phaser.Scene {
       .setDepth(depthPanel);
     elements.push(panel);
 
+    // === bouton de langue sur la popup ===
+    const popupLangLabel = (currentLang() === "fr")
+      ? I18N.fr.LANG_BTN_EN
+      : I18N.en.LANG_BTN_FR;
+
+    const popupLangBtn = this.add.text(
+      W/2,
+      H/2 - panelHeight * 0.44,
+      popupLangLabel,
+      {
+        fontFamily: "monospace",
+        fontSize: 24,
+        color: "#ffffff",
+        backgroundColor: "#0f766e",
+        padding: { left: 10, right: 10, top: 4, bottom: 4 }
+      }
+    )
+    .setOrigin(0.5)
+    .setDepth(depthPanel+2)
+    .setInteractive({ useHandCursor: true });
+    elements.push(popupLangBtn);
+
+    popupLangBtn.on("pointerdown", () => {
+      const next = (currentLang() === "fr") ? "en" : "fr";
+      setLang(next);
+      elements.forEach(el => { try { el.destroy(); } catch(e){} });
+      this.showWelcomePopup(); // recrée la popup dans la nouvelle langue
+    });
+
     const title = this.add.text(
       W/2,
       H/2 - panelHeight * 0.38,
-      "Bienvenue dans le jeu Flappy-Borgy !!!",
+      t("WELCOME_TITLE"),
       {
         fontFamily: "Georgia,serif",
         fontSize: titleFontSize,
@@ -1249,7 +1392,7 @@ class MenuScene extends Phaser.Scene {
     let y = H/2 - panelHeight * 0.24;
 
     const mkBody = (text, extraSpace = 14) => {
-      const t = this.add.text(
+      const ttxt = this.add.text(
         contentLeft,
         y,
         text,
@@ -1261,27 +1404,15 @@ class MenuScene extends Phaser.Scene {
           wordWrap:{ width: contentWidth }
         }
       ).setOrigin(0,0).setDepth(depthPanel+1);
-      elements.push(t);
-      y += t.height + extraSpace;
-      return t;
+      elements.push(ttxt);
+      y += ttxt.height + extraSpace;
+      return ttxt;
     };
 
-    mkBody(
-      "L'objectif est de passer entre les tuyaux pour faire des points\n" +
-      "et battre le record ;",
-      18
-    );
+    mkBody(t("WELCOME_L1"), 18);
+    mkBody(t("WELCOME_L2"), 18);
 
-    mkBody(
-      "- Utilise la touche espace ou le clic de la souris si tu es sur Telegram PC.\n" +
-      "  Si tu es sur mobile, un pouce suffit mais je te conseille les deux ;)",
-      18
-    );
-
-    const txtCoins = mkBody(
-      "- Récupère des Borgy Coins pour acheter des skins.",
-      18
-    );
+    const txtCoins = mkBody(t("WELCOME_L3"), 18);
     const coinIcon = this.add.image(
       iconX,
       txtCoins.y + 6,
@@ -1290,17 +1421,9 @@ class MenuScene extends Phaser.Scene {
     coinIcon.setDisplaySize(iconSize, iconSize);
     elements.push(coinIcon);
 
-    mkBody(
-      "- Des quêtes évolutives et journalières sont disponibles\n" +
-      "  (elles s'adaptent le lendemain en fonction de ton score).",
-      18
-    );
+    mkBody(t("WELCOME_L4"), 18);
 
-    const txtBonus = mkBody(
-      "- Le logo bonus vert apparaît de temps en temps et double le score\n" +
-      "  pendant un temps limité.",
-      18
-    );
+    const txtBonus = mkBody(t("WELCOME_L5"), 18);
     const bonusIcon = this.add.image(
       iconX,
       txtBonus.y + 10,
@@ -1309,10 +1432,7 @@ class MenuScene extends Phaser.Scene {
     bonusIcon.setDisplaySize(iconSize * 0.9, iconSize * 0.9);
     elements.push(bonusIcon);
 
-    const txtRobot = mkBody(
-      "- Attention au robot vert qui sort des tuyaux.",
-      18
-    );
+    const txtRobot = mkBody(t("WELCOME_L6"), 18);
     const robotIcon = this.add.image(
       iconX,
       txtRobot.y + 4,
@@ -1321,18 +1441,12 @@ class MenuScene extends Phaser.Scene {
     robotIcon.setDisplaySize(iconSize * 0.9, iconSize * 1.2);
     elements.push(robotIcon);
 
-    mkBody(
-      "- Si tu es bouillant, essaye le mode Hard : clique sur le bouton\n" +
-      "  Mode Hard ON/OFF, puis sur Jouer (les Borgy Coins sont doublés\n" +
-      "  dans ce mode).",
-      10
-    );
+    mkBody(t("WELCOME_L7"), 10);
 
     const txtEnd = this.add.text(
       contentLeft,
       y + 10,
-      "Voilà, fais-toi plaisir et LFG BORGY <3\n\n" +
-      "Fait par un fan dévoué corps et âme à la team BORGY <3",
+      t("WELCOME_END"),
       {
         fontFamily: "monospace",
         fontSize: endFontSize,
@@ -1351,7 +1465,7 @@ class MenuScene extends Phaser.Scene {
     const okBtn = this.add.text(
       W/2,
       buttonY,
-      "OK, c'est parti !",
+      t("WELCOME_OK"),
       {
         fontFamily:"monospace",
         fontSize:buttonFontSize,
@@ -1448,7 +1562,7 @@ class GameScene extends Phaser.Scene {
       emitter.setDepth(9);
     }
 
-    // ===== Nuages haut / bas =====
+    // Nuages haut / bas (murs)
     {
       const topCloudHeight    = H * CLOUD_TOP_HEIGHT_PCT;
       const bottomCloudHeight = H * CLOUD_BOTTOM_HEIGHT_PCT;
@@ -1548,7 +1662,6 @@ class GameScene extends Phaser.Scene {
 
     const finalScale = computeSkinScale(this.textures, skinKey);
 
-    // Applique une hitbox "standard Borgy" à n'importe quel skin
     function applyStandardBorgyHitbox(sprite, textures, skinKey) {
       try {
         if (!sprite || !sprite.body) return;
@@ -1602,11 +1715,9 @@ class GameScene extends Phaser.Scene {
       .setDepth(10)
       .setCollideWorldBounds(true);
 
-    // === hitbox STANDARD basée sur borgy_ingame ===
+    // hitbox standard
     this.player.body.setAllowGravity(false);
     applyStandardBorgyHitbox(this.player, this.textures, skinKey);
-
-    // la gravité sera activée au premier saut (onTap)
     this.player.setGravityY(0);
 
     this.sfxGameOver = this.sound.add("sfx_gameover", { volume: 0.75 });
@@ -1643,7 +1754,7 @@ class GameScene extends Phaser.Scene {
       this
     );
 
-    // 💀 Robot SwissBorg : collision létale
+    // Robot SwissBorg : collision létale
     this.physics.add.overlap(
       this.player,
       this.bots,
@@ -1712,27 +1823,27 @@ class GameScene extends Phaser.Scene {
   }
 
   onTap(){
-  if (this.isOver){
-    this._cancelLeaderboard = true;   // ligne ajoutée
-    this.scene.restart();
-    return;
+    if (this.isOver){
+      this._cancelLeaderboard = true;
+      this.scene.restart();
+      return;
+    }
+    if (!this.started){
+      this.started = true;
+      this.player.body.setAllowGravity(true);
+      this.player.setGravityY(PROFILE.gravity);
+
+      this.spawnPair(false);
+      this.lastSpawnMs  = this.time.now;
+      this.nextSpawnAt  = this.time.now + this._getSpawnDelay();
+
+      this._maybeSwitchToHardMusic();
+
+      updateQuestsFromEvent("game", 1);
+      try { TG?.expand?.(); } catch {}
+    }
+    if (this.player.active) this.player.setVelocityY(PROFILE.jump);
   }
-  if (!this.started){
-    this.started = true;
-    this.player.body.setAllowGravity(true);
-    this.player.setGravityY(PROFILE.gravity);
-
-    this.spawnPair(false);
-    this.lastSpawnMs  = this.time.now;
-    this.nextSpawnAt  = this.time.now + this._getSpawnDelay();
-
-    this._maybeSwitchToHardMusic();
-
-    updateQuestsFromEvent("game", 1);
-    try { TG?.expand?.(); } catch {}
-  }
-  if (this.player.active) this.player.setVelocityY(PROFILE.jump);
-}
 
   update(){
     if (this.isOver) return;
@@ -2309,13 +2420,31 @@ class GameScene extends Phaser.Scene {
     }
 
     const W = this.scale.width, H = this.scale.height;
-    this.add.rectangle(W/2, H/2, W*0.8, 360, 0x12323a, 0.92).setDepth(100);
+    this.add.rectangle(W/2, H/2, W*0.8, 380, 0x12323a, 0.92).setDepth(100);
     this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
       .setOrigin(0.5).setDepth(101);
     this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
 
-    const replay = this.add.text(W/2, H/2 + 50, "Rejouer",
+    // Bouton PARTAGER MON SCORE sous le score
+    const shareBtn = this.add.text(
+      W/2,
+      H/2 + 32,
+      "Partager mon score",
+      {
+        fontFamily: "monospace",
+        fontSize: 32,
+        color: "#ffffff",
+        backgroundColor: "#0b7285",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 }
+      }
+    ).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
+
+    shareBtn.on("pointerover", () => shareBtn.setBackgroundColor("#0e8595"));
+    shareBtn.on("pointerout",  () => shareBtn.setBackgroundColor("#0b7285"));
+    shareBtn.on("pointerdown", () => this.handleShareScore());
+
+    const replay = this.add.text(W/2, H/2 + 100, "Rejouer",
       { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     // si le joueur clique, on annule le leaderboard
@@ -2324,7 +2453,7 @@ class GameScene extends Phaser.Scene {
       this.scene.restart();
     });
 
-    const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal",
+    const menuBtn = this.add.text(W/2, H/2 + 176, "Menu principal",
       { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     menuBtn.on("pointerdown", () => {
@@ -2335,7 +2464,7 @@ class GameScene extends Phaser.Scene {
     });
 
     const isHard = this.game._hardMode === true;
-    // ⚠️ AFFICHAGE LEADERBOARD PAGINÉ APRÈS ENREGISTREMENT
+    // AFFICHAGE LEADERBOARD PAGINÉ APRÈS ENREGISTREMENT
     postScore(this.score, isHard).then(() => {
       if (this._cancelLeaderboard) return;
       if (!this.isOver) return;
@@ -2344,7 +2473,132 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // ⚠️ VERSION PAGINÉE + SCOPE DU LEADERBOARD DANS LA GAME SCENE
+  // Popup de partage (ou Web Share API si dispo)
+  handleShareScore(){
+    const score = this.score | 0;
+    const isHard = this.game._hardMode === true;
+    const modeLabel = isHard ? "en mode Hard" : "en mode Normal";
+    const baseUrl = "https://flappyborgyv15.onrender.com";
+    const text = `Je viens de faire ${score} points ${modeLabel} sur FlappyBorgy ! LFG BORGY 🔥`;
+    const fullText = `${text} ${baseUrl}`;
+
+    // Web Share API (mobile, etc.)
+    if (navigator.share){
+      navigator.share({ text: fullText, url: baseUrl }).catch(()=>{});
+      return;
+    }
+
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 420;
+    const elements = [];
+
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
+      .setDepth(depth)
+      .setInteractive();
+    elements.push(overlay);
+
+    const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.5, 0x05252f, 0.96)
+      .setDepth(depth+1);
+    elements.push(panel);
+
+    const title = this.add.text(W/2, H*0.32, "Partager ton score", {
+      fontFamily: "Georgia,serif",
+      fontSize: 40,
+      color: "#ffffff"
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(title);
+
+    const msgText = this.add.text(W*0.15, H*0.37, fullText, {
+      fontFamily: "monospace",
+      fontSize: 20,
+      color: "#e5f2ff",
+      wordWrap: { width: W*0.7 }
+    }).setOrigin(0,0).setDepth(depth+2);
+    elements.push(msgText);
+
+    const infoText = this.add.text(W/2, H*0.53, "Choisis une plateforme ou copie le texte :", {
+      fontFamily: "monospace",
+      fontSize: 20,
+      color: "#cffff1",
+      align: "center",
+      wordWrap: { width: W*0.7 }
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(infoText);
+
+    const openUrl = (u) => {
+      try {
+        if (window.Telegram?.WebApp?.openLink) {
+          window.Telegram.WebApp.openLink(u);
+        } else {
+          window.open(u, "_blank");
+        }
+      } catch(e) {
+        try { window.open(u, "_blank"); } catch {}
+      }
+    };
+
+    const makeBtn = (x, y, label) => {
+      const btn = this.add.text(x, y, label, {
+        fontFamily: "monospace",
+        fontSize: 20,
+        color: "#ffffff",
+        backgroundColor: "#0b7285",
+        padding: { left: 14, right: 14, top: 6, bottom: 6 }
+      }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+
+      btn.on("pointerover", () => btn.setBackgroundColor("#0e8595"));
+      btn.on("pointerout",  () => btn.setBackgroundColor("#0b7285"));
+
+      elements.push(btn);
+      return btn;
+    };
+
+    const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
+    const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(baseUrl)}&text=${encodeURIComponent(text)}`;
+    const instaUrl  = "https://www.instagram.com/";
+    const tiktokUrl = "https://www.tiktok.com/";
+
+    const btnX   = makeBtn(W*0.24, H*0.60, "X");
+    btnX.on("pointerdown", () => openUrl(xUrl));
+
+    const btnTg  = makeBtn(W*0.42, H*0.60, "Telegram");
+    btnTg.on("pointerdown", () => openUrl(tgUrl));
+
+    const btnIg  = makeBtn(W*0.60, H*0.60, "Instagram");
+    btnIg.on("pointerdown", () => openUrl(instaUrl));
+
+    const btnTk  = makeBtn(W*0.78, H*0.60, "TikTok");
+    btnTk.on("pointerdown", () => openUrl(tiktokUrl));
+
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      const copyBtn = makeBtn(W/2, H*0.69, "Copier le texte");
+      copyBtn.on("pointerdown", () => {
+        navigator.clipboard.writeText(fullText).then(() => {
+          copyBtn.setText("Copié !");
+          this.time.delayedCall(1200, () => copyBtn.setText("Copier le texte"));
+        }).catch(()=>{});
+      });
+    }
+
+    const close = this.add.text(W/2, H*0.80, "Fermer", {
+      fontFamily: "monospace",
+      fontSize: 28,
+      color: "#ffffff",
+      backgroundColor: "#0db187",
+      padding: { left: 22, right: 22, top: 8, bottom: 8 }
+    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+    elements.push(close);
+
+    const destroyAll = () => {
+      elements.forEach(el => { try { el.destroy(); } catch(e){} });
+    };
+
+    overlay.on("pointerdown", destroyAll);
+    close.on("pointerdown", destroyAll);
+  }
+
+  // LEADERBOARD paginé dans la GameScene (après Game Over)
   showLeaderboard(isHard = false){
     const W = this.scale.width;
     const H = this.scale.height;
