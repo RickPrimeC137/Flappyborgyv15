@@ -22,15 +22,15 @@ const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les skins
-const PIPE_HITBOX_W = 0.6; // 1 = largeur complète du sprite, 0.8 = plus serré
+const PIPE_HITBOX_W = 0.5; // 1 = largeur complète du sprite, 0.8 = plus serré
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
 const BG_XMAS_KEY  = "bg_noel";    // assets/bg_noel.png
 
 const PLAYFIELD_TOP_PCT = 0.20;
-const PLAYFIELD_BOT_PCT = 0.92;
-const PIPE_RIM_MAX_PCT  = 0.75;
+const PLAYFIELD_BOT_PCT = 0.90;
+const PIPE_RIM_MAX_PCT  = 0.65;
 
 const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
@@ -2945,7 +2945,7 @@ window.addEventListener("load", () => {
     parent: "game-root",
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } }, // debug false = plus de hitbox visibles
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: true } }, // debug false = plus de hitbox visibles
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
     fps: { target: 60, min: 30, forceSetTimeOut: false }
