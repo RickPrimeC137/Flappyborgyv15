@@ -305,26 +305,18 @@ function updateQuestsFromEvent(evt, value){
 const SKINS_STORAGE_KEY = "flappy_borgy_skins_v1";
 
 const SKINS_DEF = [
-  { id: "borgy_default",  key: "borgy",           name: "Borgy Classique",  price: 0,     ownedByDefault: true  },
-  { id: "borgy_knight",   key: "borgy_knight",    name: "Borgy Chevalier",  price: 1000,  ownedByDefault: false },
-  { id: "borgy_dragon",   key: "borgy_dragon",    name: "Borgy Dragon",     price: 1500,  ownedByDefault: false },
-  { id: "borgy_space",    key: "borgy_space",     name: "Borgy Astronaute", price: 2000,  ownedByDefault: false },
-  { id: "borgy_cyber",    key: "borgy_cyber",     name: "Borgy Cyber",      price: 2500,  ownedByDefault: false },
-  { id: "borgy_cowboy",   key: "borgy_cowboy",    name: "Borgy Cow-boy",    price: 3000,  ownedByDefault: false },
+  { id: "borgy_default",  key: "borgy",           name: "Borgy Classique",  price: 0,    ownedByDefault: true  },
+  { id: "borgy_knight",   key: "borgy_knight",    name: "Borgy Chevalier",  price: 1000, ownedByDefault: false },
+  { id: "borgy_dragon",   key: "borgy_dragon",    name: "Borgy Dragon",     price: 1500, ownedByDefault: false },
+  { id: "borgy_space",    key: "borgy_space",     name: "Borgy Astronaute", price: 2000, ownedByDefault: false },
+  { id: "borgy_cyber",    key: "borgy_cyber",     name: "Borgy Cyber",      price: 2500, ownedByDefault: false },
+  { id: "borgy_cowboy",   key: "borgy_cowboy",    name: "Borgy Cow-boy",    price: 3000, ownedByDefault: false },
   { id: "borgy_gold",     key: "borgy_gold",      name: "Borgy Gold",       price: 10000, ownedByDefault: false },
   { id: "borgy_emeraude", key: "borgy_emeraude",  name: "Borgy Émeraude",   price: 15000, ownedByDefault: false },
   { id: "borgy_diamant",  key: "borgy_diamant",   name: "Borgy Diamant",    price: 20000, ownedByDefault: false }
   // NB : le skin Noël "borgy_xmas" n'est PAS dans le shop, il est automatique en mode Noël
 ];
 
-// Sauvegarde de l'état des skins
-function saveSkinState(data){
-  try{
-    localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data));
-  }catch(e){}
-}
-
-// Chargement de l'état des skins + migration des prix/noms/keys
 function loadSkinState(){
   try{
     const raw = localStorage.getItem(SKINS_STORAGE_KEY);
@@ -332,23 +324,6 @@ function loadSkinState(){
       const data = JSON.parse(raw);
       if (data && Array.isArray(data.skins) && data.skins.length){
 
-        // === MIGRATION : synchroniser les prix / noms / keys avec SKINS_DEF ===
-        const defById = {};
-        SKINS_DEF.forEach(def => {
-          defById[def.id] = def;
-        });
-
-        // On met à jour chaque skin existant avec les nouvelles valeurs
-        data.skins.forEach(s => {
-          const def = defById[s.id];
-          if (!def) return;
-          s.price = def.price;   // nouveau prix (1000, 1500, ..., 10000, 15000, 20000)
-          s.key   = def.key;     // au cas où tu changes un jour la key
-          s.name  = def.name;    // idem pour le nom affiché
-          // !! On NE TOUCHE PAS à owned / selected pour ne pas retirer de skins déjà achetés
-        });
-
-        // Ajouter les skins manquants (si tu en ajoutes plus tard dans SKINS_DEF)
         const existingIds = new Set(data.skins.map(s => s.id));
         SKINS_DEF.forEach(def => {
           if (!existingIds.has(def.id)) {
@@ -363,7 +338,6 @@ function loadSkinState(){
           }
         });
 
-        // Si le skin sélectionné n'est plus valide, on retombe sur un skin owned
         if (!data.selectedId || !data.skins.some(s => s.id === data.selectedId && s.owned)) {
           const fallback = data.skins.find(s => s.owned) || data.skins[0];
           if (fallback) {
@@ -372,14 +346,12 @@ function loadSkinState(){
         }
         data.skins.forEach(s => { s.selected = (s.id === data.selectedId); });
 
-        // On sauvegarde l'état "migré"
         saveSkinState(data);
         return data;
       }
     }
   }catch(e){}
 
-  // Si pas de données ou erreur => init par défaut avec les nouveaux prix
   const skins = SKINS_DEF.map(s => ({
     id: s.id,
     key: s.key,
@@ -396,13 +368,35 @@ function loadSkinState(){
   return data;
 }
 
+function saveSkinState(data){
+  try {
+    localStorage.setItem(SKINS_STORAGE_KEY, JSON.stringify(data));
+  } catch(e){}
+}
+
+function getSelectedSkinKey(){
+  const data = loadSkinState();
+  const found = data.skins.find(s => s.id === data.selectedId && s.owned);
+  if (found) return found.key;
+  const def = SKINS_DEF[0];
+  return def ? def.key : "borgy";
+}
+
+function selectSkin(id){
+  const data = loadSkinState();
+  const skin = data.skins.find(s => s.id === id && s.owned);
+  if (!skin) return data;
+  data.selectedId = id;
+  data.skins.forEach(s => { s.selected = (s.id === id); });
+  saveSkinState(data);
+  return data;
+}
+
 // Essaie d'acheter un skin, renvoie { ok, reason, coinsLeft, data }
 function tryBuySkin(id){
   const data = loadSkinState();
   const skin = data.skins.find(s => s.id === id);
-  if (!skin) {
-    return { ok:false, reason:"unknown_skin", coinsLeft:loadBorgyCoins(), data };
-  }
+  if (!skin) return { ok:false, reason:"unknown_skin", coinsLeft:loadBorgyCoins(), data };
   if (skin.owned){
     return { ok:true, reason:"already_owned", coinsLeft:loadBorgyCoins(), data };
   }
@@ -410,83 +404,82 @@ function tryBuySkin(id){
   if (coins < skin.price){
     return { ok:false, reason:"not_enough_coins", coinsLeft:coins, data };
   }
-
   const newCoins = coins - skin.price;
   saveBorgyCoins(newCoins);
   skin.owned = true;
   data.coinsSpent = (data.coinsSpent || 0) + skin.price;
   saveSkinState(data);
-
   return { ok:true, reason:"purchased", coinsLeft:newCoins, data };
 }
 
-// Sélection d’un skin (utilisé par le shop et le jeu)
-function selectSkin(id){
-  const data = loadSkinState();
-  if (!data || !Array.isArray(data.skins)) return;
-
-  const skin = data.skins.find(s => s.id === id);
-  if (!skin || !skin.owned) return; // on ne sélectionne que les skins possédés
-
-  data.selectedId = id;
-  data.skins.forEach(s => {
-    s.selected = (s.id === id);
-  });
-
-  saveSkinState(data);
-}
-
-// Récupère la key du skin sélectionné (utilisée dans GameScene)
-function getSelectedSkinKey(){
-  const data = loadSkinState();
-  if (!data || !Array.isArray(data.skins) || !data.skins.length){
-    return "borgy";
-  }
-
-  // Skin sélectionné et possédé
-  let skin = data.skins.find(s => s.id === data.selectedId && s.owned);
-
-  // Sinon, on prend le premier skin possédé
-  if (!skin){
-    skin = data.skins.find(s => s.owned) || data.skins[0];
-  }
-
-  return skin && skin.key ? skin.key : "borgy";
-}
-
-// ===== Utils hitbox / échelle des skins =====
-function getVisibleBounds(img){
-  // ici on simplifie : on prend tout le sprite
-  if (!img || !img.width || !img.height) return null;
-  return { x: 0, y: 0, w: img.width, h: img.height };
-}
-
-// Calcule un scale pour que tous les skins aient à peu près
-// la même hauteur que le Borgy de base (key "borgy")
-function computeSkinScale(textures, skinKey){
+// Retourne le rectangle utile (sans les marges transparentes) d'une image
+function getVisibleBounds(img) {
   try {
-    const baseTex = textures.get("borgy");
-    const skinTex = textures.get(skinKey);
-    if (!baseTex || !skinTex) return PLAYER_SCALE;
+    const w = img.width | 0;
+    const h = img.height | 0;
+    if (!w || !h) return null;
 
-    const baseImg = baseTex.getSourceImage
-      ? baseTex.getSourceImage()
-      : baseTex.source[0]?.image;
-    const skinImg = skinTex.getSourceImage
-      ? skinTex.getSourceImage()
-      : skinTex.source[0]?.image;
+    const canvas = document.createElement("canvas");
+    canvas.width = w;
+    canvas.height = h;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    ctx.drawImage(img, 0, 0);
 
-    if (!baseImg || !skinImg) return PLAYER_SCALE;
+    const data = ctx.getImageData(0, 0, w, h).data;
+    let minX = w, minY = h, maxX = -1, maxY = -1;
+    const threshold = 10; // alpha > 10 = pixel visible
 
-    const baseH = baseImg.height || 1;
-    const skinH = skinImg.height || 1;
+    for (let y = 0; y < h; y++) {
+      let row = y * w * 4;
+      for (let x = 0; x < w; x++) {
+        const a = data[row + x * 4 + 3];
+        if (a > threshold) {
+          if (x < minX) minX = x;
+          if (x > maxX) maxX = x;
+          if (y < minY) minY = y;
+          if (y > maxY) maxY = y;
+        }
+      }
+    }
 
-    // On veut que la hauteur du skin soit comparable à celle du Borgy
-    const targetWorldHeight = PLAYER_SCALE * baseH;
-    const scale = targetWorldHeight / skinH;
+    if (maxX < minX || maxY < minY) return null;
+    return { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
 
-    if (!Number.isFinite(scale) || scale <= 0.01) return PLAYER_SCALE;
+  } catch (e) {
+    console.warn("getVisibleBounds error", e);
+    return null;
+  }
+}
+
+// Calcule un scale pour qu'un skin ait la même taille VISUELLE que le borgy de base
+function computeSkinScale(textures, skinKey) {
+  const baseKey = "borgy"; // borgy_ingame.png (sprite de référence)
+
+  try {
+    const baseTex = textures.get(baseKey);
+    const curTex  = textures.get(skinKey);
+    if (!baseTex || !curTex) return PLAYER_SCALE;
+
+    const baseImg = baseTex.getSourceImage();
+    const curImg  = curTex.getSourceImage();
+    if (!baseImg || !curImg) return PLAYER_SCALE;
+
+    const baseBounds = getVisibleBounds(baseImg);
+    const curBounds  = getVisibleBounds(curImg);
+
+    let ratio;
+    if (baseBounds && curBounds) {
+      ratio = (baseBounds.h || baseImg.height) / (curBounds.h || curImg.height);
+    } else {
+      ratio = baseImg.height / curImg.height;
+    }
+
+    let scale = PLAYER_SCALE * ratio;
+    if (!Number.isFinite(scale)) scale = PLAYER_SCALE;
+
+    scale = Phaser.Math.Clamp(scale, PLAYER_SCALE * 0.6, PLAYER_SCALE * 1.8);
     return scale;
+
   } catch (e) {
     console.warn("computeSkinScale error", e);
     return PLAYER_SCALE;
