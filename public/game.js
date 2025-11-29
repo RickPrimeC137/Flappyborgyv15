@@ -2584,136 +2584,144 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // Popup de partage (message FR + EN + lien bot)
-  handleShareScore(){
-    const score  = this.score | 0;
-    const isHard = this.game._hardMode === true;
+  // Popup de partage (nouveau texte FR + EN + lien bot)
+handleShareScore(){
+  const score  = this.score | 0;
+  const isHard = this.game._hardMode === true;
 
-    const frModeLabel = isHard ? "en mode Hard"   : "en mode Normal";
-    const enModeLabel = isHard ? "in Hard mode"   : "in Normal mode";
+  const modeFr = isHard ? "Hard" : "Normal";
+  const modeEn = isHard ? "Hard" : "Normal";
 
-    const botUrl = "https://t.me/Borgyboss_bot";
+  const botUrl = "https://t.me/Borgyboss_bot";
 
-    const textFr = `Je viens de faire ${score} points ${frModeLabel} sur FlappyBorgy ! LFG BORGY 🔥`;
-    const textEn = `I just scored ${score} points ${enModeLabel} on FlappyBorgy! LFG BORGY 🔥`;
+  // Texte FR
+  const textFr =
+    `Je viens de faire un nouveau high score de ${score} points ` +
+    `en mode ${modeFr} sur FlappyBorgy ! Tu peux me battre ? ` +
+    `Viens te challenger ici : ${botUrl}`;
 
-    const fullText = `${textFr}\n${textEn}\n\n${botUrl}`;
+  // Texte EN (proche de la suggestion que tu as reçue)
+  const textEn =
+    `Just hit a new high score of ${score} points in ${modeEn} Mode on FlappyBorgy! ` +
+    `Can you beat it? Challenge yourself here: ${botUrl}`;
 
-    // Web Share API
-    if (navigator.share){
-      navigator.share({ text: fullText, url: botUrl }).catch(()=>{});
-      return;
-    }
+  const fullText = `${textFr}\n\n${textEn}`;
 
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const depth = 420;
-    const elements = [];
-
-    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
-      .setDepth(depth)
-      .setInteractive();
-    elements.push(overlay);
-
-    const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.5, 0x05252f, 0.96)
-      .setDepth(depth+1);
-    elements.push(panel);
-
-    const title = this.add.text(W/2, H*0.32, t("SHARE_TITLE"), {
-      fontFamily: "Georgia,serif",
-      fontSize: 40,
-      color: "#ffffff"
-    }).setOrigin(0.5).setDepth(depth+2);
-    elements.push(title);
-
-    const msgText = this.add.text(W*0.15, H*0.37, fullText, {
-      fontFamily: "monospace",
-      fontSize: 20,
-      color: "#e5f2ff",
-      wordWrap: { width: W*0.7 }
-    }).setOrigin(0,0).setDepth(depth+2);
-    elements.push(msgText);
-
-    const infoText = this.add.text(W/2, H*0.53, t("SHARE_HINT"), {
-      fontFamily: "monospace",
-      fontSize: 20,
-      color: "#cffff1",
-      align: "center",
-      wordWrap: { width: W*0.7 }
-    }).setOrigin(0.5).setDepth(depth+2);
-    elements.push(infoText);
-
-    const openUrl = (u) => {
-      try {
-        if (window.Telegram?.WebApp?.openLink) {
-          window.Telegram.WebApp.openLink(u);
-        } else {
-          window.open(u, "_blank");
-        }
-      } catch(e) {
-        try { window.open(u, "_blank"); } catch {}
-      }
-    };
-
-    const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
-    const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(textFr + "\n" + textEn)}`;
-    const instaUrl  = "https://www.instagram.com/";
-    const tiktokUrl = "https://www.tiktok.com/";
-
-    const makeBtn = (x, y, label) => {
-      const btn = this.add.text(x, y, label, {
-        fontFamily: "monospace",
-        fontSize: 20,
-        color: "#ffffff",
-        backgroundColor: "#0b7285",
-        padding: { left: 14, right: 14, top: 6, bottom: 6 }
-      }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-
-      btn.on("pointerover", () => btn.setBackgroundColor("#0e8595"));
-      btn.on("pointerout",  () => btn.setBackgroundColor("#0b7285"));
-
-      elements.push(btn);
-      return btn;
-    };
-
-    const btnX   = makeBtn(W*0.24, H*0.60, "X");
-    btnX.on("pointerdown", () => openUrl(xUrl));
-
-    const btnTg  = makeBtn(W*0.42, H*0.60, "Telegram");
-    btnTg.on("pointerdown", () => openUrl(tgUrl));
-
-    const btnIg  = makeBtn(W*0.60, H*0.60, "Instagram");
-    btnIg.on("pointerdown", () => openUrl(instaUrl));
-
-    const btnTk  = makeBtn(W*0.78, H*0.60, "TikTok");
-    btnTk.on("pointerdown", () => openUrl(tiktokUrl));
-
-    if (navigator.clipboard && navigator.clipboard.writeText){
-      const copyBtn = makeBtn(W/2, H*0.69, t("SHARE_COPY"));
-      copyBtn.on("pointerdown", () => {
-        navigator.clipboard.writeText(fullText).then(() => {
-          copyBtn.setText(t("SHARE_COPIED"));
-          this.time.delayedCall(1200, () => copyBtn.setText(t("SHARE_COPY")));
-        }).catch(()=>{});
-      });
-    }
-
-    const close = this.add.text(W/2, H*0.80, t("SHARE_CLOSE"), {
-      fontFamily: "monospace",
-      fontSize: 28,
-      color: "#ffffff",
-      backgroundColor: "#0db187",
-      padding: { left: 22, right: 22, top: 8, bottom: 8 }
-    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-    elements.push(close);
-
-    const destroyAll = () => {
-      elements.forEach(el => { try { el.destroy(); } catch(e){} });
-    };
-
-    overlay.on("pointerdown", destroyAll);
-    close.on("pointerdown", destroyAll);
+  // Web Share API (mobile, certains navigateurs)
+  if (navigator.share){
+    navigator.share({ text: fullText, url: botUrl }).catch(()=>{});
+    return;
   }
+
+  const W = this.scale.width;
+  const H = this.scale.height;
+  const depth = 420;
+  const elements = [];
+
+  const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
+    .setDepth(depth)
+    .setInteractive();
+  elements.push(overlay);
+
+  const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.5, 0x05252f, 0.96)
+    .setDepth(depth+1);
+  elements.push(panel);
+
+  const title = this.add.text(W/2, H*0.32, t("SHARE_TITLE"), {
+    fontFamily: "Georgia,serif",
+    fontSize: 40,
+    color: "#ffffff"
+  }).setOrigin(0.5).setDepth(depth+2);
+  elements.push(title);
+
+  const msgText = this.add.text(W*0.15, H*0.37, fullText, {
+    fontFamily: "monospace",
+    fontSize: 20,
+    color: "#e5f2ff",
+    wordWrap: { width: W*0.7 }
+  }).setOrigin(0,0).setDepth(depth+2);
+  elements.push(msgText);
+
+  const infoText = this.add.text(W/2, H*0.53, t("SHARE_HINT"), {
+    fontFamily: "monospace",
+    fontSize: 20,
+    color: "#cffff1",
+    align: "center",
+    wordWrap: { width: W*0.7 }
+  }).setOrigin(0.5).setDepth(depth+2);
+  elements.push(infoText);
+
+  const openUrl = (u) => {
+    try {
+      if (window.Telegram?.WebApp?.openLink) {
+        window.Telegram.WebApp.openLink(u);
+      } else {
+        window.open(u, "_blank");
+      }
+    } catch(e) {
+      try { window.open(u, "_blank"); } catch {}
+    }
+  };
+
+  const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
+  const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(fullText)}`;
+  const instaUrl  = "https://www.instagram.com/";
+  const tiktokUrl = "https://www.tiktok.com/";
+
+  const makeBtn = (x, y, label) => {
+    const btn = this.add.text(x, y, label, {
+      fontFamily: "monospace",
+      fontSize: 20,
+      color: "#ffffff",
+      backgroundColor: "#0b7285",
+      padding: { left: 14, right: 14, top: 6, bottom: 6 }
+    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+
+    btn.on("pointerover", () => btn.setBackgroundColor("#0e8595"));
+    btn.on("pointerout",  () => btn.setBackgroundColor("#0b7285"));
+
+    elements.push(btn);
+    return btn;
+  };
+
+  const btnX   = makeBtn(W*0.24, H*0.60, "X");
+  btnX.on("pointerdown", () => openUrl(xUrl));
+
+  const btnTg  = makeBtn(W*0.42, H*0.60, "Telegram");
+  btnTg.on("pointerdown", () => openUrl(tgUrl));
+
+  const btnIg  = makeBtn(W*0.60, H*0.60, "Instagram");
+  btnIg.on("pointerdown", () => openUrl(instaUrl));
+
+  const btnTk  = makeBtn(W*0.78, H*0.60, "TikTok");
+  btnTk.on("pointerdown", () => openUrl(tiktokUrl));
+
+  if (navigator.clipboard && navigator.clipboard.writeText){
+    const copyBtn = makeBtn(W/2, H*0.69, t("SHARE_COPY"));
+    copyBtn.on("pointerdown", () => {
+      navigator.clipboard.writeText(fullText).then(() => {
+        copyBtn.setText(t("SHARE_COPIED"));
+        this.time.delayedCall(1200, () => copyBtn.setText(t("SHARE_COPY")));
+      }).catch(()=>{});
+    });
+  }
+
+  const close = this.add.text(W/2, H*0.80, t("SHARE_CLOSE"), {
+    fontFamily: "monospace",
+    fontSize: 28,
+    color: "#ffffff",
+    backgroundColor: "#0db187",
+    padding: { left: 22, right: 22, top: 8, bottom: 8 }
+  }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+  elements.push(close);
+
+  const destroyAll = () => {
+    elements.forEach(el => { try { el.destroy(); } catch(e){} });
+  };
+
+  overlay.on("pointerdown", destroyAll);
+  close.on("pointerdown", destroyAll);
+}
 
   // LEADERBOARD paginé dans la GameScene (après Game Over)
   showLeaderboard(isHard = false){
