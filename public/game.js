@@ -2554,7 +2554,7 @@ window.addEventListener("load", () => {
     parent: "game-root",
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } }, // debug false = plus de hitbox visibles
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: true } }, // debug false = plus de hitbox visibles
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
     fps: { target: 60, min: 30, forceSetTimeOut: false }
