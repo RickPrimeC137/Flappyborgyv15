@@ -63,6 +63,8 @@ let welcomeShownThisSession = false; // flag session
 
 /* ===== Mode Noël ===== */
 const XMAS_MODE_KEY = "flappy_borgy_xmas_mode_v1";
+// Portion haute de pipe_bottom_snow qu'on garde pour le cap (0–1)
+const XMAS_BOTTOM_CAP_PCT = 0.35;
 
 /* ============ Musique ============ */
 function ensureBgm(scene, opts = {}) {
@@ -1857,11 +1859,12 @@ class GameScene extends Phaser.Scene {
     const x  = W + SPAWN_X_OFFSET;
     const vx = this.started ? this.curSpeed : 0;
 
-    const topKey    = this.isXmasMode ? "pipe_top_ice"    : "pipe_top";
-    const bottomKey = this.isXmasMode ? "pipe_bottom_snow": "pipe_bottom";
+    // En mode Noël, on utilise un corps normal + un cap neige décoratif
+    const topKey        = this.isXmasMode ? "pipe_top_ice" : "pipe_top";
+    const bottomBodyKey = "pipe_bottom";
 
-    const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
-    const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0);
+    const topImg = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
+    const bottomImg = this.physics.add.image(x, 0, bottomBodyKey).setDepth(6).setOrigin(0.5, 0);
 
     const scaleXt = PIPE_W_DISPLAY / topImg.width;
     const scaleXb = PIPE_W_DISPLAY / bottomImg.width;
@@ -1882,6 +1885,40 @@ class GameScene extends Phaser.Scene {
     this.pipes.add(bottomImg);
 
     this.pipePairs.push({ top: topImg, bottom: bottomImg });
+
+    // Cap neige décoratif pour le tuyau bas en mode Noël
+    let bottomCap = null;
+    if (this.isXmasMode) {
+      const snowTex = this.textures.get("pipe_bottom_snow");
+      if (snowTex) {
+        const src = snowTex.getSourceImage?.();
+        if (src) {
+          const capHeight = src.height * XMAS_BOTTOM_CAP_PCT;
+
+          bottomCap = this.physics.add.image(bottomImg.x, bottomImg.y, "pipe_bottom_snow")
+            .setOrigin(0.5, 0)
+            .setDepth(bottomImg.depth + 1);
+
+          bottomCap.setCrop(0, 0, src.width, capHeight);
+
+          const capScaleX = bottomImg.displayWidth / src.width;
+          const capScaleY = capScaleX;
+          bottomCap.setScale(capScaleX, capScaleY);
+
+          bottomCap.body.setAllowGravity(false);
+          bottomCap.body.setImmovable(true);
+          bottomCap.body.setVelocityX(vx);
+
+          this.pipeDecor.add(bottomCap);
+
+          bottomImg._xmasCap = bottomCap;
+
+          bottomImg.once("destroy", () => {
+            try { bottomCap.destroy(); } catch(e){}
+          });
+        }
+      }
+    }
 
     const gapCenterY = (topImg.y + bottomImg.y) / 2;
 
@@ -2013,6 +2050,10 @@ class GameScene extends Phaser.Scene {
 
             topImg.body.setVelocityX(this.curSpeed);
             bottomImg.body.setVelocityX(this.curSpeed);
+
+            if (bottomImg._xmasCap) {
+              bottomImg._xmasCap.y = bottomImg.y;
+            }
           }
         });
 
@@ -2574,7 +2615,7 @@ window.addEventListener("load", () => {
     parent: "game-root",
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: true } }, // debug false = plus de hitbox visibles
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } }, // debug false = plus de hitbox visibles
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
     fps: { target: 60, min: 30, forceSetTimeOut: false }
