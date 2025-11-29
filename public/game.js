@@ -56,6 +56,8 @@ const HARD_DOOR_HALF_PERIOD  = 900;
 const CLOUD_TOP_HEIGHT_PCT    = 0.11; // ~11% de la hauteur en haut
 const CLOUD_BOTTOM_HEIGHT_PCT = 0.22; // ~22% de la hauteur en bas (plus large)
 const CLOUD_EXTRA_SCALE_X     = 1.25; // un peu plus large que l’écran pour éviter les trous sur les côtés
+// Décalage vers le bas de la hitbox du nuage du bas (en pixels)
+const BOTTOM_CLOUD_HITBOX_OFFSET_PX = 40; // ajuste la valeur comme tu veux
 
 /* ===== Popup bienvenue (flag) ===== */
 const WELCOME_POPUP_KEY = "flappy_borgy_welcome_seen_v1"; // (stockage si besoin)
@@ -1703,8 +1705,12 @@ class GameScene extends Phaser.Scene {
       this.topCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, topCloudHeight, true);
       this.topCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
 
-      this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
-      this.bottomCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
+        // Hitbox du nuage du bas : on la décale légèrement vers le bas
+  this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
+  this.bottomCloud.body.setOffset(
+    -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
+    BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
+  );
 
       if (isHard) {
         this._stormBaseTopTint    = 0x4b5563;
