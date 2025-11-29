@@ -91,7 +91,59 @@ const I18N = {
     WELCOME_OK:  "OK, c'est parti !",
 
     LANG_BTN_FR: "FR",
-    LANG_BTN_EN: "EN"
+    LANG_BTN_EN: "EN",
+
+    // HUD / Infos
+    HUD_SCORE: "Score :",
+    HUD_COINS: "Borgy Coins :",
+    FOOTER_TIP: "Tap/Espace pour sauter — évite les tuyaux",
+
+    // Quêtes
+    QUESTS_TITLE: "Quêtes du jour",
+    QUESTS_HARD_HINT: "(Récompenses x2 en Hard)",
+    QUESTS_REWARD_LABEL: "Récompense :",
+    QUESTS_TOTAL_COINS: "Total Borgy Coins :",
+
+    // Shop
+    SHOP_TITLE: "Borgy Coins Shop",
+    SHOP_CURRENT_COINS: "Tu as actuellement :",
+    SHOP_CHOOSE_SKIN: "Choisis ton skin Borgy :",
+    SHOP_BTN_BUY: "Acheter",
+    SHOP_BTN_SELECTED: "Sélectionné",
+    SHOP_BTN_USE: "Utiliser",
+    SHOP_NOT_ENOUGH_COINS: "Pas assez de Borgy Coins !",
+    SHOP_PRICE_FREE: "Gratuit",
+    SHOP_PERK_GOLD: "Borgy Coins x5",
+    SHOP_PERK_EMERALD: "Bonus SwissBorg x3",
+    SHOP_PERK_DIAMOND: "1 vie supplémentaire",
+
+    // Commun
+    COMMON_CLOSE: "Fermer",
+
+    // Leaderboard
+    LEADERBOARD_TITLE: "Leaderboard",
+    LEADERBOARD_TITLE_HARD: "Leaderboard (Hard)",
+    LEADERBOARD_SCOPE_GLOBAL: "Global",
+    LEADERBOARD_SCOPE_WEEK: "Semaine",
+    LEADERBOARD_SCOPE_MONTH: "Mois",
+    LEADERBOARD_PAGE_LABEL: "Page",
+
+    // Game Over
+    GAME_OVER_TITLE: "Game Over",
+    GAME_OVER_SCORE: "Score :",
+    GAME_OVER_SHARE: "Partager mon score",
+    GAME_OVER_REPLAY: "Rejouer",
+    GAME_OVER_MENU: "Menu principal",
+
+    // Partage
+    SHARE_TITLE: "Partager ton score",
+    SHARE_HINT: "Choisis une plateforme ou copie le texte :",
+    SHARE_COPY: "Copier le texte",
+    SHARE_COPIED: "Copié !",
+    SHARE_CLOSE: "Fermer",
+
+    // Réanimation
+    REVIVE_TEXT: "Réanimation !"
   },
   en: {
     MENU_PLAY: "Play",
@@ -115,7 +167,59 @@ const I18N = {
     WELCOME_OK:  "OK, let's go!",
 
     LANG_BTN_FR: "FR",
-    LANG_BTN_EN: "EN"
+    LANG_BTN_EN: "EN",
+
+    // HUD / Infos
+    HUD_SCORE: "Score:",
+    HUD_COINS: "Borgy Coins:",
+    FOOTER_TIP: "Tap/Space to jump — avoid the pipes",
+
+    // Quests
+    QUESTS_TITLE: "Daily quests",
+    QUESTS_HARD_HINT: "(Rewards x2 in Hard)",
+    QUESTS_REWARD_LABEL: "Reward:",
+    QUESTS_TOTAL_COINS: "Total Borgy Coins:",
+
+    // Shop
+    SHOP_TITLE: "Borgy Coins Shop",
+    SHOP_CURRENT_COINS: "You currently have:",
+    SHOP_CHOOSE_SKIN: "Choose your Borgy skin:",
+    SHOP_BTN_BUY: "Buy",
+    SHOP_BTN_SELECTED: "Selected",
+    SHOP_BTN_USE: "Use",
+    SHOP_NOT_ENOUGH_COINS: "Not enough Borgy Coins!",
+    SHOP_PRICE_FREE: "Free",
+    SHOP_PERK_GOLD: "Borgy Coins x5",
+    SHOP_PERK_EMERALD: "SwissBorg bonus x3",
+    SHOP_PERK_DIAMOND: "1 extra life",
+
+    // Common
+    COMMON_CLOSE: "Close",
+
+    // Leaderboard
+    LEADERBOARD_TITLE: "Leaderboard",
+    LEADERBOARD_TITLE_HARD: "Leaderboard (Hard)",
+    LEADERBOARD_SCOPE_GLOBAL: "Global",
+    LEADERBOARD_SCOPE_WEEK: "Week",
+    LEADERBOARD_SCOPE_MONTH: "Month",
+    LEADERBOARD_PAGE_LABEL: "Page",
+
+    // Game Over
+    GAME_OVER_TITLE: "Game Over",
+    GAME_OVER_SCORE: "Score:",
+    GAME_OVER_SHARE: "Share my score",
+    GAME_OVER_REPLAY: "Play again",
+    GAME_OVER_MENU: "Main menu",
+
+    // Share
+    SHARE_TITLE: "Share your score",
+    SHARE_HINT: "Pick a platform or copy the text:",
+    SHARE_COPY: "Copy text",
+    SHARE_COPIED: "Copied!",
+    SHARE_CLOSE: "Close",
+
+    // Revive
+    REVIVE_TEXT: "Revive!"
   }
 };
 
@@ -273,6 +377,7 @@ function generateDailyQuests(){
   const q2Target = Math.max(q1Target + 30, Math.round(best * 1.1));
   const bonusCount = best < 80 ? 1 : (best < 150 ? 2 : 3);
 
+  // Les titres restent en FR pour l’instant (texte de contenu, pas de l’UI)
   const quests = [
     {
       id: "score_q1_" + day,
@@ -600,7 +705,7 @@ class PreloadScene extends Phaser.Scene {
     g.destroy();
 
     // Fonds
-    this.load.image(BG_KEY,      "bg_mountains.jpg");
+    this.load.image(BG_KEY,      "bg_mountains.png"); // <- PNG
     this.load.image(BG_HARD_KEY, "bg_volcano.png");
     this.load.image(BG_XMAS_KEY, "bg_noel.png");   // fond Noël
 
@@ -627,7 +732,7 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("borgy_emeraude", "borgy_emeraude.png");
     this.load.image("borgy_diamant",  "borgy_diamant.png");
 
-    // Skin Noël (image que tu as envoyée)
+    // Skin Noël
     this.load.image("borgy_xmas", "borgy_xmas.png");
 
     // Bonus visuels
@@ -773,7 +878,7 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const totalCoins = loadBorgyCoins();
-    this.add.text(W/2, H*0.19, `Borgy Coins : ${totalCoins}`, {
+    this.add.text(W/2, H*0.19, `${t("HUD_COINS")} ${totalCoins}`, {
       fontFamily:"monospace",
       fontSize:30,
       color:"#0b4a44"
@@ -823,10 +928,10 @@ class MenuScene extends Phaser.Scene {
     );
     hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
 
-    this.add.text(W/2, H*0.92, "Tap/Espace pour sauter — évitez les tuyaux",
+    this.add.text(W/2, H*0.92, t("FOOTER_TIP"),
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
 
-    // Popup de bienvenue — 1 fois par session
+    // Popup de bienvenue — 1 fois par session (et stockable si tu veux utiliser WELCOME_POPUP_KEY plus tard)
     if (!welcomeShownThisSession) {
       this.showWelcomePopup();
       welcomeShownThisSession = true;
@@ -865,7 +970,7 @@ class MenuScene extends Phaser.Scene {
       .setDepth(depth);
     elements.push(panel);
 
-    const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
+    const titleText = isHard ? t("LEADERBOARD_TITLE_HARD") : t("LEADERBOARD_TITLE");
     const title = this.add
       .text(W / 2, H * 0.18, titleText, {
         fontFamily: "Georgia,serif",
@@ -877,7 +982,7 @@ class MenuScene extends Phaser.Scene {
     elements.push(title);
 
     const pageLabel = this.add
-      .text(W / 2, H * 0.24, "Page 1", {
+      .text(W / 2, H * 0.24, `${t("LEADERBOARD_PAGE_LABEL")} 1`, {
         fontFamily: "monospace",
         fontSize: 24,
         color: "#cffff1",
@@ -889,7 +994,7 @@ class MenuScene extends Phaser.Scene {
     // Boutons scope : Global / Semaine / Mois
     const scopeY = H * 0.28;
 
-    const btnGlobal = this.add.text(W * 0.30, scopeY, "Global", {
+    const btnGlobal = this.add.text(W * 0.30, scopeY, t("LEADERBOARD_SCOPE_GLOBAL"), {
       fontFamily: "monospace",
       fontSize: 24,
       color: "#fff",
@@ -898,7 +1003,7 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
     elements.push(btnGlobal);
 
-    const btnWeek = this.add.text(W * 0.50, scopeY, "Semaine", {
+    const btnWeek = this.add.text(W * 0.50, scopeY, t("LEADERBOARD_SCOPE_WEEK"), {
       fontFamily: "monospace",
       fontSize: 24,
       color: "#fff",
@@ -907,7 +1012,7 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
     elements.push(btnWeek);
 
-    const btnMonth = this.add.text(W * 0.70, scopeY, "Mois", {
+    const btnMonth = this.add.text(W * 0.70, scopeY, t("LEADERBOARD_SCOPE_MONTH"), {
       fontFamily: "monospace",
       fontSize: 24,
       color: "#fff",
@@ -931,7 +1036,7 @@ class MenuScene extends Phaser.Scene {
     const lineH = 56;
 
     const close = this.add
-      .text(W / 2, H * 0.82, "Fermer", {
+      .text(W / 2, H * 0.82, t("COMMON_CLOSE"), {
         fontFamily: "monospace",
         fontSize: 44,
         color: "#fff",
@@ -1007,7 +1112,7 @@ class MenuScene extends Phaser.Scene {
       rows.length = 0;
 
       currentPage = page;
-      pageLabel.setText(`Page ${page}`);
+      pageLabel.setText(`${t("LEADERBOARD_PAGE_LABEL")} ${page}`);
 
       list.slice(0, 10).forEach((row, i) => {
         const y = startY + i * lineH;
@@ -1081,9 +1186,9 @@ class MenuScene extends Phaser.Scene {
     const totalAfter = applyQuestCoins(data, isHard);
 
     const panel = this.add.rectangle(W/2, H*0.5, W*0.82, H*0.58, 0x062b35, 0.94).setDepth(depth);
-    const title = this.add.text(W/2, H*0.26, "Quêtes du jour", { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
+    const title = this.add.text(W/2, H*0.26, t("QUESTS_TITLE"), { fontFamily:"Georgia,serif", fontSize:60, color:"#ffffff" })
       .setOrigin(0.5).setDepth(depth+1);
-    this.add.text(W/2, H*0.30, isHard ? "(Récompenses x2 en Hard)" : "", {
+    this.add.text(W/2, H*0.30, isHard ? t("QUESTS_HARD_HINT") : "", {
       fontFamily:"monospace", fontSize:20, color:"#ffe9a6"
     }).setOrigin(0.5).setDepth(depth+1);
 
@@ -1098,15 +1203,15 @@ class MenuScene extends Phaser.Scene {
       this.add.text(W*0.93, y, `${Math.min(q.progress, q.target)}/${q.target}`, { fontFamily:"monospace", fontSize:24, color:"#fff" })
         .setOrigin(1,0.5).setDepth(depth+1);
       const rewardTxt = isHard ? `${q.reward} (x2)` : q.reward;
-      this.add.text(W*0.14, y+28, `Récompense: ${rewardTxt}`, { fontFamily:"monospace", fontSize:18, color:"#c3ede5" })
+      this.add.text(W*0.14, y+28, `${t("QUESTS_REWARD_LABEL")} ${rewardTxt}`, { fontFamily:"monospace", fontSize:18, color:"#c3ede5" })
         .setOrigin(0,0.5).setDepth(depth+1);
     });
 
-    this.add.text(W/2, H*0.68, `Total Borgy Coins : ${totalAfter} 🪙`, {
+    this.add.text(W/2, H*0.68, `${t("QUESTS_TOTAL_COINS")} ${totalAfter} 🪙`, {
       fontFamily:"monospace", fontSize:26, color:"#cffff1"
     }).setOrigin(0.5).setDepth(depth+1);
 
-    const close = this.add.text(W/2, H*0.78, "Fermer", { fontFamily:"monospace", fontSize:40, color:"#fff",
+    const close = this.add.text(W/2, H*0.78, t("COMMON_CLOSE"), { fontFamily:"monospace", fontSize:40, color:"#fff",
       backgroundColor:"#0db187", padding:{left:26,right:26,top:10,bottom:10} })
       .setOrigin(0.5).setDepth(depth+1).setInteractive({useHandCursor:true});
     const destroyAll = () => [panel, title, close, ...this.children.list.filter(o => o.depth>=depth && !o.input)]
@@ -1140,7 +1245,7 @@ class MenuScene extends Phaser.Scene {
       .setDepth(depth+1);
     elements.push(panel);
 
-    const title = this.add.text(W/2, H*0.26, "Borgy Coins Shop", {
+    const title = this.add.text(W/2, H*0.26, t("SHOP_TITLE"), {
       fontFamily: "Georgia,serif",
       fontSize: 54,
       color: "#ffffff"
@@ -1155,7 +1260,7 @@ class MenuScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth+2);
     elements.push(coinsText);
 
-    const infoText = this.add.text(W*0.5, H*0.38, "Choisis ton skin Borgy :", {
+    const infoText = this.add.text(W*0.5, H*0.38, t("SHOP_CHOOSE_SKIN"), {
       fontFamily: "monospace",
       fontSize: 22,
       color: "#9be7ff",
@@ -1170,7 +1275,7 @@ class MenuScene extends Phaser.Scene {
 
     const refreshCoinsText = () => {
       const coinsNow = loadBorgyCoins() || 0;
-      coinsText.setText(`Tu as actuellement : ${coinsNow} 🪙`);
+      coinsText.setText(`${t("SHOP_CURRENT_COINS")} ${coinsNow} 🪙`);
     };
 
     const refreshButtons = () => {
@@ -1183,13 +1288,13 @@ class MenuScene extends Phaser.Scene {
           const btn = buttonsById[skin.id];
           if (!btn) return;
           if (!skin.owned) {
-            btn.setText("Acheter");
+            btn.setText(t("SHOP_BTN_BUY"));
             btn.setBackgroundColor("#b45309");
           } else if (skinState.selectedId === skin.id) {
-            btn.setText("Sélectionné");
+            btn.setText(t("SHOP_BTN_SELECTED"));
             btn.setBackgroundColor("#15803d");
           } else {
-            btn.setText("Utiliser");
+            btn.setText(t("SHOP_BTN_USE"));
             btn.setBackgroundColor("#0db187");
           }
         });
@@ -1201,7 +1306,7 @@ class MenuScene extends Phaser.Scene {
     if (skinState && Array.isArray(skinState.skins)) {
       skinState.skins.forEach((skin, i) => {
         const y = startY + i * lineH;
-        const priceStr = skin.price === 0 ? "Gratuit" : `${skin.price} 🪙`;
+        const priceStr = skin.price === 0 ? t("SHOP_PRICE_FREE") : `${skin.price} 🪙`;
 
         const nameTxt = this.add.text(W*0.16, y, skin.name, {
           fontFamily: "monospace",
@@ -1238,7 +1343,7 @@ class MenuScene extends Phaser.Scene {
             if (!s.owned) {
               const res = tryBuySkin(skin.id);
               if (!res.ok && res.reason === "not_enough_coins") {
-                const warn = this.add.text(W*0.5, H*0.64, "Pas assez de Borgy Coins !", {
+                const warn = this.add.text(W*0.5, H*0.64, t("SHOP_NOT_ENOUGH_COINS"), {
                   fontFamily: "monospace",
                   fontSize: 22,
                   color: "#ffb4b4",
@@ -1268,11 +1373,11 @@ class MenuScene extends Phaser.Scene {
 
         let noteLabel = "";
         if (skin.id === "borgy_gold") {
-          noteLabel = "Borgy Coins x5";
+          noteLabel = t("SHOP_PERK_GOLD");
         } else if (skin.id === "borgy_emeraude") {
-          noteLabel = "Bonus Swissbord x3";
+          noteLabel = t("SHOP_PERK_EMERALD");
         } else if (skin.id === "borgy_diamant") {
-          noteLabel = "1 vie supplémentaire";
+          noteLabel = t("SHOP_PERK_DIAMOND");
         }
 
         if (noteLabel) {
@@ -1293,7 +1398,7 @@ class MenuScene extends Phaser.Scene {
 
     refreshButtons();
 
-    const close = this.add.text(W/2, H*0.82, "Fermer", {
+    const close = this.add.text(W/2, H*0.82, t("COMMON_CLOSE"), {
       fontFamily: "monospace",
       fontSize: 40,
       color: "#fff",
@@ -1638,7 +1743,7 @@ class GameScene extends Phaser.Scene {
     this.inputZone.on("pointerdown", () => this.onTap());
     this.input.keyboard.on("keydown-SPACE", () => this.onTap());
 
-    this.scoreText = this.add.text(24, 18, "Score: 0",
+    this.scoreText = this.add.text(24, 18, `${t("HUD_SCORE")} 0`,
       { fontFamily:"monospace", fontSize:46, color:"#fff", stroke:"#0a3a38", strokeThickness:8 }).setDepth(20);
 
     this.borgyCoinText = this.add.text(W-24, 18, `🪙 ${this.borgyCoinCount}`, {
@@ -2245,7 +2350,7 @@ class GameScene extends Phaser.Scene {
     const value = Math.round(n * multBase * hardBonus);
 
     this.score += value;
-    this.scoreText.setText("Score: " + this.score);
+    this.scoreText.setText(`${t("HUD_SCORE")} ${this.score}`);
     updateQuestsFromEvent("score", this.score);
     if (!this.game._muted && this.sfxScore) this.sfxScore.play();
 
@@ -2367,7 +2472,7 @@ class GameScene extends Phaser.Scene {
         const txt = this.add.text(
           this.player.x,
           this.player.y - 60,
-          "Réanimation !",
+          t("REVIVE_TEXT"),
           { fontFamily:"monospace", fontSize:32, color:"#ffffff", stroke:"#000000", strokeThickness:6 }
         ).setOrigin(0.5).setDepth(200);
 
@@ -2421,16 +2526,16 @@ class GameScene extends Phaser.Scene {
 
     const W = this.scale.width, H = this.scale.height;
     this.add.rectangle(W/2, H/2, W*0.8, 380, 0x12323a, 0.92).setDepth(100);
-    this.add.text(W/2, H/2 - 110, "Game Over", { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
+    this.add.text(W/2, H/2 - 110, t("GAME_OVER_TITLE"), { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
       .setOrigin(0.5).setDepth(101);
-    this.add.text(W/2, H/2 - 28, `Score : ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
+    this.add.text(W/2, H/2 - 28, `${t("GAME_OVER_SCORE")} ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
 
     // Bouton PARTAGER MON SCORE sous le score
     const shareBtn = this.add.text(
       W/2,
       H/2 + 32,
-      "Partager mon score",
+      t("GAME_OVER_SHARE"),
       {
         fontFamily: "monospace",
         fontSize: 32,
@@ -2444,7 +2549,7 @@ class GameScene extends Phaser.Scene {
     shareBtn.on("pointerout",  () => shareBtn.setBackgroundColor("#0b7285"));
     shareBtn.on("pointerdown", () => this.handleShareScore());
 
-    const replay = this.add.text(W/2, H/2 + 100, "Rejouer",
+    const replay = this.add.text(W/2, H/2 + 100, t("GAME_OVER_REPLAY"),
       { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     // si le joueur clique, on annule le leaderboard
@@ -2453,7 +2558,7 @@ class GameScene extends Phaser.Scene {
       this.scene.restart();
     });
 
-    const menuBtn = this.add.text(W/2, H/2 + 176, "Menu principal",
+    const menuBtn = this.add.text(W/2, H/2 + 176, t("GAME_OVER_MENU"),
       { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     menuBtn.on("pointerdown", () => {
@@ -2473,18 +2578,24 @@ class GameScene extends Phaser.Scene {
     });
   }
 
-  // Popup de partage (ou Web Share API si dispo)
+  // Popup de partage (message FR + EN + lien bot)
   handleShareScore(){
-    const score = this.score | 0;
+    const score  = this.score | 0;
     const isHard = this.game._hardMode === true;
-    const modeLabel = isHard ? "en mode Hard" : "en mode Normal";
-    const baseUrl = "https://flappyborgyv15.onrender.com";
-    const text = `Je viens de faire ${score} points ${modeLabel} sur FlappyBorgy ! LFG BORGY 🔥`;
-    const fullText = `${text} ${baseUrl}`;
 
-    // Web Share API (mobile, etc.)
+    const frModeLabel = isHard ? "en mode Hard"   : "en mode Normal";
+    const enModeLabel = isHard ? "in Hard mode"   : "in Normal mode";
+
+    const botUrl = "https://t.me/Borgyboss_bot";
+
+    const textFr = `Je viens de faire ${score} points ${frModeLabel} sur FlappyBorgy ! LFG BORGY 🔥`;
+    const textEn = `I just scored ${score} points ${enModeLabel} on FlappyBorgy! LFG BORGY 🔥`;
+
+    const fullText = `${textFr}\n${textEn}\n\n${botUrl}`;
+
+    // Web Share API
     if (navigator.share){
-      navigator.share({ text: fullText, url: baseUrl }).catch(()=>{});
+      navigator.share({ text: fullText, url: botUrl }).catch(()=>{});
       return;
     }
 
@@ -2502,7 +2613,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(depth+1);
     elements.push(panel);
 
-    const title = this.add.text(W/2, H*0.32, "Partager ton score", {
+    const title = this.add.text(W/2, H*0.32, t("SHARE_TITLE"), {
       fontFamily: "Georgia,serif",
       fontSize: 40,
       color: "#ffffff"
@@ -2517,7 +2628,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0,0).setDepth(depth+2);
     elements.push(msgText);
 
-    const infoText = this.add.text(W/2, H*0.53, "Choisis une plateforme ou copie le texte :", {
+    const infoText = this.add.text(W/2, H*0.53, t("SHARE_HINT"), {
       fontFamily: "monospace",
       fontSize: 20,
       color: "#cffff1",
@@ -2538,6 +2649,11 @@ class GameScene extends Phaser.Scene {
       }
     };
 
+    const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
+    const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(textFr + "\n" + textEn)}`;
+    const instaUrl  = "https://www.instagram.com/";
+    const tiktokUrl = "https://www.tiktok.com/";
+
     const makeBtn = (x, y, label) => {
       const btn = this.add.text(x, y, label, {
         fontFamily: "monospace",
@@ -2554,11 +2670,6 @@ class GameScene extends Phaser.Scene {
       return btn;
     };
 
-    const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
-    const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(baseUrl)}&text=${encodeURIComponent(text)}`;
-    const instaUrl  = "https://www.instagram.com/";
-    const tiktokUrl = "https://www.tiktok.com/";
-
     const btnX   = makeBtn(W*0.24, H*0.60, "X");
     btnX.on("pointerdown", () => openUrl(xUrl));
 
@@ -2572,16 +2683,16 @@ class GameScene extends Phaser.Scene {
     btnTk.on("pointerdown", () => openUrl(tiktokUrl));
 
     if (navigator.clipboard && navigator.clipboard.writeText){
-      const copyBtn = makeBtn(W/2, H*0.69, "Copier le texte");
+      const copyBtn = makeBtn(W/2, H*0.69, t("SHARE_COPY"));
       copyBtn.on("pointerdown", () => {
         navigator.clipboard.writeText(fullText).then(() => {
-          copyBtn.setText("Copié !");
-          this.time.delayedCall(1200, () => copyBtn.setText("Copier le texte"));
+          copyBtn.setText(t("SHARE_COPIED"));
+          this.time.delayedCall(1200, () => copyBtn.setText(t("SHARE_COPY")));
         }).catch(()=>{});
       });
     }
 
-    const close = this.add.text(W/2, H*0.80, "Fermer", {
+    const close = this.add.text(W/2, H*0.80, t("SHARE_CLOSE"), {
       fontFamily: "monospace",
       fontSize: 28,
       color: "#ffffff",
@@ -2614,7 +2725,7 @@ class GameScene extends Phaser.Scene {
       .setDepth(depth);
     elements.push(panel);
 
-    const titleText = isHard ? "Leaderboard (Hard)" : "Leaderboard";
+    const titleText = isHard ? t("LEADERBOARD_TITLE_HARD") : t("LEADERBOARD_TITLE");
     const title = this.add
       .text(W / 2, H * 0.18, titleText, {
         fontFamily: "Georgia,serif",
@@ -2626,7 +2737,7 @@ class GameScene extends Phaser.Scene {
     elements.push(title);
 
     const pageLabel = this.add
-      .text(W / 2, H * 0.24, "Page 1", {
+      .text(W / 2, H * 0.24, `${t("LEADERBOARD_PAGE_LABEL")} 1`, {
         fontFamily: "monospace",
         fontSize: 24,
         color: "#cffff1",
@@ -2637,7 +2748,7 @@ class GameScene extends Phaser.Scene {
 
     const scopeY = H * 0.28;
 
-    const btnGlobal = this.add.text(W * 0.30, scopeY, "Global", {
+    const btnGlobal = this.add.text(W * 0.30, scopeY, t("LEADERBOARD_SCOPE_GLOBAL"), {
       fontFamily: "monospace",
       fontSize: 24,
       color: "#fff",
@@ -2646,7 +2757,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
     elements.push(btnGlobal);
 
-    const btnWeek = this.add.text(W * 0.50, scopeY, "Semaine", {
+    const btnWeek = this.add.text(W * 0.50, scopeY, t("LEADERBOARD_SCOPE_WEEK"), {
       fontFamily: "monospace",
       fontSize: 24,
       color: "#fff",
@@ -2655,7 +2766,7 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
     elements.push(btnWeek);
 
-    const btnMonth = this.add.text(W * 0.70, scopeY, "Mois", {
+    const btnMonth = this.add.text(W * 0.70, scopeY, t("LEADERBOARD_SCOPE_MONTH"), {
       fontFamily: "monospace",
       fontSize: 24,
       color: "#fff",
@@ -2679,7 +2790,7 @@ class GameScene extends Phaser.Scene {
     const lineH = 56;
 
     const close = this.add
-      .text(W / 2, H * 0.82, "Fermer", {
+      .text(W / 2, H * 0.82, t("COMMON_CLOSE"), {
         fontFamily: "monospace",
         fontSize: 44,
         color: "#fff",
@@ -2755,7 +2866,7 @@ class GameScene extends Phaser.Scene {
       rows.length = 0;
 
       currentPage = page;
-      pageLabel.setText(`Page ${page}`);
+      pageLabel.setText(`${t("LEADERBOARD_PAGE_LABEL")} ${page}`);
 
       list.slice(0, 10).forEach((row, i) => {
         const y = startY + i * lineH;
