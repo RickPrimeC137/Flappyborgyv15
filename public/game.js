@@ -22,7 +22,7 @@ const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les skins
-const PIPE_HITBOX_W = 0.8; // 1 = largeur complète du sprite, 0.8 = plus serré
+const PIPE_HITBOX_W = 0.6; // 1 = largeur complète du sprite, 0.8 = plus serré
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
@@ -1408,6 +1408,9 @@ class GameScene extends Phaser.Scene {
     this.scoreGapStep = 0;
 
     this.isXmasMode = false;
+
+    // flag pour annuler l'affichage du leaderboard si le joueur relance/quitte
+    this._cancelLeaderboard = false;
   }
 
   create(){
@@ -1709,23 +1712,27 @@ class GameScene extends Phaser.Scene {
   }
 
   onTap(){
-    if (this.isOver){ this.scene.restart(); return; }
-    if (!this.started){
-      this.started = true;
-      this.player.body.setAllowGravity(true);
-      this.player.setGravityY(PROFILE.gravity);
-
-      this.spawnPair(false);
-      this.lastSpawnMs = this.time.now;
-      this.nextSpawnAt = this.time.now + this._getSpawnDelay();
-
-      this._maybeSwitchToHardMusic();
-
-      updateQuestsFromEvent("game", 1);
-      try { TG?.expand?.(); } catch {}
-    }
-    if (this.player.active) this.player.setVelocityY(PROFILE.jump);
+  if (this.isOver){
+    this._cancelLeaderboard = true;   // ligne ajoutée
+    this.scene.restart();
+    return;
   }
+  if (!this.started){
+    this.started = true;
+    this.player.body.setAllowGravity(true);
+    this.player.setGravityY(PROFILE.gravity);
+
+    this.spawnPair(false);
+    this.lastSpawnMs  = this.time.now;
+    this.nextSpawnAt  = this.time.now + this._getSpawnDelay();
+
+    this._maybeSwitchToHardMusic();
+
+    updateQuestsFromEvent("game", 1);
+    try { TG?.expand?.(); } catch {}
+  }
+  if (this.player.active) this.player.setVelocityY(PROFILE.jump);
+}
 
   update(){
     if (this.isOver) return;
@@ -2271,7 +2278,11 @@ class GameScene extends Phaser.Scene {
 
   _finalGameOver(){
     if (this.isOver) return;
-    this.isOver = true; this.started = false;
+    this.isOver = true; 
+    this.started = false;
+
+    // on autorise le leaderboard au moment du game over
+    this._cancelLeaderboard = false;
 
     saveLocalBestScore(this.score);
 
@@ -2307,12 +2318,17 @@ class GameScene extends Phaser.Scene {
     const replay = this.add.text(W/2, H/2 + 50, "Rejouer",
       { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
-    replay.on("pointerdown", ()=> this.scene.restart());
+    // si le joueur clique, on annule le leaderboard
+    replay.on("pointerdown", ()=> {
+      this._cancelLeaderboard = true;
+      this.scene.restart();
+    });
 
     const menuBtn = this.add.text(W/2, H/2 + 140, "Menu principal",
       { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
       .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
     menuBtn.on("pointerdown", () => {
+      this._cancelLeaderboard = true;
       const bgm = this.game._bgm;
       if (bgm && !this.game._muted) bgm.setVolume(0.35);
       this.scene.start("menu");
@@ -2321,6 +2337,9 @@ class GameScene extends Phaser.Scene {
     const isHard = this.game._hardMode === true;
     // ⚠️ AFFICHAGE LEADERBOARD PAGINÉ APRÈS ENREGISTREMENT
     postScore(this.score, isHard).then(() => {
+      if (this._cancelLeaderboard) return;
+      if (!this.isOver) return;
+      if (!this.scene.isActive()) return;
       this.showLeaderboard(isHard);
     });
   }
