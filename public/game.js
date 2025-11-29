@@ -22,7 +22,7 @@ const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les skins
-const PIPE_HITBOX_W = 1.00; // 1 = largeur complète du sprite, 0.8 = plus serré
+const PIPE_HITBOX_W = 0.8; // 1 = largeur complète du sprite, 0.8 = plus serré
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
