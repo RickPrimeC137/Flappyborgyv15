@@ -98,6 +98,24 @@ function normMode(m) {
   return typeof m === "string" && m.toLowerCase() === "hard" ? "hard" : "normal";
 }
 
+// Jour "clé" en UTC (pour le daily challenge, commun à tout le monde)
+function todayKeyUTC() {
+  const d = new Date();
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function resolveDayParam(qDay) {
+  if (typeof qDay === "string") {
+    const trimmed = qDay.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    if (trimmed.toLowerCase() === "today") return todayKeyUTC();
+  }
+  return todayKeyUTC();
+}
+
 /* ---------- Routes ---------- */
 
 // Health & root
@@ -187,7 +205,7 @@ app.post("/api/score", async (req, res) => {
  * ?limit=10
  * ?page=1
  * ?mode=hard|normal
- * ?period=global|week|month
+ * ?period=global|week|month   (ou ?scope=all|week|month pour compat avec le front)
  */
 app.get("/api/leaderboard", async (req, res) => {
   try {
@@ -199,8 +217,17 @@ app.get("/api/leaderboard", async (req, res) => {
 
     const mode = normMode(req.query.mode);
 
+    // Compat front: le jeu envoie "scope=all|week|month"
+    const scopeRaw =
+      typeof req.query.scope === "string" ? req.query.scope : undefined;
+
     const periodRaw =
-      typeof req.query.period === "string" ? req.query.period : "global";
+      typeof scopeRaw === "string"
+        ? scopeRaw
+        : typeof req.query.period === "string"
+        ? req.query.period
+        : "global";
+
     const periodValues = ["global", "week", "month"];
     const period = periodValues.includes(periodRaw) ? periodRaw : "global";
 
@@ -249,7 +276,201 @@ app.get("/api/leaderboard", async (req, res) => {
   }
 });
 
-// GET /api/me?initData=...&mode=hard|normal
+/* ---------- DAILY CHALLENGE ---------- */
+/**
+ * Table Supabase attendue :
+ *   create table public.daily_scores (
+ *     id         bigserial primary key,
+ *     day        date      not null,
+ *     user_id    text      not null,
+ *     name       text      not null,
+ *     best       integer   not null,
+ *     updated_at timestamptz not null default now()
+ *   );
+ *   create unique index daily_scores_day_user_idx
+ *     on public.daily_scores(day, user_id);
+ *
+ * RLS : pas obligatoire ici car on utilise service_role.
+ */
+
+// POST /api/daily_score { score:number, initData:string }
+app.post("/api/daily_score", async (req, res) => {
+  try {
+    const { score, initData } = req.body || {};
+    if (typeof score !== "number" || !Number.isFinite(score) || score < 0) {
+      return res.status(400).json({ ok: false, error: "score invalide" });
+    }
+
+    const user = verifyInitData(initData, BOT_TOKEN);
+    if (!user || !user.id) {
+      return res.status(401).json({ ok: false, error: "initData invalide" });
+    }
+
+    const uid = String(user.id);
+    const name =
+      (user.username && "@" + user.username) ||
+      sanitizeName([user.first_name, user.last_name].filter(Boolean).join(" ")) ||
+      "Player";
+    const val = Math.floor(score);
+    const dayKey = todayKeyUTC();
+
+    // 1) upsert du meilleur score du jour pour ce user
+    const { data: row, error: selErr } = await supabase
+      .from("daily_scores")
+      .select("best")
+      .eq("user_id", uid)
+      .eq("day", dayKey)
+      .maybeSingle();
+
+    if (selErr) {
+      console.error("[DB][daily] select error", selErr);
+      return res.status(500).json({ ok: false, error: "db select" });
+    }
+
+    if (!row) {
+      const { error: insErr } = await supabase.from("daily_scores").insert({
+        user_id: uid,
+        name,
+        day: dayKey,
+        best: val,
+        // updated_at par défaut
+      });
+      if (insErr) {
+        console.error("[DB][daily] insert error", insErr);
+        return res.status(500).json({ ok: false, error: "db insert" });
+      }
+      console.log(`[DAILY][NEW] uid=${uid} day=${dayKey} best=${val}`);
+    } else if (val > row.best) {
+      const { error: updErr } = await supabase
+        .from("daily_scores")
+        .update({ best: val, name, updated_at: new Date().toISOString() })
+        .eq("user_id", uid)
+        .eq("day", dayKey);
+      if (updErr) {
+        console.error("[DB][daily] update error", updErr);
+        return res.status(500).json({ ok: false, error: "db update" });
+      }
+      console.log(`[DAILY][UPD] uid=${uid} day=${dayKey} best=${val}`);
+    } else {
+      const { error: updNameErr } = await supabase
+        .from("daily_scores")
+        .update({ name, updated_at: new Date().toISOString() })
+        .eq("user_id", uid)
+        .eq("day", dayKey);
+      if (updNameErr) console.warn("[DB][daily] update name warn", updNameErr);
+      console.log(`[DAILY][KEEP] uid=${uid} day=${dayKey} best stays`);
+    }
+
+    // 2) On regarde qui est #1 du jour pour signaler au front
+    const { data: topList, error: topErr } = await supabase
+      .from("daily_scores")
+      .select("user_id,name,best")
+      .eq("day", dayKey)
+      .order("best", { ascending: false })
+      .order("updated_at", { ascending: true })
+      .limit(1);
+
+    if (topErr) {
+      console.error("[DB][daily] top error", topErr);
+      // on ne bloque pas, on renvoie juste ok sans info bonus
+      return res.json({ ok: true, day: dayKey });
+    }
+
+    let isTop = false;
+    let topScore = null;
+    let topUserName = null;
+    if (Array.isArray(topList) && topList.length > 0) {
+      const top = topList[0];
+      isTop = top.user_id === uid;
+      topScore = top.best;
+      topUserName = top.name;
+    }
+
+    return res.json({
+      ok: true,
+      day: dayKey,
+      isTop,
+      topScore,
+      topUserName,
+    });
+  } catch (e) {
+    console.error("POST /api/daily_score error", e);
+    return res.status(500).json({ ok: false, error: "server" });
+  }
+});
+
+/**
+ * GET /api/daily_leaderboard
+ * ?limit=10
+ * ?page=1
+ * ?day=YYYY-MM-DD | today (optionnel, défaut = today UTC)
+ */
+app.get("/api/daily_leaderboard", async (req, res) => {
+  try {
+    const limitRaw = Number(req.query.limit) || 10;
+    const pageRaw = Number(req.query.page) || 1;
+
+    const limit = Math.min(100, Math.max(1, limitRaw));
+    const page = Math.max(1, pageRaw);
+
+    const dayKey = resolveDayParam(req.query.day);
+
+    const from = (page - 1) * limit;
+    const to = from + limit - 1;
+
+    const { data, error } = await supabase
+      .from("daily_scores")
+      .select("user_id,name,best,day,updated_at", { head: false })
+      .eq("day", dayKey)
+      .order("best", { ascending: false })
+      .order("updated_at", { ascending: true })
+      .range(from, to);
+
+    if (error) {
+      console.error("[DB][daily] leaderboard error", error);
+      return res.status(500).json({ ok: false, error: "db" });
+    }
+
+    res.json({ ok: true, day: dayKey, list: data || [] });
+  } catch (e) {
+    console.error("GET /api/daily_leaderboard error", e);
+    res.status(500).json({ ok: false, error: "server" });
+  }
+});
+
+// GET /api/daily_me?initData=...&day=YYYY-MM-DD|today
+app.get("/api/daily_me", async (req, res) => {
+  try {
+    const user = verifyInitData(req.query.initData, BOT_TOKEN);
+    if (!user || !user.id) {
+      return res.status(401).json({ ok: false, error: "initData invalide" });
+    }
+    const uid = String(user.id);
+    const dayKey = resolveDayParam(req.query.day);
+
+    const { data, error } = await supabase
+      .from("daily_scores")
+      .select("user_id,name,best,day,updated_at")
+      .eq("user_id", uid)
+      .eq("day", dayKey)
+      .maybeSingle();
+
+    if (error) {
+      console.error("[DB][daily] me error", error);
+      return res.status(500).json({ ok: false, error: "db" });
+    }
+
+    res.json({ ok: true, day: dayKey, me: data || null });
+  } catch (e) {
+    console.error("GET /api/daily_me error", e);
+    res.status(500).json({ ok: false, error: "server" });
+  }
+});
+
+/**
+ * GET /api/me?initData=...&mode=hard|normal
+ * (leaderboard classique, pas daily)
+ */
 app.get("/api/me", async (req, res) => {
   try {
     const user = verifyInitData(req.query.initData, BOT_TOKEN);
