@@ -1,4 +1,4 @@
-verifie que tout soit bien en place    // FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
+// FlappyBorgy — montagnes 1024x1536 (pipes light only + Telegram leaderboard)
 // Domaine du jeu : https://flappyborgyv15.onrender.com
 // API : https://rickprimec137-flappyborgyv15.onrender.com
 // ⚠️ Mets ta vidéo dans /assets/intro.mp4
