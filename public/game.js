@@ -66,6 +66,9 @@ let welcomeShownThisSession = false; // flag session
 /* ===== Mode Noël ===== */
 const XMAS_MODE_KEY = "flappy_borgy_xmas_mode_v1";
 
+/* ===== Mode Tuyaux dorés (Normal only) ===== */
+const GOLD_PIPES_KEY = "flappy_borgy_goldpipes_v1";
+
 /* ================== Langues EN / FR ================== */
 const LANG_STORAGE_KEY = "flappy_borgy_lang_v1";
 const SUPPORTED_LANGS  = ["fr", "en"];
@@ -720,6 +723,10 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
+    // Tuyaux dorés (mode normal + bouton ⭐)
+    this.load.image("pipe_top_gold",    "pipe_gold_top.png");
+    this.load.image("pipe_bottom_gold", "pipe_gold_bottom.png");
+
     // Décorations de tuyaux pour le mode Noël
     this.load.image("pipe_bottom_snow", "pipe_bottom_snow.png");
     this.load.image("pipe_top_ice",     "pipe_top_ice.png");
@@ -786,6 +793,15 @@ class MenuScene extends Phaser.Scene {
         this.game._xmasMode = JSON.parse(localStorage.getItem(XMAS_MODE_KEY) || "false");
       } catch {
         this.game._xmasMode = false;
+      }
+    }
+
+    // --- init flag Tuyaux dorés depuis localStorage ---
+    if (typeof this.game._goldPipes === "undefined") {
+      try {
+        this.game._goldPipes = JSON.parse(localStorage.getItem(GOLD_PIPES_KEY) || "false");
+      } catch {
+        this.game._goldPipes = false;
       }
     }
 
@@ -857,6 +873,52 @@ class MenuScene extends Phaser.Scene {
       refreshXmasBtn();
       this.tweens.add({
         targets: [xmasBtn, xmasIcon],
+        scaleX: 1.1,
+        scaleY: 1.1,
+        yoyo: true,
+        duration: 90
+      });
+    });
+
+    // --- bouton rond Tuyaux dorés sous le bouton Noël (mode normal uniquement en game) ---
+    const goldBtnRadius = 42;
+    const goldBtnY = xmasBtn.y + xmasBtnRadius + goldBtnRadius + 14;
+
+    const goldBtn = this.add.circle(
+      xmasBtn.x,
+      goldBtnY,
+      goldBtnRadius,
+      this.game._goldPipes ? 0xf59e0b : 0x0f766e,
+      0.96
+    )
+      .setDepth(60)
+      .setInteractive({ useHandCursor: true });
+
+    const goldIcon = this.add.text(
+      goldBtn.x,
+      goldBtn.y,
+      "⭐",
+      {
+        fontFamily: "monospace",
+        fontSize: 32,
+        color: "#ffffff"
+      }
+    )
+      .setOrigin(0.5)
+      .setDepth(61);
+
+    const refreshGoldBtn = () => {
+      goldBtn.setFillStyle(this.game._goldPipes ? 0xf59e0b : 0x0f766e, 0.96);
+      goldIcon.setAlpha(this.game._goldPipes ? 1 : 0.8);
+    };
+    refreshGoldBtn();
+
+    goldBtn.on("pointerdown", () => {
+      this.game._goldPipes = !this.game._goldPipes;
+      localStorage.setItem(GOLD_PIPES_KEY, JSON.stringify(this.game._goldPipes));
+      refreshGoldBtn();
+      this.tweens.add({
+        targets: [goldBtn, goldIcon],
         scaleX: 1.1,
         scaleY: 1.1,
         yoyo: true,
@@ -1629,6 +1691,7 @@ class GameScene extends Phaser.Scene {
     this.scoreGapStep = 0;
 
     this.isXmasMode = false;
+    this.isGoldPipes = false;
 
     // flag pour annuler l'affichage du leaderboard si le joueur relance/quitte
     this._cancelLeaderboard = false;
@@ -1639,10 +1702,13 @@ class GameScene extends Phaser.Scene {
 
     const isHard  = this.game._hardMode === true;
     const isXmas  = this.game._xmasMode === true;
+    // Les tuyaux dorés ne sont actifs qu'en mode NORMAL (pas Hard, pas Noël)
+    const isGold  = this.game._goldPipes === true && !isHard && !isXmas;
 
-    this.isXmasMode = isXmas;
+    this.isXmasMode  = isXmas;
+    this.isGoldPipes = isGold;
 
-    // priorité : Noël > Hard > Normal
+    // priorité : Noël > Hard > Normal+Gold (pour le fond uniquement)
     let keyWanted;
     if (isXmas)      keyWanted = BG_XMAS_KEY;
     else if (isHard) keyWanted = BG_HARD_KEY;
@@ -1705,12 +1771,12 @@ class GameScene extends Phaser.Scene {
       this.topCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, topCloudHeight, true);
       this.topCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
 
-        // Hitbox du nuage du bas : on la décale légèrement vers le bas
-  this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
-  this.bottomCloud.body.setOffset(
-    -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
-    BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
-  );
+      // Hitbox du nuage du bas : on la décale légèrement vers le bas
+      this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
+      this.bottomCloud.body.setOffset(
+        -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
+        BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
+      );
 
       if (isHard) {
         this._stormBaseTopTint    = 0x4b5563;
@@ -2079,8 +2145,21 @@ class GameScene extends Phaser.Scene {
     const x  = W + SPAWN_X_OFFSET;
     const vx = this.started ? this.curSpeed : 0;
 
-    const topKey    = this.isXmasMode ? "pipe_top_ice"    : "pipe_top";
-    const bottomKey = this.isXmasMode ? "pipe_bottom_snow": "pipe_bottom";
+    // Choix des sprites de tuyaux
+    let topKey, bottomKey;
+    if (this.isXmasMode) {
+      // Noël prioritaire
+      topKey    = "pipe_top_ice";
+      bottomKey = "pipe_bottom_snow";
+    } else if (this.isGoldPipes) {
+      // Tuyaux dorés (uniquement en mode normal)
+      topKey    = "pipe_top_gold";
+      bottomKey = "pipe_bottom_gold";
+    } else {
+      // Tuyaux normaux
+      topKey    = "pipe_top";
+      bottomKey = "pipe_bottom";
+    }
 
     const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0);
