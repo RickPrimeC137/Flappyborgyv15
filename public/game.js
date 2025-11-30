@@ -106,6 +106,12 @@ const I18N = {
     QUESTS_REWARD_LABEL: "Récompense :",
     QUESTS_TOTAL_COINS: "Total Borgy Coins :",
 
+    // ⚡ Daily challenge
+    DAILY_TITLE: "Défi du jour",
+    DAILY_BEST: "Meilleur score aujourd'hui :",
+    DAILY_REWARD: "Récompense : 500 Borgy Coins (1x/jour)",
+    DAILY_DONE: "Récompense déjà obtenue aujourd'hui ✅",
+
     // Shop
     SHOP_TITLE: "Borgy Coins Shop",
     SHOP_CURRENT_COINS: "Tu as actuellement :",
@@ -176,11 +182,17 @@ const I18N = {
     HUD_COINS: "Borgy Coins:",
     FOOTER_TIP: "Tap/Space to jump — avoid the pipes",
 
-    // Quests
+    // Quêtes
     QUESTS_TITLE: "Daily quests",
     QUESTS_HARD_HINT: "(Rewards x2 in Hard)",
     QUESTS_REWARD_LABEL: "Reward:",
     QUESTS_TOTAL_COINS: "Total Borgy Coins:",
+
+    // ⚡ Daily challenge
+    DAILY_TITLE: "Daily challenge",
+    DAILY_BEST: "Best score today:",
+    DAILY_REWARD: "Reward: 500 Borgy Coins (once per day)",
+    DAILY_DONE: "Reward already claimed today ✅",
 
     // Shop
     SHOP_TITLE: "Borgy Coins Shop",
@@ -492,6 +504,58 @@ function updateQuestsFromEvent(evt, value){
   }
   if (changed) saveQuests(data);
   return changed;
+}
+
+/* ================== DAILY CHALLENGE (500 coins pour le meilleur score du jour) ================== */
+const DAILY_CHALLENGE_KEY = "flappy_borgy_daily_challenge_v1";
+
+function saveDailyChallenge(data){
+  try {
+    localStorage.setItem(DAILY_CHALLENGE_KEY, JSON.stringify(data));
+  } catch (e) {}
+}
+
+function loadDailyChallenge(){
+  const day = todayKey();
+  try {
+    const raw = localStorage.getItem(DAILY_CHALLENGE_KEY);
+    if (raw){
+      const data = JSON.parse(raw);
+      if (data && data.dayKey === day){
+        if (typeof data.bestScore !== "number" || !Number.isFinite(data.bestScore)){
+          data.bestScore = 0;
+        }
+        data.rewardGiven = !!data.rewardGiven;
+        return data;
+      }
+    }
+  } catch (e) {}
+  const fresh = { dayKey: day, bestScore: 0, rewardGiven: false };
+  saveDailyChallenge(fresh);
+  return fresh;
+}
+
+// Appelé en fin de partie : met à jour le best du jour et donne 500 coins une seule fois par jour
+function updateDailyChallengeOnGameOver(score){
+  const safeScore = Math.max(0, score | 0);
+  let data = loadDailyChallenge();
+  let gotReward = false;
+
+  if (safeScore > (data.bestScore || 0)){
+    data.bestScore = safeScore;
+
+    if (!data.rewardGiven && safeScore > 0){
+      data.rewardGiven = true;
+      let coins = loadBorgyCoins();
+      coins += 500; // 🎁 récompense fixe
+      saveBorgyCoins(coins);
+      saveDailyChallenge(data);
+      return { gotReward: true, coinsAfter: coins, bestScore: data.bestScore };
+    }
+  }
+
+  saveDailyChallenge(data);
+  return { gotReward: false, coinsAfter: loadBorgyCoins(), bestScore: data.bestScore };
 }
 
 /* ================== SKINS ================== */
@@ -1209,8 +1273,21 @@ class MenuScene extends Phaser.Scene {
         .setOrigin(0,0.5).setDepth(depth+1);
     });
 
-    this.add.text(W/2, H*0.68, `${t("QUESTS_TOTAL_COINS")} ${totalAfter} 🪙`, {
+    // total coins un peu plus haut pour laisser la place au défi du jour
+    this.add.text(W/2, H*0.66, `${t("QUESTS_TOTAL_COINS")} ${totalAfter} 🪙`, {
       fontFamily:"monospace", fontSize:26, color:"#cffff1"
+    }).setOrigin(0.5).setDepth(depth+1);
+
+    // 🔥 Daily challenge : affichage dans le popup Quêtes
+    const daily = loadDailyChallenge();
+    const bestToday = daily.bestScore || 0;
+    this.add.text(W/2, H*0.72, `${t("DAILY_BEST")} ${bestToday}`, {
+      fontFamily:"monospace", fontSize:22, color:"#e5f2ff"
+    }).setOrigin(0.5).setDepth(depth+1);
+
+    const rewardStr = daily.rewardGiven ? t("DAILY_DONE") : t("DAILY_REWARD");
+    this.add.text(W/2, H*0.76, rewardStr, {
+      fontFamily:"monospace", fontSize:18, color:"#d1fae5"
     }).setOrigin(0.5).setDepth(depth+1);
 
     const close = this.add.text(W/2, H*0.78, t("COMMON_CLOSE"), { fontFamily:"monospace", fontSize:40, color:"#fff",
@@ -1705,12 +1782,12 @@ class GameScene extends Phaser.Scene {
       this.topCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, topCloudHeight, true);
       this.topCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
 
-        // Hitbox du nuage du bas : on la décale légèrement vers le bas
-  this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
-  this.bottomCloud.body.setOffset(
-    -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
-    BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
-  );
+      // Hitbox du nuage du bas : on la décale légèrement vers le bas
+      this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
+      this.bottomCloud.body.setOffset(
+        -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
+        BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
+      );
 
       if (isHard) {
         this._stormBaseTopTint    = 0x4b5563;
@@ -2245,7 +2322,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ====== gestion du contact Borgy / pièce ======
+  // ====== gestion du contact Borgy / pièce ======>
   handleBorgyCoinOverlap(player, coin){
     if (!coin || !coin.active) return;
     const cx = coin.x;
@@ -2254,7 +2331,7 @@ class GameScene extends Phaser.Scene {
     this.onCollectBorgyCoin(cx, cy);
   }
 
-  // ====== Spawn d’une pièce avec hitbox identique au bonus SwissBorg ======
+  // ====== Spawn d’une pièce avec hitbox identique au bonus SwissBorg ======>
   spawnBorgyCoin(x, y, vx){
     const coin = this.physics.add.image(x, y, "borgy_coin")
       .setDepth(8)
@@ -2508,6 +2585,19 @@ class GameScene extends Phaser.Scene {
 
     saveLocalBestScore(this.score);
 
+    // ⚡ Daily challenge : mise à jour + éventuelle récompense 500 coins
+    const dailyRes = updateDailyChallengeOnGameOver(this.score);
+    const gotDailyReward = dailyRes && dailyRes.gotReward === true;
+    if (gotDailyReward) {
+      this.borgyCoinCount = dailyRes.coinsAfter;
+      if (this.borgyCoinText){
+        this.borgyCoinText.setText(`🪙 ${this.borgyCoinCount}`);
+      }
+      if (!this.game._muted && this.sfxCoin){
+        this.sfxCoin.play();
+      }
+    }
+
     try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
     try { this.input.keyboard.removeAllListeners(); } catch {}
 
@@ -2536,6 +2626,23 @@ class GameScene extends Phaser.Scene {
       .setOrigin(0.5).setDepth(101);
     this.add.text(W/2, H/2 - 28, `${t("GAME_OVER_SCORE")} ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
       .setOrigin(0.5).setDepth(101);
+
+    // Si Daily reward gagné, petit tag sous le score
+    if (gotDailyReward) {
+      const dailyTxt = this.add.text(
+        W/2,
+        H/2 + 4,
+        "+500 Borgy Coins — " + t("DAILY_TITLE"),
+        { fontFamily:"monospace", fontSize:24, color:"#ffeaa7", stroke:"#000000", strokeThickness:4 }
+      ).setOrigin(0.5).setDepth(102);
+
+      this.tweens.add({
+        targets: dailyTxt,
+        y: dailyTxt.y - 18,
+        duration: 900,
+        ease: "Cubic.out"
+      });
+    }
 
     // Bouton PARTAGER MON SCORE sous le score
     const shareBtn = this.add.text(
@@ -2585,143 +2692,143 @@ class GameScene extends Phaser.Scene {
   }
 
   // Popup de partage (nouveau texte FR + EN + lien bot)
-handleShareScore(){
-  const score  = this.score | 0;
-  const isHard = this.game._hardMode === true;
+  handleShareScore(){
+    const score  = this.score | 0;
+    const isHard = this.game._hardMode === true;
 
-  const modeFr = isHard ? "Hard" : "Normal";
-  const modeEn = isHard ? "Hard" : "Normal";
+    const modeFr = isHard ? "Hard" : "Normal";
+    const modeEn = isHard ? "Hard" : "Normal";
 
-  const botUrl = "https://t.me/Borgyboss_bot";
+    const botUrl = "https://t.me/Borgyboss_bot";
 
-  // Texte FR
-  const textFr =
-    `Je viens de faire un nouveau high score de ${score} points ` +
-    `en mode ${modeFr} sur FlappyBorgy ! Tu peux me battre ? ` +
-    `Viens te challenger ici : ${botUrl}`;
+    // Texte FR
+    const textFr =
+      `Je viens de faire un nouveau high score de ${score} points ` +
+      `en mode ${modeFr} sur FlappyBorgy ! Tu peux me battre ? ` +
+      `Viens te challenger ici : ${botUrl}`;
 
-  // Texte EN (proche de la suggestion que tu as reçue)
-  const textEn =
-    `Just hit a new high score of ${score} points in ${modeEn} Mode on FlappyBorgy! ` +
-    `Can you beat it? Challenge yourself here: ${botUrl}`;
+    // Texte EN (proche de la suggestion que tu as reçue)
+    const textEn =
+      `Just hit a new high score of ${score} points in ${modeEn} Mode on FlappyBorgy! ` +
+      `Can you beat it? Challenge yourself here: ${botUrl}`;
 
-  const fullText = `${textFr}\n\n${textEn}`;
+    const fullText = `${textFr}\n\n${textEn}`;
 
-  // Web Share API (mobile, certains navigateurs)
-  if (navigator.share){
-    navigator.share({ text: fullText, url: botUrl }).catch(()=>{});
-    return;
-  }
-
-  const W = this.scale.width;
-  const H = this.scale.height;
-  const depth = 420;
-  const elements = [];
-
-  const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
-    .setDepth(depth)
-    .setInteractive();
-  elements.push(overlay);
-
-  const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.5, 0x05252f, 0.96)
-    .setDepth(depth+1);
-  elements.push(panel);
-
-  const title = this.add.text(W/2, H*0.32, t("SHARE_TITLE"), {
-    fontFamily: "Georgia,serif",
-    fontSize: 40,
-    color: "#ffffff"
-  }).setOrigin(0.5).setDepth(depth+2);
-  elements.push(title);
-
-  const msgText = this.add.text(W*0.15, H*0.37, fullText, {
-    fontFamily: "monospace",
-    fontSize: 20,
-    color: "#e5f2ff",
-    wordWrap: { width: W*0.7 }
-  }).setOrigin(0,0).setDepth(depth+2);
-  elements.push(msgText);
-
-  const infoText = this.add.text(W/2, H*0.53, t("SHARE_HINT"), {
-    fontFamily: "monospace",
-    fontSize: 20,
-    color: "#cffff1",
-    align: "center",
-    wordWrap: { width: W*0.7 }
-  }).setOrigin(0.5).setDepth(depth+2);
-  elements.push(infoText);
-
-  const openUrl = (u) => {
-    try {
-      if (window.Telegram?.WebApp?.openLink) {
-        window.Telegram.WebApp.openLink(u);
-      } else {
-        window.open(u, "_blank");
-      }
-    } catch(e) {
-      try { window.open(u, "_blank"); } catch {}
+    // Web Share API (mobile, certains navigateurs)
+    if (navigator.share){
+      navigator.share({ text: fullText, url: botUrl }).catch(()=>{});
+      return;
     }
-  };
 
-  const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
-  const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(fullText)}`;
-  const instaUrl  = "https://www.instagram.com/";
-  const tiktokUrl = "https://www.tiktok.com/";
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 420;
+    const elements = [];
 
-  const makeBtn = (x, y, label) => {
-    const btn = this.add.text(x, y, label, {
+    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
+      .setDepth(depth)
+      .setInteractive();
+    elements.push(overlay);
+
+    const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.5, 0x05252f, 0.96)
+      .setDepth(depth+1);
+    elements.push(panel);
+
+    const title = this.add.text(W/2, H*0.32, t("SHARE_TITLE"), {
+      fontFamily: "Georgia,serif",
+      fontSize: 40,
+      color: "#ffffff"
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(title);
+
+    const msgText = this.add.text(W*0.15, H*0.37, fullText, {
       fontFamily: "monospace",
       fontSize: 20,
+      color: "#e5f2ff",
+      wordWrap: { width: W*0.7 }
+    }).setOrigin(0,0).setDepth(depth+2);
+    elements.push(msgText);
+
+    const infoText = this.add.text(W/2, H*0.53, t("SHARE_HINT"), {
+      fontFamily: "monospace",
+      fontSize: 20,
+      color: "#cffff1",
+      align: "center",
+      wordWrap: { width: W*0.7 }
+    }).setOrigin(0.5).setDepth(depth+2);
+    elements.push(infoText);
+
+    const openUrl = (u) => {
+      try {
+        if (window.Telegram?.WebApp?.openLink) {
+          window.Telegram.WebApp.openLink(u);
+        } else {
+          window.open(u, "_blank");
+        }
+      } catch(e) {
+        try { window.open(u, "_blank"); } catch {}
+      }
+    };
+
+    const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
+    const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(fullText)}`;
+    const instaUrl  = "https://www.instagram.com/";
+    const tiktokUrl = "https://www.tiktok.com/";
+
+    const makeBtn = (x, y, label) => {
+      const btn = this.add.text(x, y, label, {
+        fontFamily: "monospace",
+        fontSize: 20,
+        color: "#ffffff",
+        backgroundColor: "#0b7285",
+        padding: { left: 14, right: 14, top: 6, bottom: 6 }
+      }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+
+      btn.on("pointerover", () => btn.setBackgroundColor("#0e8595"));
+      btn.on("pointerout",  () => btn.setBackgroundColor("#0b7285"));
+
+      elements.push(btn);
+      return btn;
+    };
+
+    const btnX   = makeBtn(W*0.24, H*0.60, "X");
+    btnX.on("pointerdown", () => openUrl(xUrl));
+
+    const btnTg  = makeBtn(W*0.42, H*0.60, "Telegram");
+    btnTg.on("pointerdown", () => openUrl(tgUrl));
+
+    const btnIg  = makeBtn(W*0.60, H*0.60, "Instagram");
+    btnIg.on("pointerdown", () => openUrl(instaUrl));
+
+    const btnTk  = makeBtn(W*0.78, H*0.60, "TikTok");
+    btnTk.on("pointerdown", () => openUrl(tiktokUrl));
+
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      const copyBtn = makeBtn(W/2, H*0.69, t("SHARE_COPY"));
+      copyBtn.on("pointerdown", () => {
+        navigator.clipboard.writeText(fullText).then(() => {
+          copyBtn.setText(t("SHARE_COPIED"));
+          this.time.delayedCall(1200, () => copyBtn.setText(t("SHARE_COPY")));
+        }).catch(()=>{});
+      });
+    }
+
+    const close = this.add.text(W/2, H*0.80, t("SHARE_CLOSE"), {
+      fontFamily: "monospace",
+      fontSize: 28,
       color: "#ffffff",
-      backgroundColor: "#0b7285",
-      padding: { left: 14, right: 14, top: 6, bottom: 6 }
+      backgroundColor: "#0db187",
+      padding: { left: 22, right: 22, top: 8, bottom: 8 }
     }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+    elements.push(close);
 
-    btn.on("pointerover", () => btn.setBackgroundColor("#0e8595"));
-    btn.on("pointerout",  () => btn.setBackgroundColor("#0b7285"));
+    const destroyAll = () => {
+      elements.forEach(el => { try { el.destroy(); } catch(e){} });
+    };
 
-    elements.push(btn);
-    return btn;
-  };
-
-  const btnX   = makeBtn(W*0.24, H*0.60, "X");
-  btnX.on("pointerdown", () => openUrl(xUrl));
-
-  const btnTg  = makeBtn(W*0.42, H*0.60, "Telegram");
-  btnTg.on("pointerdown", () => openUrl(tgUrl));
-
-  const btnIg  = makeBtn(W*0.60, H*0.60, "Instagram");
-  btnIg.on("pointerdown", () => openUrl(instaUrl));
-
-  const btnTk  = makeBtn(W*0.78, H*0.60, "TikTok");
-  btnTk.on("pointerdown", () => openUrl(tiktokUrl));
-
-  if (navigator.clipboard && navigator.clipboard.writeText){
-    const copyBtn = makeBtn(W/2, H*0.69, t("SHARE_COPY"));
-    copyBtn.on("pointerdown", () => {
-      navigator.clipboard.writeText(fullText).then(() => {
-        copyBtn.setText(t("SHARE_COPIED"));
-        this.time.delayedCall(1200, () => copyBtn.setText(t("SHARE_COPY")));
-      }).catch(()=>{});
-    });
+    overlay.on("pointerdown", destroyAll);
+    close.on("pointerdown", destroyAll);
   }
-
-  const close = this.add.text(W/2, H*0.80, t("SHARE_CLOSE"), {
-    fontFamily: "monospace",
-    fontSize: 28,
-    color: "#ffffff",
-    backgroundColor: "#0db187",
-    padding: { left: 22, right: 22, top: 8, bottom: 8 }
-  }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-  elements.push(close);
-
-  const destroyAll = () => {
-    elements.forEach(el => { try { el.destroy(); } catch(e){} });
-  };
-
-  overlay.on("pointerdown", destroyAll);
-  close.on("pointerdown", destroyAll);
-}
 
   // LEADERBOARD paginé dans la GameScene (après Game Over)
   showLeaderboard(isHard = false){
@@ -2953,7 +3060,7 @@ window.addEventListener("load", () => {
     parent: "game-root",
     backgroundColor: "#9edff1",
     scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
-    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: true } }, // debug false = plus de hitbox visibles
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } }, // debug false = plus de hitbox visibles
     scene: [PreloadScene, MenuScene, GameScene],
     pixelArt: true,
     fps: { target: 60, min: 30, forceSetTimeOut: false }
