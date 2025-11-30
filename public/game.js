@@ -66,6 +66,9 @@ let welcomeShownThisSession = false; // flag session
 /* ===== Mode Noël ===== */
 const XMAS_MODE_KEY = "flappy_borgy_xmas_mode_v1";
 
+/* ===== Mode Daily Challenge ===== */
+const DAILY_MODE_KEY = "flappy_borgy_daily_mode_v1";
+
 /* ================== Langues EN / FR ================== */
 const LANG_STORAGE_KEY = "flappy_borgy_lang_v1";
 const SUPPORTED_LANGS  = ["fr", "en"];
@@ -80,6 +83,8 @@ const I18N = {
     MENU_BUY:  "Buy Borgy",
     MENU_HARD_ON:  "Mode Hard : ON",
     MENU_HARD_OFF: "Mode Hard : OFF",
+    MENU_DAILY_ON: "Daily Challenge : ON",
+    MENU_DAILY_OFF: "Daily Challenge : OFF",
 
     WELCOME_TITLE: "Bienvenue dans le jeu Flappy-Borgy !!!",
     WELCOME_L1: "L'objectif est de passer entre les tuyaux pour faire des points\net battre le record ;",
@@ -162,6 +167,8 @@ const I18N = {
     MENU_BUY:  "Buy Borgy",
     MENU_HARD_ON:  "Hard Mode : ON",
     MENU_HARD_OFF: "Hard Mode : OFF",
+    MENU_DAILY_ON: "Daily Challenge: ON",
+    MENU_DAILY_OFF: "Daily Challenge: OFF",
 
     WELCOME_TITLE: "Welcome to Flappy-Borgy !!!",
     WELCOME_L1: "The goal is to fly between the pipes to score points\nand beat the high score;",
@@ -981,6 +988,7 @@ class MenuScene extends Phaser.Scene {
       }
     });
 
+    // --- Hard mode ---
     if (typeof this.game._hardMode === "undefined") {
       try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
       catch { this.game._hardMode = false; }
@@ -997,6 +1005,28 @@ class MenuScene extends Phaser.Scene {
       }
     );
     hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
+
+    // --- Daily Challenge (tuyaux dorés) ---
+    if (typeof this.game._dailyMode === "undefined") {
+      try {
+        this.game._dailyMode = JSON.parse(localStorage.getItem(DAILY_MODE_KEY) || "false");
+      } catch {
+        this.game._dailyMode = false;
+      }
+    }
+
+    const dailyBtn = this.makeBtn(
+      W / 2,
+      H * 0.86,
+      this.game._dailyMode ? t("MENU_DAILY_ON") : t("MENU_DAILY_OFF"),
+      () => {
+        this.game._dailyMode = !this.game._dailyMode;
+        localStorage.setItem(DAILY_MODE_KEY, JSON.stringify(this.game._dailyMode));
+        dailyBtn.setText(this.game._dailyMode ? t("MENU_DAILY_ON") : t("MENU_DAILY_OFF"));
+        dailyBtn.setBackgroundColor(this.game._dailyMode ? "#f59e0b" : "#12a38a");
+      }
+    );
+    dailyBtn.setBackgroundColor(this.game._dailyMode ? "#f59e0b" : "#12a38a");
 
     this.add.text(W/2, H*0.92, t("FOOTER_TIP"),
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
@@ -1726,9 +1756,10 @@ class GameScene extends Phaser.Scene {
 
     this.isXmasMode = isXmas;
 
-    // 🔥 Daily run = tant que la récompense 500 coins n'est pas claim aujourd'hui
+    // 🔥 Daily run : activé seulement si le bouton Daily Challenge est ON
     const dailyInfo = loadDailyChallenge();
-    this.isDailyRun = dailyInfo && !dailyInfo.rewardGiven;
+    this.dailyInfo = dailyInfo;
+    this.isDailyRun = this.game._dailyMode === true;
 
     // priorité : Noël > Hard > Normal pour le fond (les tuyaux sont gérés plus bas)
     let keyWanted;
@@ -2567,7 +2598,7 @@ class GameScene extends Phaser.Scene {
         this.player.setPosition(targetX, targetY);
         this.player.setAngle(0);
         this.player.body.enable = true;
-                this.player.setVelocity(0, 0);
+        this.player.setVelocity(0, 0);
         this.player.setAlpha(0);
         this.player.setScale(startScaleX * 0.7, startScaleY * 0.7);
 
@@ -2651,10 +2682,13 @@ class GameScene extends Phaser.Scene {
       totalCoinsAfter = applyQuestCoins(q, isHard);
     } catch(e){}
 
-    // MAJ du daily challenge (500 coins / jour max)
-    const dailyRes = updateDailyChallengeOnGameOver(finalScore);
-    if (dailyRes && typeof dailyRes.coinsAfter === "number") {
-      totalCoinsAfter = dailyRes.coinsAfter;
+    // MAJ du daily challenge (500 coins / jour max) uniquement si Daily ON
+    let dailyRes = null;
+    if (this.game._dailyMode) {
+      dailyRes = updateDailyChallengeOnGameOver(finalScore);
+      if (dailyRes && typeof dailyRes.coinsAfter === "number") {
+        totalCoinsAfter = dailyRes.coinsAfter;
+      }
     }
 
     // Petit délai avant le popup
