@@ -22,15 +22,15 @@ const PAD = 2;
 const PIPE_BODY_W    = 0.92;
 const PIPE_W_DISPLAY = 180;
 const PLAYER_SCALE   = 0.14; // légèrement réduit pour bien caser tous les skins
-const PIPE_HITBOX_W = 0.5; // 1 = largeur complète du sprite, 0.8 = plus serré
+const PIPE_HITBOX_W = 0.6; // 1 = largeur complète du sprite, 0.8 = plus serré
 
 const BG_KEY       = "bg_mountains";
 const BG_HARD_KEY  = "bg_volcano"; // assets/bg_volcano.png
 const BG_XMAS_KEY  = "bg_noel";    // assets/bg_noel.png
 
 const PLAYFIELD_TOP_PCT = 0.20;
-const PLAYFIELD_BOT_PCT = 0.90;
-const PIPE_RIM_MAX_PCT  = 0.65;
+const PLAYFIELD_BOT_PCT = 0.92;
+const PIPE_RIM_MAX_PCT  = 0.75;
 
 const PIPE_OVERSCAN = 160;
 const JOINT_OVERLAP = 1;
@@ -66,9 +66,6 @@ let welcomeShownThisSession = false; // flag session
 /* ===== Mode Noël ===== */
 const XMAS_MODE_KEY = "flappy_borgy_xmas_mode_v1";
 
-/* ===== Mode Daily Challenge ===== */
-const DAILY_MODE_KEY = "flappy_borgy_daily_mode_v1";
-
 /* ================== Langues EN / FR ================== */
 const LANG_STORAGE_KEY = "flappy_borgy_lang_v1";
 const SUPPORTED_LANGS  = ["fr", "en"];
@@ -83,8 +80,6 @@ const I18N = {
     MENU_BUY:  "Buy Borgy",
     MENU_HARD_ON:  "Mode Hard : ON",
     MENU_HARD_OFF: "Mode Hard : OFF",
-    MENU_DAILY_ON: "Daily Challenge : ON",
-    MENU_DAILY_OFF: "Daily Challenge : OFF",
 
     WELCOME_TITLE: "Bienvenue dans le jeu Flappy-Borgy !!!",
     WELCOME_L1: "L'objectif est de passer entre les tuyaux pour faire des points\net battre le record ;",
@@ -110,12 +105,6 @@ const I18N = {
     QUESTS_HARD_HINT: "(Récompenses x2 en Hard)",
     QUESTS_REWARD_LABEL: "Récompense :",
     QUESTS_TOTAL_COINS: "Total Borgy Coins :",
-
-    // ⚡ Daily challenge
-    DAILY_TITLE: "Défi du jour",
-    DAILY_BEST: "Meilleur score aujourd'hui :",
-    DAILY_REWARD: "Récompense : 500 Borgy Coins (1x/jour)",
-    DAILY_DONE: "Récompense déjà obtenue aujourd'hui ✅",
 
     // Shop
     SHOP_TITLE: "Borgy Coins Shop",
@@ -167,8 +156,6 @@ const I18N = {
     MENU_BUY:  "Buy Borgy",
     MENU_HARD_ON:  "Hard Mode : ON",
     MENU_HARD_OFF: "Hard Mode : OFF",
-    MENU_DAILY_ON: "Daily Challenge: ON",
-    MENU_DAILY_OFF: "Daily Challenge: OFF",
 
     WELCOME_TITLE: "Welcome to Flappy-Borgy !!!",
     WELCOME_L1: "The goal is to fly between the pipes to score points\nand beat the high score;",
@@ -189,17 +176,11 @@ const I18N = {
     HUD_COINS: "Borgy Coins:",
     FOOTER_TIP: "Tap/Space to jump — avoid the pipes",
 
-    // Quêtes
+    // Quests
     QUESTS_TITLE: "Daily quests",
     QUESTS_HARD_HINT: "(Rewards x2 in Hard)",
     QUESTS_REWARD_LABEL: "Reward:",
     QUESTS_TOTAL_COINS: "Total Borgy Coins:",
-
-    // ⚡ Daily challenge
-    DAILY_TITLE: "Daily challenge",
-    DAILY_BEST: "Best score today:",
-    DAILY_REWARD: "Reward: 500 Borgy Coins (once per day)",
-    DAILY_DONE: "Reward already claimed today ✅",
 
     // Shop
     SHOP_TITLE: "Borgy Coins Shop",
@@ -513,58 +494,6 @@ function updateQuestsFromEvent(evt, value){
   return changed;
 }
 
-/* ================== DAILY CHALLENGE (500 coins pour le meilleur score du jour) ================== */
-const DAILY_CHALLENGE_KEY = "flappy_borgy_daily_challenge_v1";
-
-function saveDailyChallenge(data){
-  try {
-    localStorage.setItem(DAILY_CHALLENGE_KEY, JSON.stringify(data));
-  } catch (e) {}
-}
-
-function loadDailyChallenge(){
-  const day = todayKey();
-  try {
-    const raw = localStorage.getItem(DAILY_CHALLENGE_KEY);
-    if (raw){
-      const data = JSON.parse(raw);
-      if (data && data.dayKey === day){
-        if (typeof data.bestScore !== "number" || !Number.isFinite(data.bestScore)){
-          data.bestScore = 0;
-        }
-        data.rewardGiven = !!data.rewardGiven;
-        return data;
-      }
-    }
-  } catch (e) {}
-  const fresh = { dayKey: day, bestScore: 0, rewardGiven: false };
-  saveDailyChallenge(fresh);
-  return fresh;
-}
-
-// Appelé en fin de partie : met à jour le best du jour et donne 500 coins une seule fois par jour
-function updateDailyChallengeOnGameOver(score){
-  const safeScore = Math.max(0, score | 0);
-  let data = loadDailyChallenge();
-  let gotReward = false;
-
-  if (safeScore > (data.bestScore || 0)){
-    data.bestScore = safeScore;
-
-    if (!data.rewardGiven && safeScore > 0){
-      data.rewardGiven = true;
-      let coins = loadBorgyCoins();
-      coins += 500; // 🎁 récompense fixe
-      saveBorgyCoins(coins);
-      saveDailyChallenge(data);
-      return { gotReward: true, coinsAfter: coins, bestScore: data.bestScore };
-    }
-  }
-
-  saveDailyChallenge(data);
-  return { gotReward: false, coinsAfter: loadBorgyCoins(), bestScore: data.bestScore };
-}
-
 /* ================== SKINS ================== */
 const SKINS_STORAGE_KEY = "flappy_borgy_skins_v1";
 
@@ -572,7 +501,7 @@ const SKINS_DEF = [
   { id: "borgy_default",  key: "borgy",           name: "Borgy Classique",  price: 0,    ownedByDefault: true  },
   { id: "borgy_knight",   key: "borgy_knight",    name: "Borgy Chevalier",  price: 1000, ownedByDefault: false },
   { id: "borgy_dragon",   key: "borgy_dragon",    name: "Borgy Dragon",     price: 1500, ownedByDefault: false },
-  { id: "borgy_space",    key: "borgy_space",    name: "Borgy Astronaute", price: 2000, ownedByDefault: false },
+  { id: "borgy_space",    key: "borgy_space",     name: "Borgy Astronaute", price: 2000, ownedByDefault: false },
   { id: "borgy_cyber",    key: "borgy_cyber",     name: "Borgy Cyber",      price: 2500, ownedByDefault: false },
   { id: "borgy_cowboy",   key: "borgy_cowboy",    name: "Borgy Cow-boy",    price: 3000, ownedByDefault: false },
   { id: "borgy_gold",     key: "borgy_gold",      name: "Borgy Gold",       price: 10000, ownedByDefault: false },
@@ -791,10 +720,6 @@ class PreloadScene extends Phaser.Scene {
     this.load.image("pipe_top",    "pipe_light_top.png");
     this.load.image("pipe_bottom", "pipe_light_bottom.png");
 
-    // 🔥 Tuyaux dorés pour le daily challenge
-    this.load.image("pipe_top_gold",    "pipe_light_top_gold.png");
-    this.load.image("pipe_bottom_gold", "pipe_light_bottom_gold.png");
-
     // Décorations de tuyaux pour le mode Noël
     this.load.image("pipe_bottom_snow", "pipe_bottom_snow.png");
     this.load.image("pipe_top_ice",     "pipe_top_ice.png");
@@ -988,7 +913,6 @@ class MenuScene extends Phaser.Scene {
       }
     });
 
-    // --- Hard mode ---
     if (typeof this.game._hardMode === "undefined") {
       try { this.game._hardMode = JSON.parse(localStorage.getItem("flappy_borgy_hard") || "false"); }
       catch { this.game._hardMode = false; }
@@ -1005,28 +929,6 @@ class MenuScene extends Phaser.Scene {
       }
     );
     hardBtn.setBackgroundColor(this.game._hardMode ? "#b91c1c" : "#12a38a");
-
-    // --- Daily Challenge (tuyaux dorés) ---
-    if (typeof this.game._dailyMode === "undefined") {
-      try {
-        this.game._dailyMode = JSON.parse(localStorage.getItem(DAILY_MODE_KEY) || "false");
-      } catch {
-        this.game._dailyMode = false;
-      }
-    }
-
-    const dailyBtn = this.makeBtn(
-      W / 2,
-      H * 0.86,
-      this.game._dailyMode ? t("MENU_DAILY_ON") : t("MENU_DAILY_OFF"),
-      () => {
-        this.game._dailyMode = !this.game._dailyMode;
-        localStorage.setItem(DAILY_MODE_KEY, JSON.stringify(this.game._dailyMode));
-        dailyBtn.setText(this.game._dailyMode ? t("MENU_DAILY_ON") : t("MENU_DAILY_OFF"));
-        dailyBtn.setBackgroundColor(this.game._dailyMode ? "#f59e0b" : "#12a38a");
-      }
-    );
-    dailyBtn.setBackgroundColor(this.game._dailyMode ? "#f59e0b" : "#12a38a");
 
     this.add.text(W/2, H*0.92, t("FOOTER_TIP"),
       { fontFamily:"monospace", fontSize:22, color:"#0b4a44", align:"center" }).setOrigin(0.5);
@@ -1307,21 +1209,8 @@ class MenuScene extends Phaser.Scene {
         .setOrigin(0,0.5).setDepth(depth+1);
     });
 
-    // total coins un peu plus haut pour laisser la place au défi du jour
-    this.add.text(W/2, H*0.66, `${t("QUESTS_TOTAL_COINS")} ${totalAfter} 🪙`, {
+    this.add.text(W/2, H*0.68, `${t("QUESTS_TOTAL_COINS")} ${totalAfter} 🪙`, {
       fontFamily:"monospace", fontSize:26, color:"#cffff1"
-    }).setOrigin(0.5).setDepth(depth+1);
-
-    // 🔥 Daily challenge : affichage dans le popup Quêtes
-    const daily = loadDailyChallenge();
-    const bestToday = daily.bestScore || 0;
-    this.add.text(W/2, H*0.72, `${t("DAILY_BEST")} ${bestToday}`, {
-      fontFamily:"monospace", fontSize:22, color:"#e5f2ff"
-    }).setOrigin(0.5).setDepth(depth+1);
-
-    const rewardStr = daily.rewardGiven ? t("DAILY_DONE") : t("DAILY_REWARD");
-    this.add.text(W/2, H*0.76, rewardStr, {
-      fontFamily:"monospace", fontSize:18, color:"#d1fae5"
     }).setOrigin(0.5).setDepth(depth+1);
 
     const close = this.add.text(W/2, H*0.78, t("COMMON_CLOSE"), { fontFamily:"monospace", fontSize:40, color:"#fff",
@@ -1741,9 +1630,6 @@ class GameScene extends Phaser.Scene {
 
     this.isXmasMode = false;
 
-    // 🔥 flag pour la partie "daily challenge" (tuyaux dorés)
-    this.isDailyRun = false;
-
     // flag pour annuler l'affichage du leaderboard si le joueur relance/quitte
     this._cancelLeaderboard = false;
   }
@@ -1756,12 +1642,7 @@ class GameScene extends Phaser.Scene {
 
     this.isXmasMode = isXmas;
 
-    // 🔥 Daily run : activé seulement si le bouton Daily Challenge est ON
-    const dailyInfo = loadDailyChallenge();
-    this.dailyInfo = dailyInfo;
-    this.isDailyRun = this.game._dailyMode === true;
-
-    // priorité : Noël > Hard > Normal pour le fond (les tuyaux sont gérés plus bas)
+    // priorité : Noël > Hard > Normal
     let keyWanted;
     if (isXmas)      keyWanted = BG_XMAS_KEY;
     else if (isHard) keyWanted = BG_HARD_KEY;
@@ -1824,12 +1705,12 @@ class GameScene extends Phaser.Scene {
       this.topCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, topCloudHeight, true);
       this.topCloud.body.setOffset(-W * (CLOUD_EXTRA_SCALE_X - 1) / 2, 0);
 
-      // Hitbox du nuage du bas : on la décale légèrement vers le bas
-      this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
-      this.bottomCloud.body.setOffset(
-        -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
-        BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
-      );
+        // Hitbox du nuage du bas : on la décale légèrement vers le bas
+  this.bottomCloud.body.setSize(W * CLOUD_EXTRA_SCALE_X, bottomCloudHeight, true);
+  this.bottomCloud.body.setOffset(
+    -W * (CLOUD_EXTRA_SCALE_X - 1) / 2,
+    BOTTOM_CLOUD_HITBOX_OFFSET_PX   // 🔥 descend le mur invisible
+  );
 
       if (isHard) {
         this._stormBaseTopTint    = 0x4b5563;
@@ -2198,23 +2079,8 @@ class GameScene extends Phaser.Scene {
     const x  = W + SPAWN_X_OFFSET;
     const vx = this.started ? this.curSpeed : 0;
 
-    // 🎯 Sélection des sprites de tuyaux :
-    // Daily challenge -> tuyaux dorés
-    // Sinon Noël -> tuyaux neige
-    // Sinon tuyaux classiques
-    let topKey;
-    let bottomKey;
-
-    if (this.isDailyRun) {
-      topKey    = "pipe_top_gold";
-      bottomKey = "pipe_bottom_gold";
-    } else if (this.isXmasMode) {
-      topKey    = "pipe_top_ice";
-      bottomKey = "pipe_bottom_snow";
-    } else {
-      topKey    = "pipe_top";
-      bottomKey = "pipe_bottom";
-    }
+    const topKey    = this.isXmasMode ? "pipe_top_ice"    : "pipe_top";
+    const bottomKey = this.isXmasMode ? "pipe_bottom_snow": "pipe_bottom";
 
     const topImg    = this.physics.add.image(x, 0, topKey).setDepth(6).setOrigin(0.5, 1);
     const bottomImg = this.physics.add.image(x, 0, bottomKey).setDepth(6).setOrigin(0.5, 0);
@@ -2379,7 +2245,7 @@ class GameScene extends Phaser.Scene {
     }
   }
 
-  // ====== gestion du contact Borgy / pièce ======>
+  // ====== gestion du contact Borgy / pièce ======
   handleBorgyCoinOverlap(player, coin){
     if (!coin || !coin.active) return;
     const cx = coin.x;
@@ -2388,7 +2254,7 @@ class GameScene extends Phaser.Scene {
     this.onCollectBorgyCoin(cx, cy);
   }
 
-  // ====== Spawn d’une pièce avec hitbox identique au bonus SwissBorg ======>
+  // ====== Spawn d’une pièce avec hitbox identique au bonus SwissBorg ======
   spawnBorgyCoin(x, y, vx){
     const coin = this.physics.add.image(x, y, "borgy_coin")
       .setDepth(8)
@@ -2599,49 +2465,34 @@ class GameScene extends Phaser.Scene {
         this.player.setAngle(0);
         this.player.body.enable = true;
         this.player.setVelocity(0, 0);
-        this.player.setAlpha(0);
-        this.player.setScale(startScaleX * 0.7, startScaleY * 0.7);
-
-        // Petit délai avant de ré-afficher le joueur
-        this.time.delayedCall(60, () => {
-          this.tweens.add({
-            targets: this.player,
-            alpha: 1,
-            scaleX: startScaleX,
-            scaleY: startScaleY,
-            duration: 260,
-            ease: "Cubic.out",
-            onStart: () => {
-              this.player.body.setAllowGravity(true);
-              this.player.setGravityY(PROFILE.gravity);
-            },
-            onComplete: () => {
-              this.isInvincible = false;
-            }
-          });
-        });
-
-        // Texte "Réanimation !"
-        const reviveText = this.add.text(
-          this.player.x,
-          this.player.y - this.player.displayHeight,
-          t("REVIVE_TEXT"),
-          {
-            fontFamily: "monospace",
-            fontSize: 32,
-            color: "#ffffaa",
-            stroke: "#000000",
-            strokeThickness: 4
-          }
-        ).setOrigin(0.5).setDepth(40);
 
         this.tweens.add({
-          targets: reviveText,
-          y: reviveText.y - 60,
+          targets: this.player,
+          alpha: 1,
+          scaleX: startScaleX,
+          scaleY: startScaleY,
+          duration: 220,
+          ease: "Cubic.out"
+        });
+
+        const txt = this.add.text(
+          this.player.x,
+          this.player.y - 60,
+          t("REVIVE_TEXT"),
+          { fontFamily:"monospace", fontSize:32, color:"#ffffff", stroke:"#000000", strokeThickness:6 }
+        ).setOrigin(0.5).setDepth(200);
+
+        this.tweens.add({
+          targets: txt,
+          y: txt.y - 40,
           alpha: 0,
-          duration: 900,
+          duration: 800,
           ease: "Cubic.out",
-          onComplete: () => reviveText.destroy()
+          onComplete: () => txt.destroy()
+        });
+
+        this.time.delayedCall(2000, () => {
+          this.isInvincible = false;
         });
       }
     });
@@ -2649,60 +2500,114 @@ class GameScene extends Phaser.Scene {
 
   _finalGameOver(){
     if (this.isOver) return;
-    this.isOver = true;
+    this.isOver = true; 
+    this.started = false;
 
-    const finalScore = this.score | 0;
-    const isHard     = this.game._hardMode === true;
+    // on autorise le leaderboard au moment du game over
+    this._cancelLeaderboard = false;
 
-    // Stop mouvements
-    this.player.body.setAllowGravity(true);
-    this.player.setTint(0x111111);
-    this.player.setVelocity(0, 260);
+    saveLocalBestScore(this.score);
 
-    this.pipes.children.iterate(p => { if (p?.body) p.body.setVelocityX(0); });
-    this.sensors.children.iterate(s => { if (s?.body) s.body.setVelocityX(0); });
-    this.bonuses.children.iterate(b => { if (b?.body) b.body.setVelocityX(0); });
-    this.borgyCoins.children.iterate(c => { if (c?.body) c.body.setVelocityX(0); });
-    this.bots.children.iterate(b => { if (b?.body) b.body.setVelocityX(0); });
-    if (this.pipeDecor) {
-      this.pipeDecor.children.iterate(d => { if (d?.body) d.body.setVelocityX(0); });
-    }
+    try { this.inputZone?.disableInteractive(); this.inputZone?.removeAllListeners(); } catch {}
+    try { this.input.keyboard.removeAllListeners(); } catch {}
 
-    if (!this.game._muted && this.sfxGameOver){
+    if (!this.game._muted && this.sfxGameOver) {
+      const bgm = this.game._bgm;
+      if (bgm) bgm.setVolume(0.15);
+      this.sfxGameOver.once("complete", () => { if (bgm && !this.game._muted) bgm.setVolume(0.35); });
       this.sfxGameOver.play();
     }
 
-    // Best local + quêtes + leaderboard
-    saveLocalBestScore(finalScore);
-    postScore(finalScore, isHard);
-
-    let totalCoinsAfter = loadBorgyCoins();
-    try {
-      const q = loadQuests();
-      totalCoinsAfter = applyQuestCoins(q, isHard);
-    } catch(e){}
-
-    // MAJ du daily challenge (500 coins / jour max) uniquement si Daily ON
-    let dailyRes = null;
-    if (this.game._dailyMode) {
-      dailyRes = updateDailyChallengeOnGameOver(finalScore);
-      if (dailyRes && typeof dailyRes.coinsAfter === "number") {
-        totalCoinsAfter = dailyRes.coinsAfter;
-      }
+    this.pipes.clear(true, true);
+    this.sensors.clear(true, true);
+    this.bonuses.clear(true, true);
+    this.borgyCoins.clear(true, true);
+    this.bots.clear(true, true);
+    if (this.pipeDecor) this.pipeDecor.clear(true, true);
+    this.pipePairs = [];
+    if (this.bonusFollower){
+      this.bonusFollower.destroy();
+      this.bonusFollower = null;
     }
 
-    // Petit délai avant le popup
-    this.time.delayedCall(450, () => {
+    const W = this.scale.width, H = this.scale.height;
+    this.add.rectangle(W/2, H/2, W*0.8, 380, 0x12323a, 0.92).setDepth(100);
+    this.add.text(W/2, H/2 - 110, t("GAME_OVER_TITLE"), { fontFamily:"Georgia,serif", fontSize:68, color:"#fff" })
+      .setOrigin(0.5).setDepth(101);
+    this.add.text(W/2, H/2 - 28, `${t("GAME_OVER_SCORE")} ${this.score}`, { fontFamily:"monospace", fontSize:48, color:"#cffff1" })
+      .setOrigin(0.5).setDepth(101);
+
+    // Bouton PARTAGER MON SCORE sous le score
+    const shareBtn = this.add.text(
+      W/2,
+      H/2 + 32,
+      t("GAME_OVER_SHARE"),
+      {
+        fontFamily: "monospace",
+        fontSize: 32,
+        color: "#ffffff",
+        backgroundColor: "#0b7285",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 }
+      }
+    ).setOrigin(0.5).setDepth(101).setInteractive({ useHandCursor: true });
+
+    shareBtn.on("pointerover", () => shareBtn.setBackgroundColor("#0e8595"));
+    shareBtn.on("pointerout",  () => shareBtn.setBackgroundColor("#0b7285"));
+    shareBtn.on("pointerdown", () => this.handleShareScore());
+
+    const replay = this.add.text(W/2, H/2 + 100, t("GAME_OVER_REPLAY"),
+      { fontFamily:"monospace", fontSize:44, color:"#fff", backgroundColor:"#0db187", padding:{left:22,right:22,top:10,bottom:10} })
+      .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    // si le joueur clique, on annule le leaderboard
+    replay.on("pointerdown", ()=> {
+      this._cancelLeaderboard = true;
+      this.scene.restart();
+    });
+
+    const menuBtn = this.add.text(W/2, H/2 + 176, t("GAME_OVER_MENU"),
+      { fontFamily:"monospace", fontSize:40, color:"#fff", backgroundColor:"#0a8ea1", padding:{left:22,right:22,top:8,bottom:8} })
+      .setOrigin(0.5).setDepth(101).setInteractive({useHandCursor:true});
+    menuBtn.on("pointerdown", () => {
+      this._cancelLeaderboard = true;
+      const bgm = this.game._bgm;
+      if (bgm && !this.game._muted) bgm.setVolume(0.35);
+      this.scene.start("menu");
+    });
+
+    const isHard = this.game._hardMode === true;
+    // AFFICHAGE LEADERBOARD PAGINÉ APRÈS ENREGISTREMENT
+    postScore(this.score, isHard).then(() => {
       if (this._cancelLeaderboard) return;
-      this.showGameOverPopup(finalScore, totalCoinsAfter, dailyRes);
+      if (!this.isOver) return;
+      if (!this.scene.isActive()) return;
+      this.showLeaderboard(isHard);
     });
   }
 
-  showGameOverPopup(score, totalCoinsAfter, dailyRes){
+  // Popup de partage (message FR + EN + lien bot)
+  handleShareScore(){
+    const score  = this.score | 0;
+    const isHard = this.game._hardMode === true;
+
+    const frModeLabel = isHard ? "en mode Hard"   : "en mode Normal";
+    const enModeLabel = isHard ? "in Hard mode"   : "in Normal mode";
+
+    const botUrl = "https://t.me/Borgyboss_bot";
+
+    const textFr = `Je viens de faire ${score} points ${frModeLabel} sur FlappyBorgy ! LFG BORGY 🔥`;
+    const textEn = `I just scored ${score} points ${enModeLabel} on FlappyBorgy! LFG BORGY 🔥`;
+
+    const fullText = `${textFr}\n${textEn}\n\n${botUrl}`;
+
+    // Web Share API
+    if (navigator.share){
+      navigator.share({ text: fullText, url: botUrl }).catch(()=>{});
+      return;
+    }
+
     const W = this.scale.width;
     const H = this.scale.height;
-    const depth = 1200;
-
+    const depth = 420;
     const elements = [];
 
     const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.55)
@@ -2710,117 +2615,7 @@ class GameScene extends Phaser.Scene {
       .setInteractive();
     elements.push(overlay);
 
-    const panel = this.add.rectangle(W/2, H/2, W*0.78, H*0.54, 0x05252f, 0.96)
-      .setDepth(depth+1);
-    elements.push(panel);
-
-    const title = this.add.text(W/2, H*0.30, t("GAME_OVER_TITLE"), {
-      fontFamily: "Georgia,serif",
-      fontSize: 60,
-      color: "#ffffff"
-    }).setOrigin(0.5).setDepth(depth+2);
-    elements.push(title);
-
-    const scoreTxt = this.add.text(W/2, H*0.38,
-      `${t("GAME_OVER_SCORE")} ${score}`,
-      {
-        fontFamily: "monospace",
-        fontSize: 32,
-        color: "#e0fff7"
-      }
-    ).setOrigin(0.5).setDepth(depth+2);
-    elements.push(scoreTxt);
-
-    const coinsTxt = this.add.text(W/2, H*0.44,
-      `${t("HUD_COINS")} ${totalCoinsAfter} 🪙`,
-      {
-        fontFamily: "monospace",
-        fontSize: 26,
-        color: "#cffff1"
-      }
-    ).setOrigin(0.5).setDepth(depth+2);
-    elements.push(coinsTxt);
-
-    // Info daily challenge
-    if (dailyRes) {
-      const dailyLine = dailyRes.gotReward
-        ? t("DAILY_REWARD")
-        : (dailyRes.bestScore > 0 ? t("DAILY_DONE") : "");
-      if (dailyLine) {
-        const dailyTxt = this.add.text(W/2, H*0.50, dailyLine, {
-          fontFamily: "monospace",
-          fontSize: 20,
-          color: "#d1fae5",
-          align: "center",
-          wordWrap: { width: W*0.7 }
-        }).setOrigin(0.5).setDepth(depth+2);
-        elements.push(dailyTxt);
-      }
-    }
-
-    const btnShare = this.add.text(W*0.28, H*0.60, t("GAME_OVER_SHARE"), {
-      fontFamily: "monospace",
-      fontSize: 24,
-      color: "#ffffff",
-      backgroundColor: "#0a8ea1",
-      padding: { left: 14, right: 14, top: 8, bottom: 8 }
-    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-    elements.push(btnShare);
-
-    const btnReplay = this.add.text(W*0.72, H*0.60, t("GAME_OVER_REPLAY"), {
-      fontFamily: "monospace",
-      fontSize: 24,
-      color: "#ffffff",
-      backgroundColor: "#0db187",
-      padding: { left: 14, right: 14, top: 8, bottom: 8 }
-    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-    elements.push(btnReplay);
-
-    const btnMenu = this.add.text(W/2, H*0.72, t("GAME_OVER_MENU"), {
-      fontFamily: "monospace",
-      fontSize: 28,
-      color: "#ffffff",
-      backgroundColor: "#b45309",
-      padding: { left: 20, right: 20, top: 8, bottom: 8 }
-    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-    elements.push(btnMenu);
-
-    const destroyAll = () => {
-      elements.forEach(el => { try { el.destroy(); } catch(e){} });
-    };
-
-    overlay.on("pointerdown", () => {}); // bloque clics sur le fond
-
-    btnReplay.on("pointerdown", () => {
-      this._cancelLeaderboard = true;
-      destroyAll();
-      this.scene.restart();
-    });
-
-    btnMenu.on("pointerdown", () => {
-      this._cancelLeaderboard = true;
-      destroyAll();
-      this.scene.start("menu");
-    });
-
-    btnShare.on("pointerdown", () => {
-      this.showSharePopup(score);
-    });
-  }
-
-  showSharePopup(score){
-    const W = this.scale.width;
-    const H = this.scale.height;
-    const depth = 1400;
-
-    const elements = [];
-
-    const overlay = this.add.rectangle(W/2, H/2, W, H, 0x000000, 0.60)
-      .setDepth(depth)
-      .setInteractive();
-    elements.push(overlay);
-
-    const panel = this.add.rectangle(W/2, H/2, W*0.72, H*0.46, 0x041c24, 0.98)
+    const panel = this.add.rectangle(W/2, H/2, W*0.8, H*0.5, 0x05252f, 0.96)
       .setDepth(depth+1);
     elements.push(panel);
 
@@ -2831,41 +2626,84 @@ class GameScene extends Phaser.Scene {
     }).setOrigin(0.5).setDepth(depth+2);
     elements.push(title);
 
-    const hint = this.add.text(W/2, H*0.38, t("SHARE_HINT"), {
+    const msgText = this.add.text(W*0.15, H*0.37, fullText, {
+      fontFamily: "monospace",
+      fontSize: 20,
+      color: "#e5f2ff",
+      wordWrap: { width: W*0.7 }
+    }).setOrigin(0,0).setDepth(depth+2);
+    elements.push(msgText);
+
+    const infoText = this.add.text(W/2, H*0.53, t("SHARE_HINT"), {
       fontFamily: "monospace",
       fontSize: 20,
       color: "#cffff1",
       align: "center",
-      wordWrap: { width: W*0.64 }
+      wordWrap: { width: W*0.7 }
     }).setOrigin(0.5).setDepth(depth+2);
-    elements.push(hint);
+    elements.push(infoText);
 
-    const shareText = `FlappyBorgy — ${score} pts ! LFG BORGY 🚀`;
+    const openUrl = (u) => {
+      try {
+        if (window.Telegram?.WebApp?.openLink) {
+          window.Telegram.WebApp.openLink(u);
+        } else {
+          window.open(u, "_blank");
+        }
+      } catch(e) {
+        try { window.open(u, "_blank"); } catch {}
+      }
+    };
 
-    const btnCopy = this.add.text(W*0.30, H*0.48, t("SHARE_COPY"), {
+    const xUrl      = `https://twitter.com/intent/tweet?text=${encodeURIComponent(fullText)}`;
+    const tgUrl     = `https://t.me/share/url?url=${encodeURIComponent(botUrl)}&text=${encodeURIComponent(textFr + "\n" + textEn)}`;
+    const instaUrl  = "https://www.instagram.com/";
+    const tiktokUrl = "https://www.tiktok.com/";
+
+    const makeBtn = (x, y, label) => {
+      const btn = this.add.text(x, y, label, {
+        fontFamily: "monospace",
+        fontSize: 20,
+        color: "#ffffff",
+        backgroundColor: "#0b7285",
+        padding: { left: 14, right: 14, top: 6, bottom: 6 }
+      }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
+
+      btn.on("pointerover", () => btn.setBackgroundColor("#0e8595"));
+      btn.on("pointerout",  () => btn.setBackgroundColor("#0b7285"));
+
+      elements.push(btn);
+      return btn;
+    };
+
+    const btnX   = makeBtn(W*0.24, H*0.60, "X");
+    btnX.on("pointerdown", () => openUrl(xUrl));
+
+    const btnTg  = makeBtn(W*0.42, H*0.60, "Telegram");
+    btnTg.on("pointerdown", () => openUrl(tgUrl));
+
+    const btnIg  = makeBtn(W*0.60, H*0.60, "Instagram");
+    btnIg.on("pointerdown", () => openUrl(instaUrl));
+
+    const btnTk  = makeBtn(W*0.78, H*0.60, "TikTok");
+    btnTk.on("pointerdown", () => openUrl(tiktokUrl));
+
+    if (navigator.clipboard && navigator.clipboard.writeText){
+      const copyBtn = makeBtn(W/2, H*0.69, t("SHARE_COPY"));
+      copyBtn.on("pointerdown", () => {
+        navigator.clipboard.writeText(fullText).then(() => {
+          copyBtn.setText(t("SHARE_COPIED"));
+          this.time.delayedCall(1200, () => copyBtn.setText(t("SHARE_COPY")));
+        }).catch(()=>{});
+      });
+    }
+
+    const close = this.add.text(W/2, H*0.80, t("SHARE_CLOSE"), {
       fontFamily: "monospace",
-      fontSize: 22,
+      fontSize: 28,
       color: "#ffffff",
       backgroundColor: "#0db187",
-      padding: { left: 16, right: 16, top: 8, bottom: 8 }
-    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-    elements.push(btnCopy);
-
-    const btnTg = this.add.text(W*0.70, H*0.48, "Telegram", {
-      fontFamily: "monospace",
-      fontSize: 22,
-      color: "#ffffff",
-      backgroundColor: "#0a8ea1",
-      padding: { left: 16, right: 16, top: 8, bottom: 8 }
-    }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
-    elements.push(btnTg);
-
-    const close = this.add.text(W/2, H*0.62, t("SHARE_CLOSE"), {
-      fontFamily: "monospace",
-      fontSize: 26,
-      color: "#ffffff",
-      backgroundColor: "#b45309",
-      padding: { left: 20, right: 20, top: 8, bottom: 8 }
+      padding: { left: 22, right: 22, top: 8, bottom: 8 }
     }).setOrigin(0.5).setDepth(depth+2).setInteractive({ useHandCursor: true });
     elements.push(close);
 
@@ -2875,50 +2713,241 @@ class GameScene extends Phaser.Scene {
 
     overlay.on("pointerdown", destroyAll);
     close.on("pointerdown", destroyAll);
+  }
 
-    btnCopy.on("pointerdown", async () => {
-      try {
-        await navigator.clipboard.writeText(shareText);
-        close.setText(t("SHARE_COPIED"));
-      } catch(e){
-        console.warn("clipboard error", e);
+  // LEADERBOARD paginé dans la GameScene (après Game Over)
+  showLeaderboard(isHard = false){
+    const W = this.scale.width;
+    const H = this.scale.height;
+    const depth = 300;
+
+    const elements = [];
+    const rows = [];
+    let currentPage = 1;
+    let currentScope = "all"; // "all" | "week" | "month"
+
+    const panel = this.add
+      .rectangle(W / 2, H * 0.5, W * 0.78, H * 0.6, 0x0a2a2f, 0.92)
+      .setDepth(depth);
+    elements.push(panel);
+
+    const titleText = isHard ? t("LEADERBOARD_TITLE_HARD") : t("LEADERBOARD_TITLE");
+    const title = this.add
+      .text(W / 2, H * 0.18, titleText, {
+        fontFamily: "Georgia,serif",
+        fontSize: 60,
+        color: "#ffffff",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(title);
+
+    const pageLabel = this.add
+      .text(W / 2, H * 0.24, `${t("LEADERBOARD_PAGE_LABEL")} 1`, {
+        fontFamily: "monospace",
+        fontSize: 24,
+        color: "#cffff1",
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1);
+    elements.push(pageLabel);
+
+    const scopeY = H * 0.28;
+
+    const btnGlobal = this.add.text(W * 0.30, scopeY, t("LEADERBOARD_SCOPE_GLOBAL"), {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0db187",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnGlobal);
+
+    const btnWeek = this.add.text(W * 0.50, scopeY, t("LEADERBOARD_SCOPE_WEEK"), {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0a4d8a",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnWeek);
+
+    const btnMonth = this.add.text(W * 0.70, scopeY, t("LEADERBOARD_SCOPE_MONTH"), {
+      fontFamily: "monospace",
+      fontSize: 24,
+      color: "#fff",
+      backgroundColor: "#0a4d8a",
+      padding: { left: 10, right: 10, top: 6, bottom: 6 },
+    }).setOrigin(0.5).setDepth(depth + 1).setInteractive({ useHandCursor: true });
+    elements.push(btnMonth);
+
+    const refreshScopeButtons = () => {
+      const onColor  = "#0db187";
+      const offColor = "#0a4d8a";
+
+      btnGlobal.setBackgroundColor(currentScope === "all"   ? onColor : offColor);
+      btnWeek.setBackgroundColor(  currentScope === "week"  ? onColor : offColor);
+      btnMonth.setBackgroundColor( currentScope === "month" ? onColor : offColor);
+    };
+    refreshScopeButtons();
+
+    const colX = W * 0.23;
+    const startY = H * 0.34;
+    const lineH = 56;
+
+    const close = this.add
+      .text(W / 2, H * 0.82, t("COMMON_CLOSE"), {
+        fontFamily: "monospace",
+        fontSize: 44,
+        color: "#fff",
+        backgroundColor: "#0db187",
+        padding: { left: 22, right: 22, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(close);
+
+    const prevBtn = this.add
+      .text(W * 0.28, H * 0.82, "◀", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(prevBtn);
+
+    const nextBtn = this.add
+      .text(W * 0.72, H * 0.82, "▶", {
+        fontFamily: "monospace",
+        fontSize: 40,
+        color: "#fff",
+        backgroundColor: "#0a8ea1",
+        padding: { left: 18, right: 18, top: 8, bottom: 8 },
+      })
+      .setOrigin(0.5)
+      .setDepth(depth + 1)
+      .setInteractive({ useHandCursor: true });
+    elements.push(nextBtn);
+
+    const destroyAll = () => {
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      elements.forEach((el) => {
+        try { el.destroy(); } catch (e) {}
+      });
+    };
+
+    close.on("pointerdown", destroyAll);
+
+    const refreshButtonsState = (listLength) => {
+      if (currentPage <= 1) {
+        prevBtn.disableInteractive();
+        prevBtn.setAlpha(0.4);
+      } else {
+        prevBtn.setInteractive({ useHandCursor: true });
+        prevBtn.setAlpha(1);
       }
+
+      if (listLength < 10) {
+        nextBtn.disableInteractive();
+        nextBtn.setAlpha(0.4);
+      } else {
+        nextBtn.setInteractive({ useHandCursor: true });
+        nextBtn.setAlpha(1);
+      }
+    };
+
+    const loadPage = async (page) => {
+      const list = await fetchLeaderboard(10, isHard, page, currentScope);
+
+      rows.forEach((r) => {
+        try { r.destroy(); } catch (e) {}
+      });
+      rows.length = 0;
+
+      currentPage = page;
+      pageLabel.setText(`${t("LEADERBOARD_PAGE_LABEL")} ${page}`);
+
+      list.slice(0, 10).forEach((row, i) => {
+        const y = startY + i * lineH;
+
+        const rankTxt = this.add
+          .text(
+            colX,
+            y,
+            String((page - 1) * 10 + i + 1).padStart(2, "0") + ".",
+            { fontFamily: "monospace", fontSize: 36, color: "#bff" }
+          )
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const nameTxt = this.add
+          .text(colX + 70, y, row.name || "Player", {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#fff",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(0, 0.5);
+
+        const scoreTxt = this.add
+          .text(W * 0.72, y, String(row.best), {
+            fontFamily: "monospace",
+            fontSize: 36,
+            color: "#cffff1",
+          })
+          .setDepth(depth + 1)
+          .setOrigin(1, 0.5);
+
+        rows.push(rankTxt, nameTxt, scoreTxt);
+      });
+
+      refreshButtonsState(list.length);
+    };
+
+    prevBtn.on("pointerdown", () => {
+      if (currentPage > 1) loadPage(currentPage - 1);
     });
 
-    btnTg.on("pointerdown", () => {
-      const url = `https://t.me/share/url?text=${encodeURIComponent(shareText)}`;
-      try {
-        if (TG && TG.openTelegramLink) {
-          TG.openTelegramLink(url);
-        } else {
-          window.open(url, "_blank");
-        }
-      } catch(e){
-        window.open(url, "_blank");
-      }
+    nextBtn.on("pointerdown", () => {
+      loadPage(currentPage + 1);
     });
+
+    btnGlobal.on("pointerdown", () => {
+      currentScope = "all";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+    btnWeek.on("pointerdown", () => {
+      currentScope = "week";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+    btnMonth.on("pointerdown", () => {
+      currentScope = "month";
+      refreshScopeButtons();
+      loadPage(1);
+    });
+
+    loadPage(1);
   }
 }
 
-/* ================== Lancement Phaser ================== */
-const gameConfig = {
-  type: Phaser.AUTO,
-  parent: "game-root",
-  width: GAME_W,
-  height: GAME_H,
-  backgroundColor: "#000000",
-  physics: {
-    default: "arcade",
-    arcade: {
-      gravity: { y: 0 },
-      debug: false
-    }
-  },
-  scale: {
-    mode: Phaser.Scale.FIT,
-    autoCenter: Phaser.Scale.CENTER_BOTH
-  },
-  scene: [PreloadScene, MenuScene, GameScene]
-};
-
-new Phaser.Game(gameConfig);
+window.addEventListener("load", () => {
+  new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: "game-root",
+    backgroundColor: "#9edff1",
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH, width: GAME_W, height: GAME_H },
+    physics: { default: "arcade", arcade: { gravity: { y: 0 }, debug: false } }, // debug false = plus de hitbox visibles
+    scene: [PreloadScene, MenuScene, GameScene],
+    pixelArt: true,
+    fps: { target: 60, min: 30, forceSetTimeOut: false }
+  });
+});
