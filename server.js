@@ -1,4 +1,4 @@
-le server.js // server.js — FlappyBorgy Leaderboard (Express + Telegram WebApp + Supabase)
+// server.js — FlappyBorgy Leaderboard (Express + Telegram WebApp + Supabase)
 // package.json doit contenir: { "type": "module" }
 
 import express from "express";
